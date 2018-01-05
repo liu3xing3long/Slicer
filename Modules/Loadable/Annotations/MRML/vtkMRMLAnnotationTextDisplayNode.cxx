@@ -17,7 +17,11 @@ vtkMRMLAnnotationTextDisplayNode::New()
       return (vtkMRMLAnnotationTextDisplayNode*) ret;
     }
   // If the factory was unable to create the object, then create it here.
-  return new vtkMRMLAnnotationTextDisplayNode;
+  vtkMRMLAnnotationTextDisplayNode* result = new vtkMRMLAnnotationTextDisplayNode;
+#ifdef VTK_HAS_INITIALIZE_OBJECT_BASE
+  result->InitializeObjectBase();
+#endif
+  return result;
 }
 
 //-----------------------------------------------------------------------------
@@ -31,7 +35,11 @@ vtkMRMLAnnotationTextDisplayNode::CreateNodeInstance()
       return (vtkMRMLAnnotationTextDisplayNode*) ret;
     }
   // If the factory was unable to create the object, then create it here.
-  return new vtkMRMLAnnotationTextDisplayNode;
+  vtkMRMLAnnotationTextDisplayNode* result = new vtkMRMLAnnotationTextDisplayNode;
+#ifdef VTK_HAS_INITIALIZE_OBJECT_BASE
+  result->InitializeObjectBase();
+#endif
+  return result;
 }
 
 //----------------------------------------------------------------------------
@@ -59,8 +67,6 @@ vtkMRMLAnnotationTextDisplayNode::WriteXML(ostream& of, int nIndent)
   // Write all attributes not equal to their defaults
 
   Superclass::WriteXML(of, nIndent);
-
-  vtkIndent indent(nIndent);
 
   of << " textScale=\"" << this->TextScale << "\"";
   of << " useLineWrap=\"" << (this->UseLineWrap ? "true" : "false") << "\"";

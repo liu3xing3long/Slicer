@@ -1,5 +1,5 @@
-#ifndef __itkGrowCutSegmentationImageFilter_h
-#define __itkGrowCutSegmentationImageFilter_h
+#ifndef itkGrowCutSegmentationImageFilter_h
+#define itkGrowCutSegmentationImageFilter_h
 
 #include "itkImage.h"
 #include "itkImageToImageFilter.h"
@@ -9,10 +9,11 @@
 
 //#include "itkGrowCutSegmentationUpdateFilter.h"
 
-#include "vcl_list.h"
+#include <vcl_compiler.h>
 
-#include <vcl_vector.h>
-
+#include <iostream>
+#include <list>
+#include <vector>
 
 #ifndef PixelState
 enum PixelState{
@@ -61,10 +62,10 @@ template<class TInputImage,
 
  public:
   /** Standard class typedefs. */
-  typedef GrowCutSegmentationImageFilter Self;
+  typedef GrowCutSegmentationImageFilter               Self;
   typedef ImageToImageFilter<TInputImage,TOutputImage> Superclass;
-  typedef SmartPointer<Self> Pointer;
-  typedef SmartPointer<const Self> ConstPointer;
+  typedef SmartPointer<Self>                           Pointer;
+  typedef SmartPointer<const Self>                     ConstPointer;
 
   /** Method for creation through the object factory. */
   itkNewMacro(Self);
@@ -75,22 +76,22 @@ template<class TInputImage,
 
   /** Image related typedefs. */
   itkStaticConstMacro(ImageDimension, unsigned int,
-                      TInputImage::ImageDimension ) ;
+                      TInputImage::ImageDimension );
 
-  typedef TInputImage InputImageType;
-  typedef typename InputImageType::Pointer InputImagePointer;
+  typedef TInputImage                           InputImageType;
+  typedef typename InputImageType::Pointer      InputImagePointer;
   typedef typename InputImageType::ConstPointer InputImageConstPointer;
 
   typedef typename InputImageType::PixelType InputPixelType;
   typedef typename InputImageType::IndexType InputIndexType;
-  typedef typename InputImageType::SizeType SizeType;
+  typedef typename InputImageType::SizeType  SizeType;
 
-  typedef TOutputImage OutputImageType;
-  typedef typename OutputImageType::Pointer OutputImagePointer;
+  typedef TOutputImage                         OutputImageType;
+  typedef typename OutputImageType::Pointer    OutputImagePointer;
   typedef typename OutputImageType::RegionType OutputImageRegionType;
-  typedef typename OutputImageType::PixelType OutputPixelType;
-  typedef typename OutputImageType::IndexType OutputIndexType;
-  typedef typename InputImageType::SizeType OutputSizeType;
+  typedef typename OutputImageType::PixelType  OutputPixelType;
+  typedef typename OutputImageType::IndexType  OutputIndexType;
+  typedef typename InputImageType::SizeType    OutputSizeType;
 
 
   /** Smart Pointer type to a DataObject. */
@@ -203,24 +204,24 @@ template<class TInputImage,
   /** Set/Get the ROI start and End **/
   void SetROIStart( const OutputIndexType &start)
   {
-    m_roiStart = start;
+    m_RoiStart = start;
   }
 
   OutputIndexType GetROIStart() const
   {
-    return m_roiStart;
+    return m_RoiStart;
   }
 
 
   void SetROIEnd(const OutputIndexType &end)
   {
-    m_roiEnd = end;
+    m_RoiEnd = end;
   }
 
 
   OutputIndexType GetROIEnd() const
   {
-    return m_roiEnd;
+    return m_RoiEnd;
   }
 
   /** Set the radius of the neighborhood for processing. Default is 1 **/
@@ -297,7 +298,7 @@ template<class TInputImage,
 
   void GetRegionOfInterest();
 
-  void ComputeLabelVolumes(TOutputImage *outputImage, vcl_vector< unsigned > &volumes, vcl_vector< unsigned > &phyVolumes);
+  void ComputeLabelVolumes(TOutputImage *outputImage, std::vector< unsigned > &volumes, std::vector< unsigned > &phyVolumes);
 
   void MaskSegmentedImageByWeight(float upperThresh);
 
@@ -323,8 +324,8 @@ template<class TInputImage,
   OutputPixelType                        m_BackgroundLabel;
   OutputPixelType                        m_UnknownLabel;
 
-  OutputIndexType                            m_roiStart;
-  OutputIndexType                            m_roiEnd;
+  OutputIndexType                            m_RoiStart;
+  OutputIndexType                            m_RoiEnd;
 
 };
 

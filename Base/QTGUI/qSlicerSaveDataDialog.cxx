@@ -119,9 +119,13 @@ QString qSlicerFileNameItemDelegate::fixupFileName(const QString& fileName, cons
     vtkObject * object = mrmlScene;
     if (!nodeID.isEmpty())
       {
-      object = mrmlScene->GetNodeByID(nodeID.toLatin1());
+      object = qSlicerSaveDataDialogPrivate::getNodeByID(nodeID.toLatin1().data(), mrmlScene);
       }
-    Q_ASSERT(object);
+    if (!object)
+      {
+      qCritical() << Q_FUNC_INFO << " failed: node not found by ID " << qPrintable(nodeID);
+      return QString();
+      }
     strippedFileName = qSlicerSaveDataDialogPrivate::stripKnownExtension(fixup, object);
     strippedFileName += extension;
     }
@@ -161,8 +165,13 @@ qSlicerSaveDataDialogPrivate::qSlicerSaveDataDialogPrivate(QWidget* parentWidget
   QHeaderView* previousHeaderView = this->FileWidget->horizontalHeader();
   ctkCheckableHeaderView* headerView = new ctkCheckableHeaderView(Qt::Horizontal, this->FileWidget);
   // Copy the previous behavior of the header into the new checkable header view
+#if (QT_VERSION < QT_VERSION_CHECK(5, 0, 0))
   headerView->setClickable(previousHeaderView->isClickable());
   headerView->setMovable(previousHeaderView->isMovable());
+#else
+  headerView->setSectionsClickable(previousHeaderView->sectionsClickable());
+  headerView->setSectionsMovable(previousHeaderView->sectionsMovable());
+#endif
   headerView->setHighlightSections(previousHeaderView->highlightSections());
   headerView->setStretchLastSection(previousHeaderView->stretchLastSection());
   // Propagate to top-level items only (depth = 1),no need to go deeper
@@ -404,7 +413,7 @@ void qSlicerSaveDataDialogPrivate::populateNode(vtkMRMLNode* node)
   vtkMRMLStorableNode* storableNode = vtkMRMLStorableNode::SafeDownCast(node);
   // Don't show if the node doesn't want to (internal node)
   if (!storableNode ||
-      storableNode->GetHideFromEditors())
+    storableNode->GetHideFromEditors() || !storableNode->GetSaveWithScene())
     {
     return;
     }
@@ -441,6 +450,14 @@ void qSlicerSaveDataDialogPrivate::populateNode(vtkMRMLNode* node)
   // that is mandatory for fileWriterFileType()
   if (coreIOManager->fileWriterFileType(node) == QString("NoFile"))
     {
+    return;
+    }
+
+  if (!storableNode->GetStorageNode())
+    {
+    qCritical() << Q_FUNC_INFO << " failed: storage node not found for node "
+      << (storableNode->GetID() ? storableNode->GetID() : "(unknown)")
+      << ". The node will not be shown in the save data dialog.";
     return;
     }
 
@@ -487,29 +504,35 @@ void qSlicerSaveDataDialogPrivate::populateNode(vtkMRMLNode* node)
 //-----------------------------------------------------------------------------
 QFileInfo qSlicerSaveDataDialogPrivate::nodeFileInfo(vtkMRMLStorableNode* node)
 {
-  // Make sure series number is not one digit (names like "1: something" confuse save dialog, see http://www.na-mic.org/Bug/view.php?id=3991)
-  // TODO: This is a workaround, remove if good fix found
-  QString safeNodeName(node->GetName());
-  if (safeNodeName.length() > 1 &&
-      safeNodeName.at(0).isNumber() && safeNodeName.at(1) == QChar(':'))
+  // Remove characters from node name that cannot be used in file names
+  // (same method as in qSlicerFileNameItemDelegate::fixupFileName)
+  QString inputNodeName(node->GetName() ? node->GetName() : "");
+  QString safeNodeName;
+  QRegExp regExp = qSlicerFileNameItemDelegate::fileNameRegExp();
+  for (int i = 0; i < inputNodeName.size(); ++i)
     {
-    safeNodeName.insert(0, tr("0"));
+    if (regExp.exactMatch(QString(inputNodeName[i])))
+      {
+      safeNodeName += inputNodeName[i];
+      }
     }
 
   vtkMRMLStorageNode* snode = node->GetStorageNode();
   if (snode == 0)
     {
-    vtkMRMLStorageNode* storageNode = node->CreateDefaultStorageNode();
-    if (storageNode == 0)
+    bool success = node->AddDefaultStorageNode();
+    if (!success)
       {
-      // node can be stored in the scene
+      qCritical() << Q_FUNC_INFO << " failed: error while trying to add storage node";
       return QFileInfo();
       }
-
-    this->MRMLScene->AddNode(storageNode);
-    node->SetAndObserveStorageNodeID(storageNode->GetID());
-    storageNode->Delete();
-    snode = storageNode;
+    snode = node->GetStorageNode();
+    if (!snode)
+      {
+      // no error and no storage node means that
+      // there is no need for storage node, the node can be stored in the scene
+      return QFileInfo();
+      }
     }
   else
     {
@@ -517,21 +540,16 @@ QFileInfo qSlicerSaveDataDialogPrivate::nodeFileInfo(vtkMRMLStorableNode* node)
     // node name
     if (snode->GetFileName() && node->GetName())
       {
-      QFileInfo existingInfo(snode->GetFileName());
-      qSlicerCoreIOManager* coreIOManager =
-           qSlicerCoreApplication::application()->coreIOManager();
-      QString suffix = coreIOManager->completeSlicerWritableFileNameSuffix(existingInfo.fileName());
-      if (!suffix.startsWith(QString(".")))
-        {
-        suffix = QString(".") + suffix;
-        }
-      QFileInfo newInfo(existingInfo.absoluteDir(), QString(safeNodeName + suffix));
+      std::string filenameWithoutExtension = snode->GetFileNameWithoutExtension();
       // Only reset the file name if the user has set the name explicitly (that is,
       // if the name isn't the default created by qSlicerVolumesIOOptionsWidget::setFileNames
       // TODO: this logic relies on the GUI so we should consider moving it into MRML proper
       // with a way for storage nodes to generate their default node names from a given filename
-      if (existingInfo.completeBaseName() != QString(node->GetName()))
+      if (QString(filenameWithoutExtension.c_str()) != safeNodeName)
         {
+        QFileInfo existingInfo(snode->GetFileName());
+        std::string extension = snode->GetSupportedFileExtension();
+        QFileInfo newInfo(existingInfo.absoluteDir(), safeNodeName + QString(extension.c_str()));
         snode->SetFileName(newInfo.absoluteFilePath().toLatin1());
         node->StorableModified();
         }
@@ -639,11 +657,7 @@ QWidget* qSlicerSaveDataDialogPrivate::createFileFormatsWidget(vtkMRMLStorableNo
   qSlicerCoreIOManager* coreIOManager =
     qSlicerCoreApplication::application()->coreIOManager();
   int currentFormat = -1;
-  QString currentExtension = coreIOManager->completeSlicerWritableFileNameSuffix(fileInfo.fileName());
-  if (!currentExtension.startsWith(QString(".")))
-    {
-    currentExtension = currentExtension + QString(".");
-    }
+  QString currentExtension = coreIOManager->completeSlicerWritableFileNameSuffix(node);
   foreach(QString nameFilter, coreIOManager->fileWriterExtensions(node))
     {
     QString extension = QString::fromStdString(
@@ -938,13 +952,19 @@ vtkObject* qSlicerSaveDataDialogPrivate::object(int row)const
 //-----------------------------------------------------------------------------
 vtkMRMLNode* qSlicerSaveDataDialogPrivate::getNodeByID(char *id)const
 {
-  vtkMRMLNode *node = this->MRMLScene->GetNodeByID(id);
+  return qSlicerSaveDataDialogPrivate::getNodeByID(id, this->MRMLScene);
+}
+
+//-----------------------------------------------------------------------------
+vtkMRMLNode* qSlicerSaveDataDialogPrivate::getNodeByID(char *id, vtkMRMLScene* scene)
+{
+  vtkMRMLNode *node = scene->GetNodeByID(id);
   if (node == 0)
     {
     // search in SceneView nodes
     std::string sID(id);
     std::vector<vtkMRMLNode *> nodes;
-    this->MRMLScene->GetNodesByClass("vtkMRMLSceneViewNode", nodes);
+    scene->GetNodesByClass("vtkMRMLSceneViewNode", nodes);
     std::vector<vtkMRMLNode *>::iterator it;
 
     for (it = nodes.begin(); it != nodes.end(); it++)
@@ -1087,7 +1107,10 @@ void qSlicerSaveDataDialogPrivate::setSceneRootDirectory(const QString& dir)
     {
     vtkMRMLNode* node = this->MRMLScene->GetNthNodeByClass(n, "vtkMRMLSceneViewNode");
     vtkMRMLSceneViewNode *snode = vtkMRMLSceneViewNode::SafeDownCast(node);
-    snode->GetStoredScene()->SetRootDirectory(this->MRMLScene->GetRootDirectory());
+    if (snode && snode->GetStoredScene())
+      {
+      snode->GetStoredScene()->SetRootDirectory(this->MRMLScene->GetRootDirectory());
+      }
     }
 }
 

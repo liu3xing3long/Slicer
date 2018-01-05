@@ -11,6 +11,9 @@ add_subdirectory(VTKWidgets)
 add_subdirectory(Logic)
 add_subdirectory(MRMLDM)
 add_subdirectory(Widgets)
+if(Slicer_USE_PYTHONQT)
+  add_subdirectory(SubjectHierarchyPlugins)
+endif()
 
 #-----------------------------------------------------------------------------
 set(MODULE_EXPORT_DIRECTIVE "Q_SLICER_QTMODULES_${MODULE_NAME_UPPER}_EXPORT")

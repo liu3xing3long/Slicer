@@ -23,6 +23,7 @@
 #include <QComboBox>
 #include <QDropEvent>
 #include <QFileDialog>
+#include <QMimeData>
 
 /// CTK includes
 #include <ctkCheckableHeaderView.h>
@@ -52,8 +53,13 @@ qSlicerDataDialogPrivate::qSlicerDataDialogPrivate(QWidget* _parent)
   ctkCheckableHeaderView* headerView = new ctkCheckableHeaderView(
     Qt::Horizontal, this->FileWidget);
   // Copy the previous behavior of the header into the new checkable header view
+#if (QT_VERSION < QT_VERSION_CHECK(5, 0, 0))
   headerView->setClickable(previousHeaderView->isClickable());
   headerView->setMovable(previousHeaderView->isMovable());
+#else
+  headerView->setSectionsClickable(previousHeaderView->sectionsClickable());
+  headerView->setSectionsMovable(previousHeaderView->sectionsMovable());
+#endif
   headerView->setHighlightSections(previousHeaderView->highlightSections());
   headerView->setStretchLastSection(previousHeaderView->stretchLastSection());
   // Propagate to top-level items only (depth = 1),no need to go deeper
@@ -63,9 +69,15 @@ qSlicerDataDialogPrivate::qSlicerDataDialogPrivate(QWidget* _parent)
   this->FileWidget->setHorizontalHeader(headerView);
 
   headerView->setStretchLastSection(false);
+#if (QT_VERSION < QT_VERSION_CHECK(5, 0, 0))
   headerView->setResizeMode(FileColumn, QHeaderView::Stretch);
   headerView->setResizeMode(TypeColumn, QHeaderView::ResizeToContents);
   headerView->setResizeMode(OptionsColumn, QHeaderView::ResizeToContents);
+#else
+  headerView->setSectionResizeMode(FileColumn, QHeaderView::Stretch);
+  headerView->setSectionResizeMode(TypeColumn, QHeaderView::ResizeToContents);
+  headerView->setSectionResizeMode(OptionsColumn, QHeaderView::ResizeToContents);
+#endif
 
   this->FileWidget->sortItems(-1, Qt::AscendingOrder);
 
@@ -84,6 +96,26 @@ qSlicerDataDialogPrivate::qSlicerDataDialogPrivate(QWidget* _parent)
 
   // Authorize Drops action from outside
   this->setAcceptDrops(true);
+
+  // Set up button focus default action:
+  // * Space bar: clicks the button where the focus is on (e.g., if a user added data from
+  //   file and wants to add another data from file then he should press space bar)
+  // * Enter key: loads the selected data (unless cancel button has the focus, that case
+  //   enter key cancels loading). It is important that after add data button was clicked
+  //   and add data button has the focus enter key still loads selected data instead of
+  //   opening the add data window. This allows the user to load data then just hit Enter
+  //   key to load data.
+
+  // All buttons have strong focus, so after clicking/tabbing on them hitting space bar
+  // clicks them. However, we need to prevent all push-buttons (other than OK and Cancel)
+  // to become default buttons.
+  // Default button is the one that is clicked when user hits Enter key.
+  resetButton->setAutoDefault(false);
+  resetButton->setDefault(false);
+  this->AddDirectoryButton->setDefault(false);
+  this->AddDirectoryButton->setAutoDefault(false);
+  this->AddFilesButton->setDefault(false);
+  this->AddFilesButton->setAutoDefault(false);
 }
 
 //-----------------------------------------------------------------------------

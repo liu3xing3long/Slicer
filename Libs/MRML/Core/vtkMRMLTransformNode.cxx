@@ -71,7 +71,6 @@ vtkMRMLTransformNode::~vtkMRMLTransformNode()
 //----------------------------------------------------------------------------
 void vtkMRMLTransformNode::WriteXML(ostream& of, int nIndent)
 {
-  vtkIndent indent(nIndent);
   Superclass::WriteXML(of, nIndent);
 }
 
@@ -330,7 +329,6 @@ void vtkMRMLTransformNode::PrintSelf(ostream& os, vtkIndent indent)
       concatenatedTransform->PrintSelf(os, indent.GetNextIndent().GetNextIndent());
       }
     }
-
 }
 
 //----------------------------------------------------------------------------
@@ -1004,39 +1002,67 @@ vtkAbstractTransform* vtkMRMLTransformNode::GetAbstractTransformAs(vtkAbstractTr
 }
 
 //----------------------------------------------------------------------------
-vtkAbstractTransform* vtkMRMLTransformNode::GetTransformToParentAs(const char* transformClassName, bool logErrorIfFails/* =true */)
+vtkAbstractTransform* vtkMRMLTransformNode::GetTransformToParentAs(const char* transformClassName,
+  bool logErrorIfFails/* =true */, bool modifiableOnly/* =false */)
 {
+  vtkAbstractTransform *transform = NULL;
   if (this->TransformToParent)
     {
-    return GetAbstractTransformAs(this->TransformToParent, transformClassName, logErrorIfFails);
+    transform = GetAbstractTransformAs(this->TransformToParent, transformClassName, logErrorIfFails);
     }
   else if (this->TransformFromParent)
     {
-    vtkAbstractTransform *transform = GetAbstractTransformAs(this->TransformFromParent, transformClassName, logErrorIfFails);
-    if (transform!=NULL)
+    vtkAbstractTransform *inverseTransform = GetAbstractTransformAs(this->TransformFromParent, transformClassName, logErrorIfFails);
+    if (inverseTransform != NULL)
       {
-      return transform->GetInverse();
+      transform = inverseTransform->GetInverse();
       }
     }
-  return NULL;
+  if (modifiableOnly && transform != NULL)
+    {
+    // if a transform is computed from its inverse then it is not editable
+    if (vtkMRMLTransformNode::IsAbstractTransformComputedFromInverse(transform))
+      {
+      if (logErrorIfFails)
+        {
+        vtkErrorMacro("vtkMRMLTransformNode::GetTransformToParentAs failed: transform is available but not modifiable");
+        }
+      return NULL;
+      }
+    }
+  return transform;
 }
 
 //----------------------------------------------------------------------------
-vtkAbstractTransform* vtkMRMLTransformNode::GetTransformFromParentAs(const char* transformClassName, bool logErrorIfFails/* =true */)
+vtkAbstractTransform* vtkMRMLTransformNode::GetTransformFromParentAs(const char* transformClassName,
+  bool logErrorIfFails/* =true */, bool modifiableOnly/* =false */)
 {
+  vtkAbstractTransform *transform = NULL;
   if (this->TransformFromParent)
     {
-    return GetAbstractTransformAs(this->TransformFromParent, transformClassName, logErrorIfFails);
+    transform = GetAbstractTransformAs(this->TransformFromParent, transformClassName, logErrorIfFails);
     }
   else if (this->TransformToParent)
     {
-    vtkAbstractTransform *transform = GetAbstractTransformAs(this->TransformToParent, transformClassName, logErrorIfFails);
-    if (transform!=NULL)
+    vtkAbstractTransform *inverseTransform = GetAbstractTransformAs(this->TransformToParent, transformClassName, logErrorIfFails);
+    if (inverseTransform != NULL)
       {
-      return transform->GetInverse();
+      transform = inverseTransform->GetInverse();
       }
     }
-  return NULL;
+  if (modifiableOnly && transform != NULL)
+    {
+    // if a transform is computed from its inverse then it is not editable
+    if (vtkMRMLTransformNode::IsAbstractTransformComputedFromInverse(transform))
+      {
+      if (logErrorIfFails)
+        {
+        vtkErrorMacro("vtkMRMLTransformNode::GetTransformFromParentAs failed: transform is available but not modifiable");
+        }
+      return NULL;
+      }
+    }
+  return transform;
 }
 
 //----------------------------------------------------------------------------
@@ -1116,9 +1142,9 @@ void vtkMRMLTransformNode::Inverse()
 }
 
 //----------------------------------------------------------------------------
-unsigned long vtkMRMLTransformNode::GetTransformToWorldMTime()
+vtkMTimeType vtkMRMLTransformNode::GetTransformToWorldMTime()
 {
-  unsigned long latestMTime=0;
+  vtkMTimeType latestMTime=0;
   vtkAbstractTransform* transformToParent=this->GetTransformToParent();
   if (transformToParent!=NULL)
     {
@@ -1128,7 +1154,7 @@ unsigned long vtkMRMLTransformNode::GetTransformToWorldMTime()
   vtkMRMLTransformNode *parent = this->GetParentTransformNode();
   if (parent != NULL)
     {
-    unsigned long parentMTime=parent->GetTransformToWorldMTime();
+    vtkMTimeType parentMTime=parent->GetTransformToWorldMTime();
     if (parentMTime>latestMTime)
       {
       latestMTime=parentMTime;

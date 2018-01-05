@@ -50,6 +50,7 @@
 #include <vtkVolumeProperty.h>
 
 #if defined(Slicer_VTK_RENDERING_USE_OpenGL_BACKEND)
+#include <vtkOpenGLExtensionManager.h>
 #include <vtkgl.h>
 #endif
 
@@ -906,40 +907,51 @@ vtkMRMLVolumeRenderingDisplayNode* vtkSlicerVolumeRenderingLogic
 // if needed create vtkMRMLVolumePropertyNode and vtkMRMLAnnotationROINode
 // and initioalize them from VolumeNode
 //----------------------------------------------------------------------------
-void vtkSlicerVolumeRenderingLogic::UpdateDisplayNodeFromVolumeNode(
-                                          vtkMRMLVolumeRenderingDisplayNode *displayNode,
-                                          vtkMRMLVolumeNode *volumeNode,
-                                          vtkMRMLVolumePropertyNode **propNode,
-                                          vtkMRMLAnnotationROINode **roiNode)
+void vtkSlicerVolumeRenderingLogic
+::UpdateDisplayNodeFromVolumeNode(vtkMRMLVolumeRenderingDisplayNode *displayNode,
+                                  vtkMRMLVolumeNode *volumeNode,
+                                  vtkMRMLVolumePropertyNode *propNode /* = NULL */,
+                                  vtkMRMLAnnotationROINode *roiNode /* = NULL */)
 {
+  if (displayNode == NULL)
+    {
+    vtkErrorMacro("vtkSlicerVolumeRenderingLogic::UpdateDisplayNodeFromVolumeNode: "
+                  << "display node pointer is null.")
+    return;
+    }
 
   if (volumeNode == NULL)
     {
     displayNode->SetAndObserveVolumeNodeID(NULL);
     return;
     }
-
   displayNode->SetAndObserveVolumeNodeID(volumeNode->GetID());
 
-  if (*propNode == NULL)
+  if (propNode == NULL && displayNode->GetVolumePropertyNode() == NULL)
     {
-    *propNode = vtkMRMLVolumePropertyNode::New();
-    this->GetMRMLScene()->AddNode(*propNode);
-    (*propNode)->Delete();
+    propNode = vtkMRMLVolumePropertyNode::New();
+    this->GetMRMLScene()->AddNode(propNode);
+    propNode->Delete();
     }
-  displayNode->SetAndObserveVolumePropertyNodeID((*propNode)->GetID());
+  if (propNode != NULL)
+    {
+    displayNode->SetAndObserveVolumePropertyNodeID(propNode->GetID());
+    }
 
-  if (*roiNode == NULL)
+  if (roiNode == NULL && displayNode->GetROINode() == NULL)
     {
-    *roiNode = vtkMRMLAnnotationROINode::New();
+    roiNode = vtkMRMLAnnotationROINode::New();
     // By default, the ROI is interactive. It could be an application setting.
-    (*roiNode)->SetInteractiveMode(1);
-    (*roiNode)->Initialize(this->GetMRMLScene());
+    roiNode->SetInteractiveMode(1);
+    roiNode->Initialize(this->GetMRMLScene());
     // by default, show the ROI only if cropping is enabled
-    (*roiNode)->SetDisplayVisibility(displayNode->GetCroppingEnabled());
-    (*roiNode)->Delete();
+    roiNode->SetDisplayVisibility(displayNode->GetCroppingEnabled());
+    roiNode->Delete();
     }
-  displayNode->SetAndObserveROINodeID((*roiNode)->GetID());
+  if (roiNode != NULL)
+    {
+    displayNode->SetAndObserveROINodeID(roiNode->GetID());
+    }
 
   //this->UpdateVolumePropertyFromImageData(displayNode);
   this->CopyDisplayToVolumeRenderingDisplayNode(displayNode);
@@ -1166,4 +1178,52 @@ bool vtkSlicerVolumeRenderingLogic::IsDifferentFunction(
       }
     }
   return different;
+}
+
+//---------------------------------------------------------------------------
+void vtkSlicerVolumeRenderingLogic::AddPreset(vtkMRMLVolumePropertyNode* preset, vtkImageData* icon /* = NULL */)
+{
+  if (preset == NULL)
+    {
+    vtkErrorMacro("vtkSlicerVolumeRenderingLogic::AddPreset failed: preset is invalid");
+    return;
+    }
+  if (icon == NULL)
+    {
+    // use the icon assigned to the preset node if available
+    vtkMRMLVolumeNode* iconNode = vtkMRMLVolumeNode::SafeDownCast(
+      preset->GetNodeReference(vtkSlicerVolumeRenderingLogic::GetIconVolumeReferenceRole()));
+    if (iconNode)
+      {
+      icon = iconNode->GetImageData();
+      }
+    }
+  vtkMRMLScene* presetScene = this->GetPresetsScene();
+  if (icon != NULL)
+    {
+    // vector volume is chosen because usually icons are RGB color images
+    vtkNew<vtkMRMLVectorVolumeNode> iconNode;
+    iconNode->SetAndObserveImageData(icon);
+    vtkMRMLNode* addedIconNode = presetScene->AddNode(iconNode.GetPointer());
+    // Need to set the node reference before adding the node to the scene to make sure the icon
+    // is available immediately when the node is added (otherwise widgets may add the item without an icon)
+    preset->SetNodeReferenceID(vtkSlicerVolumeRenderingLogic::GetIconVolumeReferenceRole(), addedIconNode->GetID());
+    }
+  presetScene->AddNode(preset);
+}
+
+//---------------------------------------------------------------------------
+void vtkSlicerVolumeRenderingLogic::RemovePreset(vtkMRMLVolumePropertyNode* preset)
+{
+  if (preset == NULL)
+    {
+    return;
+    }
+  vtkMRMLScene* presetScene = this->GetPresetsScene();
+  vtkMRMLNode* iconNode = preset->GetNodeReference(vtkSlicerVolumeRenderingLogic::GetIconVolumeReferenceRole());
+  if (iconNode != NULL)
+    {
+    presetScene->RemoveNode(iconNode);
+    }
+  presetScene->RemoveNode(preset);
 }

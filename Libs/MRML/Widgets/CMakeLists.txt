@@ -2,7 +2,7 @@ project(qMRMLWidgets)
 
 
 #-----------------------------------------------------------------------------
-cmake_minimum_required(VERSION 2.8.4)
+cmake_minimum_required(VERSION 3.5)
 #-----------------------------------------------------------------------------
 
 # --------------------------------------------------------------------------
@@ -11,6 +11,10 @@ cmake_minimum_required(VERSION 2.8.4)
 if(NOT DEFINED BUILD_SHARED_LIBS)
   option(BUILD_SHARED_LIBS "Build with shared libraries." ON)
 endif(NOT DEFINED BUILD_SHARED_LIBS)
+
+if(NOT DEFINED MRML_BUILD_QT_DESIGNER_PLUGINS)
+  option(MRML_BUILD_QT_DESIGNER_PLUGINS "Build Qt designer plugins." ON)
+endif()
 
 include(CheckIncludeFiles)
 check_include_files("stdint.h" HAVE_STDINT_H)
@@ -41,6 +45,18 @@ endif()
 # --------------------------------------------------------------------------
 # Configure headers
 # --------------------------------------------------------------------------
+set(MRML_WIDGETS_HAVE_QT5 1)
+if(CTK_QT_VERSION VERSION_LESS "5")
+  set(MRML_WIDGETS_HAVE_QT5 0)
+endif()
+
+set(MRML_WIDGETS_HAVE_WEBKIT_SUPPORT 1)
+if(CTK_QT_VERSION VERSION_GREATER "4")
+  if(Qt5_VERSION VERSION_GREATER "5.5.0")
+    set(MRML_WIDGETS_HAVE_WEBKIT_SUPPORT 0)
+  endif()
+endif()
+
 configure_file(
   ${CMAKE_CURRENT_SOURCE_DIR}/qMRMLWidgetsConfigure.h.in
   ${CMAKE_CURRENT_BINARY_DIR}/qMRMLWidgetsConfigure.h
@@ -126,6 +142,17 @@ set(MRMLWidgets_SRCS
   qMRMLNodeComboBox_p.h
   qMRMLNodeFactory.cxx
   qMRMLNodeFactory.h
+  qMRMLPlotWidget.cxx
+  qMRMLPlotWidget.h
+  qMRMLPlotView.cxx
+  qMRMLPlotView_p.h
+  qMRMLPlotView.h
+  qMRMLPlotViewControllerWidget.cxx
+  qMRMLPlotViewControllerWidget.h
+  qMRMLPlotViewControllerWidget_p.h
+  qMRMLPlotViewInformationWidget.cxx
+  qMRMLPlotViewInformationWidget.h
+  qMRMLPlotViewInformationWidget_p.h
   qMRMLRangeWidget.cxx
   qMRMLRangeWidget.h
   qMRMLROIWidget.cxx
@@ -153,6 +180,8 @@ set(MRMLWidgets_SRCS
   qMRMLSceneDisplayableModel.h
   qMRMLScreenShotDialog.cxx
   qMRMLScreenShotDialog.h
+  qMRMLSegmentSelectorWidget.cxx
+  qMRMLSegmentSelectorWidget.h
   qMRMLSliceControllerWidget.cxx
   qMRMLSliceControllerWidget.h
   qMRMLSliceControllerWidget_p.h
@@ -189,6 +218,9 @@ set(MRMLWidgets_SRCS
   qMRMLThreeDViewControllerWidget.cxx
   qMRMLThreeDViewControllerWidget.h
   qMRMLThreeDViewControllerWidget_p.h
+  qMRMLThreeDViewInformationWidget.cxx
+  qMRMLThreeDViewInformationWidget.h
+  qMRMLThreeDViewInformationWidget_p.h
   qMRMLThreeDWidget.cxx
   qMRMLThreeDWidget.h
   qMRMLTransformSliders.cxx
@@ -256,6 +288,13 @@ set(MRMLWidgets_MOC_SRCS
   qMRMLNodeComboBoxDelegate.h
   qMRMLNodeComboBoxMenuDelegate.h
   qMRMLNodeFactory.h
+  qMRMLPlotWidget.h
+  qMRMLPlotViewControllerWidget.h
+  qMRMLPlotViewControllerWidget_p.h
+  qMRMLPlotViewInformationWidget.h
+  qMRMLPlotViewInformationWidget_p.h
+  qMRMLPlotView_p.h
+  qMRMLPlotView.h
   qMRMLRangeWidget.h
   qMRMLROIWidget.h
   qMRMLScalarInvariantComboBox.h
@@ -270,6 +309,7 @@ set(MRMLWidgets_MOC_SRCS
   qMRMLSceneHierarchyModel.h
   qMRMLSceneDisplayableModel.h
   qMRMLScreenShotDialog.h
+  qMRMLSegmentSelectorWidget.h
   qMRMLSliceControllerWidget.h
   qMRMLSliceControllerWidget_p.h
   qMRMLSliceInformationWidget.h
@@ -291,6 +331,8 @@ set(MRMLWidgets_MOC_SRCS
   qMRMLThreeDView.h
   qMRMLThreeDView_p.h
   qMRMLThreeDViewControllerWidget.h
+  qMRMLThreeDViewInformationWidget.h
+  qMRMLThreeDViewInformationWidget_p.h
   qMRMLThreeDWidget.h
   qMRMLTransformSliders.h
   qMRMLTreeView.h
@@ -317,21 +359,25 @@ set(MRMLWidgets_UI_SRCS
   Resources/UI/qMRMLModelInfoWidget.ui
   Resources/UI/qMRMLNodeAttributeTableView.ui
   Resources/UI/qMRMLNodeAttributeTableWidget.ui
+  Resources/UI/qMRMLPlotViewControllerWidget.ui
+  Resources/UI/qMRMLPlotViewInformationWidget.ui
   Resources/UI/qMRMLROIWidget.ui
   Resources/UI/qMRMLSceneFactoryWidget.ui
   Resources/UI/qMRMLScreenShotDialog.ui
+  Resources/UI/qMRMLSegmentSelectorWidget.ui
   Resources/UI/qMRMLSliceControllerWidget.ui
   Resources/UI/qMRMLSliceInformationWidget.ui
   Resources/UI/qMRMLSliceWidget.ui
   Resources/UI/qMRMLTableViewControllerWidget.ui
   Resources/UI/qMRMLThreeDViewControllerWidget.ui
+  Resources/UI/qMRMLThreeDViewInformationWidget.ui
   Resources/UI/qMRMLTransformSliders.ui
   Resources/UI/qMRMLVolumeInfoWidget.ui
   Resources/UI/qMRMLVolumeThresholdWidget.ui
   Resources/UI/qMRMLWindowLevelWidget.ui
   )
 
-configure_file(Resources/jqPlot.qrc.in ${qMRMLWidgets_BINARY_DIR}/Resources/jqPlot.qrc) 
+configure_file(Resources/jqPlot.qrc.in ${qMRMLWidgets_BINARY_DIR}/Resources/jqPlot.qrc)
 set(MRMLWidgets_QRC_SRCS
   Resources/qMRMLWidgets.qrc
   ${qMRMLWidgets_BINARY_DIR}/Resources/jqPlot.qrc
@@ -360,9 +406,23 @@ if(Slicer_USE_QtTesting)
     )
 endif()
 
-QT4_WRAP_CPP(MRMLWidgets_MOC_CXX ${MRMLWidgets_MOC_SRCS})
-QT4_WRAP_UI(MRMLWidgets_UI_CXX ${MRMLWidgets_UI_SRCS})
-QT4_ADD_RESOURCES(MRMLWidgets_QRC_CXX ${MRMLWidgets_QRC_SRCS})
+if(CTK_QT_VERSION VERSION_LESS "5")
+  set(_moc_options)
+  if(MRML_WIDGETS_HAVE_WEBKIT_SUPPORT)
+    set(_moc_options OPTIONS -DMRML_WIDGETS_HAVE_WEBKIT_SUPPORT)
+  endif()
+  QT4_WRAP_CPP(MRMLWidgets_MOC_CXX ${MRMLWidgets_MOC_SRCS} OPTIONS ${_moc_options})
+  QT4_WRAP_UI(MRMLWidgets_UI_CXX ${MRMLWidgets_UI_SRCS})
+  QT4_ADD_RESOURCES(MRMLWidgets_QRC_CXX ${MRMLWidgets_QRC_SRCS})
+else()
+  set(_moc_options OPTIONS -DMRML_WIDGETS_HAVE_QT5)
+  if(MRML_WIDGETS_HAVE_WEBKIT_SUPPORT)
+    set(_moc_options OPTIONS -DMRML_WIDGETS_HAVE_WEBKIT_SUPPORT)
+  endif()
+  QT5_WRAP_CPP(MRMLWidgets_MOC_CXX ${MRMLWidgets_MOC_SRCS} ${_moc_options})
+  QT5_WRAP_UI(MRMLWidgets_UI_CXX ${MRMLWidgets_UI_SRCS})
+  QT5_ADD_RESOURCES(MRMLWidgets_QRC_CXX ${MRMLWidgets_QRC_SRCS})
+endif()
 
 source_group("Resources" FILES
   ${MRMLWidgets_UI_SRCS}
@@ -492,7 +552,9 @@ endif()
 # --------------------------------------------------------------------------
 # Qt Designer Plugins
 # --------------------------------------------------------------------------
-add_subdirectory(DesignerPlugins)
+if(MRML_BUILD_QT_DESIGNER_PLUGINS)
+  add_subdirectory(DesignerPlugins)
+endif()
 
 # --------------------------------------------------------------------------
 # Set INCLUDE_DIRS variable

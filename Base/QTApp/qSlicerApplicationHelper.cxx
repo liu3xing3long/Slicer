@@ -50,8 +50,6 @@
 #ifdef Slicer_USE_PYTHONQT
 # include <PythonQtObjectPtr.h>
 # include <PythonQtPythonInclude.h>
-# include "qSlicerPythonManager.h"
-# include "qSlicerSettingsPythonPanel.h"
 #endif
 
 //----------------------------------------------------------------------------
@@ -122,7 +120,7 @@ void qSlicerApplicationHelper::setupModuleFactoryManager(qSlicerModuleFactoryMan
 
     // Option to prefer executable CLIs to limit memory consumption.
     bool preferExecutableCLIs =
-      app->userSettings()->value("Modules/PreferExecutableCLI", false).toBool();
+      app->userSettings()->value("Modules/PreferExecutableCLI", Slicer_CLI_PREFER_EXECUTABLE_DEFAULT).toBool();
 
     qSlicerCLILoadableModuleFactory* cliLoadableFactory = new qSlicerCLILoadableModuleFactory();
     cliLoadableFactory->setTempDirectory(tempDirectory);
@@ -150,9 +148,18 @@ void qSlicerApplicationHelper::setupModuleFactoryManager(qSlicerModuleFactoryMan
 #endif
   moduleFactoryManager->addSearchPaths(
     app->revisionUserSettings()->value("Modules/AdditionalPaths").toStringList());
-  QStringList ignoreModules =
+
+  QStringList modulesToAlwaysIgnore =
     app->revisionUserSettings()->value("Modules/IgnoreModules").toStringList();
-  moduleFactoryManager->setModulesToIgnore(ignoreModules);
+  QStringList modulesToTemporarlyIgnore = options->modulesToIgnore();
+  // Discard modules already listed in the settings
+  foreach(const QString& moduleToAlwaysIgnore, modulesToAlwaysIgnore)
+    {
+    modulesToTemporarlyIgnore.removeAll(moduleToAlwaysIgnore);
+    }
+  QStringList modulesToIgnore = modulesToAlwaysIgnore << modulesToTemporarlyIgnore;
+  moduleFactoryManager->setModulesToIgnore(modulesToIgnore);
+
   moduleFactoryManager->setVerboseModuleDiscovery(app->commandOptions()->verboseModuleDiscovery());
 }
 
@@ -170,37 +177,4 @@ void qSlicerApplicationHelper::showMRMLEventLoggerWidget()
                    SLOT(setMRMLScene(vtkMRMLScene*)));
 
   logger->show();
-}
-
-//----------------------------------------------------------------------------
-void qSlicerApplicationHelper::initializePythonConsole(ctkPythonConsole* pythonConsole)
-{
-#ifdef Slicer_USE_PYTHONQT
-  Q_ASSERT(pythonConsole);
-  Q_ASSERT(qSlicerApplication::application()->pythonManager());
-  pythonConsole->initialize(qSlicerApplication::application()->pythonManager());
-
-  QStringList autocompletePreferenceList;
-  autocompletePreferenceList
-      << "slicer" << "slicer.mrmlScene"
-      << "qt.QPushButton";
-  pythonConsole->completer()->setAutocompletePreferenceList(autocompletePreferenceList);
-
-  //pythonConsole->setAttribute(Qt::WA_QuitOnClose, false);
-  pythonConsole->resize(600, 280);
-
-  qSlicerApplication::application()->settingsDialog()->addPanel(
-    "Python", new qSlicerSettingsPythonPanel);
-
-  // Show pythonConsole if required
-  qSlicerCommandOptions * options = qSlicerApplication::application()->commandOptions();
-  if(options->showPythonInteractor() && !options->runPythonAndExit())
-    {
-    pythonConsole->show();
-    pythonConsole->activateWindow();
-    pythonConsole->raise();
-    }
-#else
-  Q_UNUSED(pythonConsole);
-#endif
 }

@@ -45,6 +45,7 @@ class Q_SLICER_BASE_QTCORE_EXPORT qSlicerCoreCommandOptions : public ctkCommandL
   Q_PROPERTY(bool disableBuiltInCLIModules READ disableBuiltInCLIModules CONSTANT)
   Q_PROPERTY(bool disableBuiltInLoadableModules READ disableBuiltInLoadableModules CONSTANT)
   Q_PROPERTY(bool disableBuiltInScriptedLoadableModules READ disableBuiltInScriptedLoadableModules CONSTANT)
+  Q_PROPERTY(bool displayApplicationInformation READ displayApplicationInformation CONSTANT)
   Q_PROPERTY(bool displayVersionAndExit READ displayVersionAndExit CONSTANT)
   Q_PROPERTY(bool displayProgramPathAndExit READ displayProgramPathAndExit CONSTANT)
   Q_PROPERTY(bool displayHomePathAndExit READ displayHomePathAndExit CONSTANT)
@@ -57,7 +58,8 @@ class Q_SLICER_BASE_QTCORE_EXPORT qSlicerCoreCommandOptions : public ctkCommandL
 #ifdef Slicer_USE_PYTHONQT
   Q_PROPERTY(bool pythonDisabled READ isPythonDisabled CONSTANT)
 #endif
-  Q_PROPERTY(QStringList additonalModulePaths READ additonalModulePaths CONSTANT)
+  Q_PROPERTY(QStringList additionalModulePaths READ additionalModulePaths CONSTANT)
+  Q_PROPERTY(QStringList modulesToIgnore READ modulesToIgnore CONSTANT)
 public:
   typedef ctkCommandLineParser Superclass;
   qSlicerCoreCommandOptions();
@@ -94,7 +96,10 @@ public:
   void setRunPythonAndExit(bool value);
 
   /// Return list of additional module path that should be considered when searching for modules to load.
-  QStringList additonalModulePaths()const;
+  QStringList additionalModulePaths()const;
+
+  /// Return list of modules that should not be loaded.
+  QStringList modulesToIgnore()const;
 
   /// Return True if the loading of any modules should be disabled
   bool disableModules()const;
@@ -146,6 +151,9 @@ public:
   /// \sa displayTemporaryPathAndExit()
   virtual bool displayMessageAndExit() const;
 
+  /// Return True if slicer should display application information in the terminal.
+  bool displayApplicationInformation() const;
+
   /// Return True if slicer should display details regarding the module discovery process
   bool verboseModuleDiscovery()const;
 
@@ -162,21 +170,31 @@ public:
   /// \sa ctkErrorLogModel::setTerminalOutputs()
   bool disableTerminalOutputs()const;
 
-  /// Return True if slicer settings are ignored
+  /// Return a value indicating if slicer settings should be disabled.
+  ///
+  /// When disabled, temporary settings file are created.
+  ///
+  /// By default, temporary settings are cleared unless keepTemporarySettings()
+  /// returns \a True.
   bool settingsDisabled() const;
+
+  /// Returns a value indicating whether temporary settings should be maintained.
+  ///
+  /// Temporary settings are created when settingsDisabled() is \a true and
+  /// are cleared by default.
+  bool keepTemporarySettings() const;
 
   /// Return True if slicer is in testing mode.
   /// Typically set when running unit tests:
   ///  ./Slicer --testing --launch ./bin/qSlicerXXXTests ...
-  /// \note Using this option is equivalent to 'disable-settings' option. Note that
-  /// this may change in the future.
-  /// \sa settingsEnabled()
+  /// \note Using this option implies 'disable-settings' option.
+  /// \sa settingsDisabled()
   bool isTestingEnabled()const;
 
 #ifdef Slicer_USE_PYTHONQT
   /// Return True if slicer has no python infrastructure initialized.
   /// Python is still compiled with the app, but not enabled at run-time.
-  /// \sa settingsEnabled()
+  /// \sa settingsDisabled()
   bool isPythonDisabled()const;
 #endif
 

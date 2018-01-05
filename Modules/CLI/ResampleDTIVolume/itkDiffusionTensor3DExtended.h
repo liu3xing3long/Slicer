@@ -11,8 +11,8 @@
   See License.txt or http://www.slicer.org/copyright/copyright.txt for details.
 
 ==========================================================================*/
-#ifndef __itkDiffusionTensor3DExtended_h
-#define __itkDiffusionTensor3DExtended_h
+#ifndef itkDiffusionTensor3DExtended_h
+#define itkDiffusionTensor3DExtended_h
 
 #include <itkDiffusionTensor3D.h>
 #include <itkMatrix.h>
@@ -35,9 +35,6 @@ public:
   typedef DiffusionTensor3DExtended   Self;
   typedef DiffusionTensor3D<DataType> Superclass;
   typedef Matrix<DataType, 3, 3>      MatrixType;
-
-  /** Run-time type information (and related methods). */
-  itkTypeMacro(DiffusionTensor3DExtended, DiffusionTensor3D);
 
   DiffusionTensor3DExtended()
   {

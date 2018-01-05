@@ -35,6 +35,9 @@ class Q_SLICER_QTMODULES_CAMERAS_EXPORT qSlicerCamerasModule
   : public qSlicerLoadableModule
 {
   Q_OBJECT
+#ifdef Slicer_HAVE_QT5
+  Q_PLUGIN_METADATA(IID "org.slicer.modules.loadable.qSlicerLoadableModule/1.0");
+#endif
   Q_INTERFACES(qSlicerLoadableModule);
 public:
   typedef qSlicerLoadableModule Superclass;
@@ -50,6 +53,9 @@ public:
   virtual QString helpText()const;
   virtual QString acknowledgementText()const;
   virtual QStringList contributors()const;
+
+  /// Specify editable node types
+  virtual QStringList associatedNodeTypes()const;
 
 protected:
 

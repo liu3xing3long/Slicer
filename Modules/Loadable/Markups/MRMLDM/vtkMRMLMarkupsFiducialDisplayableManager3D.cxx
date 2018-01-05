@@ -70,7 +70,14 @@ public:
   static vtkMarkupsFiducialWidgetCallback3D *New()
   { return new vtkMarkupsFiducialWidgetCallback3D; }
 
-  vtkMarkupsFiducialWidgetCallback3D(){}
+  vtkMarkupsFiducialWidgetCallback3D()
+    : Widget(NULL)
+    , Node(NULL)
+    , DisplayableManager(NULL)
+    , LastInteractionEventMarkupIndex(-1)
+    , PointMovedSinceStartInteraction(false)
+  {
+  }
 
   virtual void Execute (vtkObject *vtkNotUsed(caller), unsigned long event, void *callData)
   {
@@ -78,7 +85,7 @@ public:
       {
       // std::cout << "Warning: PlacePointEvent not supported" << std::endl;
       }
-    else if ((event == vtkCommand::EndInteractionEvent) || (event == vtkCommand::InteractionEvent))
+    else if ((event == vtkCommand::StartInteractionEvent) || (event == vtkCommand::EndInteractionEvent) || (event == vtkCommand::InteractionEvent))
       {
       // sanity checks
       if (!this->DisplayableManager)
@@ -95,8 +102,18 @@ public:
         }
       // sanity checks end
       }
-
-    if (event == vtkCommand::EndInteractionEvent)
+    if (event == vtkCommand::StartInteractionEvent)
+      {
+      // If calldata is NULL, invoking an event may cause a crash (e.g., Python observer
+      // tries to dereference the NULL pointer), therefore it's important to always pass a valid pointer
+      // and indicate invalidity with value (-1).
+      this->LastInteractionEventMarkupIndex = (callData ? *(reinterpret_cast<int *>(callData)) : -1);
+      this->PointMovedSinceStartInteraction = false;
+      this->Node->InvokeEvent(vtkMRMLMarkupsNode::PointStartInteractionEvent, &this->LastInteractionEventMarkupIndex);
+      // no need to propagate to MRML, just notify external observers that the user selected a markup
+      return;
+      }
+    else if (event == vtkCommand::EndInteractionEvent)
       {
       // save the state of the node when done moving, then call
       // PropagateWidgetToMRML to update the node one last time
@@ -104,7 +121,22 @@ public:
         {
         this->Node->GetScene()->SaveStateForUndo(this->Node);
         }
-      this->Node->InvokeEvent(vtkMRMLMarkupsNode::PointEndInteractionEvent, callData);
+      if (callData)
+        {
+        // Most of the time vtkCommand::EndInteractionEvent does not provide
+        // seed index, but in case we get a value then update the markup index.
+        this->LastInteractionEventMarkupIndex = *(reinterpret_cast<int *>(callData));
+        }
+      this->Node->InvokeEvent(vtkMRMLMarkupsNode::PointEndInteractionEvent, &this->LastInteractionEventMarkupIndex);
+      if (!this->PointMovedSinceStartInteraction)
+        {
+        this->Node->InvokeEvent(vtkMRMLMarkupsNode::PointClickedEvent, &this->LastInteractionEventMarkupIndex);
+        }
+      this->LastInteractionEventMarkupIndex = -1;
+      }
+    else if (event == vtkCommand::InteractionEvent)
+      {
+      this->PointMovedSinceStartInteraction = true;
       }
     // the interaction with the widget ended, now propagate the changes to MRML
     this->DisplayableManager->PropagateWidgetToMRML(this->Widget, this->Node);
@@ -126,6 +158,8 @@ public:
   vtkAbstractWidget * Widget;
   vtkMRMLMarkupsNode * Node;
   vtkMRMLMarkupsDisplayableManager3D * DisplayableManager;
+  int LastInteractionEventMarkupIndex;
+  bool PointMovedSinceStartInteraction;
 };
 
 //---------------------------------------------------------------------------
@@ -224,8 +258,9 @@ void vtkMRMLMarkupsFiducialDisplayableManager3D::OnWidgetCreated(vtkAbstractWidg
   myCallback->SetNode(node);
   myCallback->SetWidget(widget);
   myCallback->SetDisplayableManager(this);
-  widget->AddObserver(vtkCommand::EndInteractionEvent,myCallback);
-  widget->AddObserver(vtkCommand::InteractionEvent,myCallback);
+  widget->AddObserver(vtkCommand::StartInteractionEvent,myCallback);
+  widget->AddObserver(vtkCommand::EndInteractionEvent, myCallback);
+  widget->AddObserver(vtkCommand::InteractionEvent, myCallback);
   myCallback->Delete();
 }
 
@@ -364,6 +399,7 @@ void vtkMRMLMarkupsFiducialDisplayableManager3D::SetNthSeed(int n, vtkMRMLMarkup
     {
     handleRep->VisibilityOn();
     handleRep->HandleVisibilityOn();
+    handleRep->EnablePicking();
     if (textString.compare("") != 0)
       {
       handleRep->LabelVisibilityOn();
@@ -374,6 +410,7 @@ void vtkMRMLMarkupsFiducialDisplayableManager3D::SetNthSeed(int n, vtkMRMLMarkup
     {
     handleRep->VisibilityOff();
     handleRep->HandleVisibilityOff();
+    handleRep->DisablePicking();
     handleRep->LabelVisibilityOff();
     seedWidget->GetSeed(n)->EnabledOff();
     }
@@ -392,13 +429,15 @@ void vtkMRMLMarkupsFiducialDisplayableManager3D::SetNthSeed(int n, vtkMRMLMarkup
       (interactionNode->GetCurrentInteractionMode() == vtkMRMLInteractionNode::Place)
       && (interactionNode->GetPlaceModePersistence() == 1);
     }
-  if (listLocked || seedLocked || persistentPlaceMode)
+  vtkHandleWidget *seed = seedWidget->GetSeed(n);
+  if (listLocked || persistentPlaceMode)
     {
-    seedWidget->GetSeed(n)->ProcessEventsOff();
+    seed->ProcessEventsOff();
     }
   else
     {
-    seedWidget->GetSeed(n)->ProcessEventsOn();
+    seed->ProcessEventsOn();
+    seed->SetEnableTranslation(!seedLocked);
     }
 
   // set the glyph type if a new handle was created, or the glyph type changed
@@ -916,7 +955,7 @@ void vtkMRMLMarkupsFiducialDisplayableManager3D::OnMRMLMarkupsNodeNthMarkupModif
 }
 
 //---------------------------------------------------------------------------
-void vtkMRMLMarkupsFiducialDisplayableManager3D::OnMRMLMarkupsNodeMarkupAddedEvent(vtkMRMLMarkupsNode * markupsNode)
+void vtkMRMLMarkupsFiducialDisplayableManager3D::OnMRMLMarkupsNodeMarkupAddedEvent(vtkMRMLMarkupsNode * markupsNode, int n)
 {
   vtkDebugMacro("OnMRMLMarkupsNodeMarkupAddedEvent");
 
@@ -931,6 +970,13 @@ void vtkMRMLMarkupsFiducialDisplayableManager3D::OnMRMLMarkupsNodeMarkupAddedEve
     vtkErrorMacro("OnMRMLMarkupsNodeMarkupAddedEvent: a markup was added to a node that doesn't already have a widget! Returning..");
     return;
     }
+  if (n < 0)
+    {
+    // batch update, recreate the widget
+    this->Helper->RemoveWidgetAndNode(markupsNode);
+    this->AddWidget(markupsNode);
+    return;
+    }
 
   vtkSeedWidget* seedWidget = vtkSeedWidget::SafeDownCast(widget);
   if (!seedWidget)
@@ -940,7 +986,6 @@ void vtkMRMLMarkupsFiducialDisplayableManager3D::OnMRMLMarkupsNodeMarkupAddedEve
    }
 
   // this call will create a new handle and set it
-  int n = markupsNode->GetNumberOfMarkups() - 1;
   this->SetNthSeed(n, vtkMRMLMarkupsFiducialNode::SafeDownCast(markupsNode), seedWidget);
 
   vtkSeedRepresentation * seedRepresentation = vtkSeedRepresentation::SafeDownCast(seedWidget->GetRepresentation());
@@ -949,7 +994,7 @@ void vtkMRMLMarkupsFiducialDisplayableManager3D::OnMRMLMarkupsNodeMarkupAddedEve
 }
 
 //---------------------------------------------------------------------------
-void vtkMRMLMarkupsFiducialDisplayableManager3D::OnMRMLMarkupsNodeMarkupRemovedEvent(vtkMRMLMarkupsNode * markupsNode)
+void vtkMRMLMarkupsFiducialDisplayableManager3D::OnMRMLMarkupsNodeMarkupRemovedEvent(vtkMRMLMarkupsNode * markupsNode, int vtkNotUsed(n))
 {
   vtkDebugMacro("OnMRMLMarkupsNodeMarkupRemovedEvent");
 

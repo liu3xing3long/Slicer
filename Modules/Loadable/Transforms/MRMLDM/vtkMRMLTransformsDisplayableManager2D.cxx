@@ -27,6 +27,7 @@
 #include "vtkSlicerTransformLogic.h"
 
 // MRML includes
+#include <vtkMRMLMarkupsFiducialNode.h>
 #include <vtkMRMLProceduralColorNode.h>
 #include <vtkMRMLScene.h>
 #include <vtkMRMLSliceCompositeNode.h>
@@ -346,7 +347,8 @@ void vtkMRMLTransformsDisplayableManager2D::vtkInternal::UpdateDisplayNodePipeli
   vtkMRMLTransformDisplayNode* transformDisplayNode = vtkMRMLTransformDisplayNode::SafeDownCast(displayNode);
 
   vtkSmartPointer<vtkPolyData> polyData = vtkSmartPointer<vtkPolyData>::New();
-  vtkSlicerTransformLogic::GetVisualization2d(polyData, transformDisplayNode, this->SliceNode);
+  vtkMRMLMarkupsFiducialNode* glyphPointsNode = vtkMRMLMarkupsFiducialNode::SafeDownCast(displayNode->GetGlyphPointsNode());
+  vtkSlicerTransformLogic::GetVisualization2d(polyData, transformDisplayNode, this->SliceNode, glyphPointsNode);
 
   pipeline->Transformer->SetInputData(polyData);
 
@@ -396,10 +398,6 @@ void vtkMRMLTransformsDisplayableManager2D::vtkInternal::UpdateDisplayNodePipeli
 void vtkMRMLTransformsDisplayableManager2D::vtkInternal::AddObservations(vtkMRMLTransformNode* node)
 {
   vtkEventBroker* broker = vtkEventBroker::GetInstance();
-  if (!broker->GetObservationExist(node, vtkMRMLDisplayableNode::TransformModifiedEvent, this->External, this->External->GetMRMLNodesCallbackCommand() ))
-    {
-    broker->AddObservation(node, vtkMRMLDisplayableNode::TransformModifiedEvent, this->External, this->External->GetMRMLNodesCallbackCommand() );
-    }
   if (!broker->GetObservationExist(node, vtkMRMLDisplayableNode::DisplayModifiedEvent, this->External, this->External->GetMRMLNodesCallbackCommand() ))
     {
     broker->AddObservation(node, vtkMRMLDisplayableNode::DisplayModifiedEvent, this->External, this->External->GetMRMLNodesCallbackCommand() );
@@ -418,8 +416,6 @@ void vtkMRMLTransformsDisplayableManager2D::vtkInternal::RemoveObservations(vtkM
   observations = broker->GetObservations(node, vtkMRMLTransformableNode::TransformModifiedEvent, this->External, this->External->GetMRMLNodesCallbackCommand() );
   broker->RemoveObservations(observations);
   observations = broker->GetObservations(node, vtkMRMLDisplayableNode::DisplayModifiedEvent, this->External, this->External->GetMRMLNodesCallbackCommand() );
-  broker->RemoveObservations(observations);
-  observations = broker->GetObservations(node, vtkMRMLDisplayableNode::TransformModifiedEvent, this->External, this->External->GetMRMLNodesCallbackCommand() );
   broker->RemoveObservations(observations);
 }
 
@@ -548,8 +544,7 @@ void vtkMRMLTransformsDisplayableManager2D::ProcessMRMLNodesEvents(vtkObject* ca
       this->Internal->UpdateDisplayNode(displayNode);
       this->RequestRender();
       }
-    else if ( (event == vtkMRMLDisplayableNode::TransformModifiedEvent)
-             || (event == vtkMRMLTransformableNode::TransformModifiedEvent))
+    else if (event == vtkMRMLTransformableNode::TransformModifiedEvent)
       {
       this->Internal->UpdateDisplayableTransforms(displayableNode);
       this->RequestRender();

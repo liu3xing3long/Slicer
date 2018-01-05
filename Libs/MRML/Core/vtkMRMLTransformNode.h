@@ -35,29 +35,29 @@ class VTK_MRML_EXPORT vtkMRMLTransformNode : public vtkMRMLDisplayableNode
 public:
   static vtkMRMLTransformNode *New();
   vtkTypeMacro(vtkMRMLTransformNode,vtkMRMLDisplayableNode);
-  void PrintSelf(ostream& os, vtkIndent indent);
+  void PrintSelf(ostream& os, vtkIndent indent) VTK_OVERRIDE;
 
-  virtual vtkMRMLNode* CreateNodeInstance();
+  virtual vtkMRMLNode* CreateNodeInstance() VTK_OVERRIDE;
 
   ///
   /// Read node attributes from XML file
-  virtual void ReadXMLAttributes( const char** atts);
+  virtual void ReadXMLAttributes( const char** atts) VTK_OVERRIDE;
 
   ///
   /// Write this node's information to a MRML file in XML format.
-  virtual void WriteXML(ostream& of, int indent);
+  virtual void WriteXML(ostream& of, int indent) VTK_OVERRIDE;
 
   ///
   /// Copy the node's attributes to this object
-  virtual void Copy(vtkMRMLNode *node);
+  virtual void Copy(vtkMRMLNode *node) VTK_OVERRIDE;
 
   ///
   /// Get node XML tag name (like Volume, Model)
-  virtual const char* GetNodeTagName() {return "Transform";};
+  virtual const char* GetNodeTagName() VTK_OVERRIDE {return "Transform";};
 
   ///
   /// Finds the storage node and read the data
-  virtual void UpdateScene(vtkMRMLScene *scene)
+  virtual void UpdateScene(vtkMRMLScene *scene) VTK_OVERRIDE
     {
      Superclass::UpdateScene(scene);
     };
@@ -222,7 +222,7 @@ public:
   /// linear transform.
   /// If the current transformation was non-linear then the method
   /// is equivalent to ApplyTransform (creates a composite transform).
-  virtual void ApplyTransformMatrix(vtkMatrix4x4* transformMatrix);
+  virtual void ApplyTransformMatrix(vtkMatrix4x4* transformMatrix) VTK_OVERRIDE;
 
   ///
   /// Set a new matrix transform of this node to parent node.
@@ -237,9 +237,9 @@ public:
   virtual int SetAndObserveMatrixTransformFromParent(vtkMatrix4x4 *matrix);
 
   /// Reimplemented from vtkMRMLTransformableNode
-  virtual bool CanApplyNonLinearTransforms()const;
+  virtual bool CanApplyNonLinearTransforms()const VTK_OVERRIDE;
   /// Reimplemented from vtkMRMLTransformableNode
-  virtual void ApplyTransform(vtkAbstractTransform* transform);
+  virtual void ApplyTransform(vtkAbstractTransform* transform) VTK_OVERRIDE;
 
   /// Split a composite transform to its components. The components are inserted to the scene between this transform and its parent.
   /// A composite transform can be created by hardening different types of transforms on each other.
@@ -248,11 +248,11 @@ public:
 
   ///
   /// Create default storage node or NULL if does not have one
-  virtual vtkMRMLStorageNode* CreateDefaultStorageNode();
+  virtual vtkMRMLStorageNode* CreateDefaultStorageNode() VTK_OVERRIDE;
 
   ///
   /// Create and observe default display node
-  virtual void CreateDefaultDisplayNodes();
+  virtual void CreateDefaultDisplayNodes() VTK_OVERRIDE;
 
   /// Get/Set for ReadAsTransformToParent
   /// Indicates that the transform in the storage node has to be interpreted as
@@ -274,19 +274,21 @@ public:
     this->InvokeCustomModifiedEvent(vtkMRMLTransformableNode::TransformModifiedEvent);
     }
 
-  virtual bool GetModifiedSinceRead();
+  virtual bool GetModifiedSinceRead() VTK_OVERRIDE;
 
   ///
   /// Retrieves the transform as the specified transform class.
+  /// If modifiableOnly is set to true then NULL will be returned for transforms that cannot be modified (e.g., because it is computed from its inverse).
   /// Returns NULL if the transform is not a kind of transform that was requested.
   /// Example usage: vtkOrientedBSplineTransform* bsplineTransform=vtkOrientedBSplineTransform::SafeDownCast(GetTransformToParentAs("vtkOrientedBSplineTransform"));
-  vtkAbstractTransform* GetTransformToParentAs(const char* transformType, bool logErrorIfFails=true);
+  vtkAbstractTransform* GetTransformToParentAs(const char* transformType, bool logErrorIfFails = true, bool modifiableOnly = false);
 
   ///
   /// Retrieves the transform as the specified transform class.
+  /// If modifiableOnly is set to true then NULL will be returned for transforms that cannot be modified (e.g., because it is computed from its inverse).
   /// Returns NULL if the transform is not a kind of transform that was requested.
   /// Example usage: vtkOrientedBSplineTransform* bsplineTransform=vtkOrientedBSplineTransform::SafeDownCast(GetTransformFromParentAs("vtkOrientedBSplineTransform"));
-  vtkAbstractTransform* GetTransformFromParentAs(const char* transformType, bool logErrorIfFails=true);
+  vtkAbstractTransform* GetTransformFromParentAs(const char* transformType, bool logErrorIfFails = true, bool modifiableOnly = false);
 
   /// Set and observe a new transform of this node to parent node.
   /// Each time the transform is modified,
@@ -305,7 +307,7 @@ public:
   /// alternative method to propagate events generated in Transform nodes
   virtual void ProcessMRMLEvents ( vtkObject * /*caller*/,
                                    unsigned long /*event*/,
-                                   void * /*callData*/ );
+                                   void * /*callData*/ ) VTK_OVERRIDE;
 
   ///
   /// Creates a shallow copy of an input composite transform (that can contain a complex hierarchy of transforms)
@@ -337,7 +339,7 @@ public:
   void Inverse();
 
   /// Get the latest modification time of the stored transform
-  unsigned long GetTransformToWorldMTime();
+  vtkMTimeType GetTransformToWorldMTime();
 
   /// Get a human-readable description of the transformation
   /// The returned string is stored in a shared buffer therefore the text has to be copied. This is a

@@ -62,7 +62,7 @@ class VTK_MRML_EXPORT vtkMRMLScene : public vtkObject
 public:
   static vtkMRMLScene *New();
   vtkTypeMacro(vtkMRMLScene, vtkObject);
-  void PrintSelf(ostream& os, vtkIndent indent);
+  void PrintSelf(ostream& os, vtkIndent indent) VTK_OVERRIDE;
 
   /// Set URL (file name) of the scene
   void SetURL(const char *url);
@@ -99,7 +99,17 @@ public:
   /// Reset all nodes to their constructor's state
   void ResetNodes();
 
-  /// Create node with a given class
+  /// \brief Create node with a given class
+  ///
+  /// This method ensures the new node properties are
+  /// initialized using the associated default node if any.
+  ///
+  /// \note A default node is associated with an other node if
+  /// it belongs to the class hierarchy of that node.
+  ///
+  /// \warning This method does NOT add the new node to the scene.
+  ///
+  /// \sa AddDefaultNode()
   vtkMRMLNode* CreateNodeByClass(const char* className);
 
   /// \brief Register a node class to the scene so that the scene can later
@@ -127,7 +137,7 @@ public:
   /// \brief Utility function to RegisterNodeClass(), the node tag name is used when
   /// registering the node.
   ///
-  /// \sa RegisterNodeClass()
+  /// \sa RegisterNodeClass(vtkMRMLNode* node, const char* tagName)
   void RegisterNodeClass(vtkMRMLNode* node);
 
   /// Add a path to the list.
@@ -162,6 +172,23 @@ public:
   /// into the already existing singleton node. That node is then returned.
   vtkMRMLNode* AddNode(vtkMRMLNode *nodeToAdd);
 
+  /// \brief Instantiate and add a node to the scene.
+  ///
+  /// This is the preferred way to create and add a new node to
+  /// the scene. It ensures that the new node properties are initialized
+  /// considering its default nodes.
+  ///
+  /// The method calls CreateNodeByClass(), vtkMRMLNode::SetName() and AddNode().
+  ///
+  /// \note Instead of calling SetName() after creating the node, prefer
+  /// passing \a nodeBaseName, indeed the method AddNode() ensures that the
+  /// final node name is unique in the scene by appending a suffix if needed.
+  ///
+  /// \sa CreateNodeByClass(), vtkMRMLNode::SetName(), AddNode()
+  /// \sa AddDefaultNode()
+  /// \sa GenerateUniqueName()
+  vtkMRMLNode* AddNewNodeByClass(std::string className, std::string nodeBaseName = "");
+
   /// Add a copy of a node to the scene.
   vtkMRMLNode* CopyNode(vtkMRMLNode *n);
 
@@ -179,13 +206,31 @@ public:
   /// Returns its position in the list.
   int IsNodePresent(vtkMRMLNode *n);
 
-  /// Initialize a traversal (not reentrant!)
+  /// This method is deprecated, kept for backward compatibility but it will be
+  /// removed in the future.
+  /// The problem is that it changes the node collection's internal iterator,
+  /// which may cause unintended side effects in caller functions that also
+  /// use the node collection's internal iterator.
+  /// Use other methods instead (GetNodes(), GetNodesByClass(), etc.)
+  /// or traverse collection returned by GetNodes() using a collection iterator.
   void InitTraversal();
 
-  /// Get next node in the scene.
+  /// This method is deprecated, kept for backward compatibility but it will be
+  /// removed in the future.
+  /// The problem is that it changes the node collection's internal iterator,
+  /// which may cause unintended side effects in caller functions that also
+  /// use the node collection's internal iterator.
+  /// Use other methods instead (GetNodes(), GetNodesByClass(), etc.)
+  /// or traverse collection returned by GetNodes() using a collection iterator.
   vtkMRMLNode *GetNextNode();
 
-  /// Get next node of the class in the scene.
+  /// This method is deprecated, kept for backward compatibility but it will be
+  /// removed in the future.
+  /// The problem is that it changes the node collection's internal iterator,
+  /// which may cause unintended side effects in caller functions that also
+  /// use the node collection's internal iterator.
+  /// Use other methods instead (GetNodes(), GetNodesByClass(), etc.)
+  /// or traverse collection returned by GetNodes() using a collection iterator.
   vtkMRMLNode *GetNextNodeByClass(const char* className);
 
   /// Get nodes having the specified name
@@ -197,7 +242,12 @@ public:
   ///
   /// By default, \a byName will be compared using an exact match. If
   /// \a exactNameMatch is set to \a false, the node will be returned if
-  /// its name starts with \a byName.
+  /// its name starts with \a byName. If the pointer \a byHideFromEditors
+  /// is not set, the function will return both the nodes hidden from
+  /// editors as well as the nodes visible in editors. If the pointer
+  /// \a byHideFromEditors is set, the function will only return the
+  /// nodes that are either hidden from editors or the nodes that are
+  /// visible in editors.
   vtkMRMLNode *GetFirstNode(const char* byName = 0, const char* byClass = 0,
                             const int* byHideFromEditors = 0,
                             bool exactNameMatch = true);
@@ -216,8 +266,10 @@ public:
   /// Get n-th node in the scene
   vtkMRMLNode* GetNthNode(int n);
 
-  /// Get n-th node of a specified class  in the scene
+  /// Get n-th node of a specified class in the scene
   vtkMRMLNode* GetNthNodeByClass(int n, const char* className );
+  /// Convenience function for getting 0-th node of a specified class in the scene
+  vtkMRMLNode* GetFirstNodeByClass(const char* className);
 
   /// Get number of nodes of a specified class in the scene
   int GetNumberOfNodesByClass(const char* className);
@@ -250,6 +302,11 @@ public:
   /// Get the nth registered node class, returns NULL if n is out of the range 0-GetNumberOfRegisteredNodeClasses
   /// Useful for iterating through nodes to find all the possible storage nodes.
   vtkMRMLNode * GetNthRegisteredNodeClass(int n);
+
+  /// \brief Return True if \a className is a registered node.
+  ///
+  /// \sa RegisterNodeClass(vtkMRMLNode* node)
+  bool IsNodeClassRegistered(const std::string& className);
 
   /// \brief Generate a node name that is unique in the scene.
   /// Calling this function successively with the same baseName returns a
@@ -693,7 +750,7 @@ protected:
   NodeReferencesType::iterator FindNodeReference(const char* referencedId, vtkMRMLNode* referencingNode);
 
   vtkCollection*  Nodes;
-  unsigned long   SceneModifiedTime;
+  vtkMTimeType    SceneModifiedTime;
 
   /// data i/o handling members
   vtkCacheManager *  CacheManager;
@@ -739,7 +796,7 @@ protected:
 
   int ReadDataOnLoad;
 
-  unsigned long NodeIDsMTime;
+  vtkMTimeType  NodeIDsMTime;
 
   void RemoveAllNodes(bool removeSingletons);
 

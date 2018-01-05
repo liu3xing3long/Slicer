@@ -22,19 +22,24 @@
 
 // SubjectHierarchy plugins includes
 #include "qSlicerSubjectHierarchyPluginHandler.h"
+#include "qSlicerSubjectHierarchyPluginLogic.h"
 #include "qSlicerSubjectHierarchyAbstractPlugin.h"
 #include "qSlicerSubjectHierarchyDefaultPlugin.h"
 
-// SubjectHierarchy MRML includes
-#include "vtkMRMLSubjectHierarchyNode.h"
-
-// MRML includes
-#include <vtkMRMLNode.h>
+// Subject hierarchy logic includes
+#include "vtkSlicerSubjectHierarchyModuleLogic.h"
 
 // Qt includes
 #include <QDebug>
 #include <QStringList>
 #include <QInputDialog>
+#include <QSettings>
+
+// SlicerQt includes
+#include "qSlicerApplication.h"
+
+// VTK includes
+#include <vtkCallbackCommand.h>
 
 //----------------------------------------------------------------------------
 qSlicerSubjectHierarchyPluginHandler *qSlicerSubjectHierarchyPluginHandler::m_Instance = NULL;
@@ -94,16 +99,28 @@ void qSlicerSubjectHierarchyPluginHandler::setInstance(qSlicerSubjectHierarchyPl
 //-----------------------------------------------------------------------------
 qSlicerSubjectHierarchyPluginHandler::qSlicerSubjectHierarchyPluginHandler(QObject* parent)
   : QObject(parent)
-  , m_Scene(NULL)
+  , m_SubjectHierarchyNode(NULL)
+  , m_MRMLScene(NULL)
+  , m_PluginLogic(NULL)
 {
-  this->m_CurrentNodes.clear();
+  this->m_CurrentItems.clear();
+
   this->m_RegisteredPlugins.clear();
   this->m_DefaultPlugin = new qSlicerSubjectHierarchyDefaultPlugin();
+
+  this->m_CallBack = vtkSmartPointer<vtkCallbackCommand>::New();
+  this->m_CallBack->SetClientData(this);
+  this->m_CallBack->SetCallback(qSlicerSubjectHierarchyPluginHandler::onSubjectHierarchyNodeEvent);
 }
 
 //-----------------------------------------------------------------------------
 qSlicerSubjectHierarchyPluginHandler::~qSlicerSubjectHierarchyPluginHandler()
 {
+  if (m_SubjectHierarchyNode)
+    {
+    m_SubjectHierarchyNode->RemoveObserver(m_CallBack);
+    }
+
   QList<qSlicerSubjectHierarchyAbstractPlugin*>::iterator pluginIt;
   for (pluginIt = this->m_RegisteredPlugins.begin(); pluginIt != this->m_RegisteredPlugins.end(); ++pluginIt)
     {
@@ -119,12 +136,12 @@ bool qSlicerSubjectHierarchyPluginHandler::registerPlugin(qSlicerSubjectHierarch
 {
   if (pluginToRegister == NULL)
     {
-    qCritical() << "qSlicerSubjectHierarchyPluginHandler::RegisterPlugin: Invalid plugin to register!";
+    qCritical() << Q_FUNC_INFO << ": Invalid plugin to register!";
     return false;
     }
   if (pluginToRegister->name().isEmpty())
     {
-    qCritical() << "qSlicerSubjectHierarchyPluginHandler::RegisterPlugin: SubjectHierarchy plugin cannot be registered with empty name!";
+    qCritical() << Q_FUNC_INFO << ": SubjectHierarchy plugin cannot be registered with empty name!";
     return false;
     }
 
@@ -134,8 +151,7 @@ bool qSlicerSubjectHierarchyPluginHandler::registerPlugin(qSlicerSubjectHierarch
     {
     if (pluginToRegister->name().compare(currentPlugin->name()) == 0)
       {
-      qDebug() << "qSlicerSubjectHierarchyPluginHandler::RegisterPlugin: "
-                    "SubjectHierarchy plugin " << pluginToRegister->name() << " is already registered";
+      qDebug() << Q_FUNC_INFO << ": SubjectHierarchy plugin " << pluginToRegister->name() << " is already registered";
       return false;
       }
     }
@@ -183,20 +199,20 @@ qSlicerSubjectHierarchyAbstractPlugin* qSlicerSubjectHierarchyPluginHandler::plu
       }
     }
 
-  qWarning() << "qSlicerSubjectHierarchyPluginHandler::pluginByName: Plugin named '" << name << "' cannot be found!";
+  qWarning() << Q_FUNC_INFO << ": Plugin named '" << name << "' cannot be found!";
   return NULL;
 }
 
 //---------------------------------------------------------------------------
-QList<qSlicerSubjectHierarchyAbstractPlugin*> qSlicerSubjectHierarchyPluginHandler::pluginsForAddingToSubjectHierarchyForNode(
-  vtkMRMLNode* node, vtkMRMLSubjectHierarchyNode* parent/*=NULL*/)
+QList<qSlicerSubjectHierarchyAbstractPlugin*> qSlicerSubjectHierarchyPluginHandler::pluginsForAddingNodeToSubjectHierarchy(
+  vtkMRMLNode* node, vtkIdType parentItemID/*=vtkMRMLSubjectHierarchyNode::INVALID_ITEM_ID*/ )
 {
   QList<qSlicerSubjectHierarchyAbstractPlugin*> mostSuitablePlugins;
   double bestConfidence = 0.0;
   qSlicerSubjectHierarchyAbstractPlugin* currentPlugin = NULL;
   foreach (currentPlugin, this->m_RegisteredPlugins)
     {
-    double currentConfidence = currentPlugin->canAddNodeToSubjectHierarchy(node, parent);
+    double currentConfidence = currentPlugin->canAddNodeToSubjectHierarchy(node, parentItemID);
     if (currentConfidence > bestConfidence)
       {
       bestConfidence = currentConfidence;
@@ -216,15 +232,15 @@ QList<qSlicerSubjectHierarchyAbstractPlugin*> qSlicerSubjectHierarchyPluginHandl
 }
 
 //---------------------------------------------------------------------------
-QList<qSlicerSubjectHierarchyAbstractPlugin*> qSlicerSubjectHierarchyPluginHandler::pluginsForReparentingInsideSubjectHierarchyForNode(
-  vtkMRMLSubjectHierarchyNode* node, vtkMRMLSubjectHierarchyNode* parent/*=NULL*/) //TODO is NULL possible?
+QList<qSlicerSubjectHierarchyAbstractPlugin*>
+qSlicerSubjectHierarchyPluginHandler::pluginsForReparentingItemInSubjectHierarchy(vtkIdType itemID, vtkIdType parentItemID)
 {
   QList<qSlicerSubjectHierarchyAbstractPlugin*> mostSuitablePlugins;
   double bestConfidence = 0.0;
   qSlicerSubjectHierarchyAbstractPlugin* currentPlugin = NULL;
   foreach (currentPlugin, this->m_RegisteredPlugins)
     {
-    double currentConfidence = currentPlugin->canReparentNodeInsideSubjectHierarchy(node, parent);
+    double currentConfidence = currentPlugin->canReparentItemInsideSubjectHierarchy(itemID, parentItemID);
     if (currentConfidence > bestConfidence)
       {
       bestConfidence = currentConfidence;
@@ -244,14 +260,21 @@ QList<qSlicerSubjectHierarchyAbstractPlugin*> qSlicerSubjectHierarchyPluginHandl
 }
 
 //---------------------------------------------------------------------------
-qSlicerSubjectHierarchyAbstractPlugin* qSlicerSubjectHierarchyPluginHandler::findOwnerPluginForSubjectHierarchyNode(vtkMRMLSubjectHierarchyNode* node)
+qSlicerSubjectHierarchyAbstractPlugin*
+qSlicerSubjectHierarchyPluginHandler::findOwnerPluginForSubjectHierarchyItem(vtkIdType itemID)
 {
+  if (!this->m_SubjectHierarchyNode.GetPointer())
+    {
+    qCritical() << Q_FUNC_INFO << ": Invalid subject hierarchy node";
+    return NULL;
+    }
+
   QList<qSlicerSubjectHierarchyAbstractPlugin*> mostSuitablePlugins;
   double bestConfidence = 0.0;
   qSlicerSubjectHierarchyAbstractPlugin* currentPlugin = NULL;
   foreach (currentPlugin, this->m_RegisteredPlugins)
     {
-    double currentConfidence = currentPlugin->canOwnSubjectHierarchyNode(node);
+    double currentConfidence = currentPlugin->canOwnSubjectHierarchyItem(itemID);
     if (currentConfidence > bestConfidence)
       {
       bestConfidence = currentConfidence;
@@ -267,14 +290,15 @@ qSlicerSubjectHierarchyAbstractPlugin* qSlicerSubjectHierarchyPluginHandler::fin
       }
     }
 
-  // Determine owner plugin based on plugins returning the highest non-zero confidence values for the input node
+  // Determine owner plugin based on plugins returning the highest non-zero confidence values for the input item
   qSlicerSubjectHierarchyAbstractPlugin* ownerPlugin = NULL;
   if (mostSuitablePlugins.size() > 1)
     {
     // Let the user choose a plugin if more than one returned the same non-zero confidence value
-    vtkMRMLNode* associatedNode = (node->GetAssociatedNode() ? node->GetAssociatedNode() : node);
+    vtkMRMLNode* dataNode = this->m_SubjectHierarchyNode->GetItemDataNode(itemID);
     QString textToDisplay = QString("Equal confidence number found for more than one subject hierarchy plugin.\n\n"
-                                    "Select plugin to own node named\n'%1'\n(type %2):").arg(associatedNode->GetName()).arg(associatedNode->GetNodeTagName());
+                                    "Select plugin to own node named\n'%1'\n(type %2):").arg(
+                                    dataNode?dataNode->GetName():"NULL").arg(dataNode?dataNode->GetNodeTagName():"None");
     ownerPlugin = this->selectPluginFromDialog(textToDisplay, mostSuitablePlugins);
     }
   else if (mostSuitablePlugins.size() == 1)
@@ -292,24 +316,36 @@ qSlicerSubjectHierarchyAbstractPlugin* qSlicerSubjectHierarchyPluginHandler::fin
 }
 
 //---------------------------------------------------------------------------
-qSlicerSubjectHierarchyAbstractPlugin* qSlicerSubjectHierarchyPluginHandler::findAndSetOwnerPluginForSubjectHierarchyNode(vtkMRMLSubjectHierarchyNode* node)
+qSlicerSubjectHierarchyAbstractPlugin* qSlicerSubjectHierarchyPluginHandler::findAndSetOwnerPluginForSubjectHierarchyItem(vtkIdType itemID)
 {
-  qSlicerSubjectHierarchyAbstractPlugin* ownerPlugin = this->findOwnerPluginForSubjectHierarchyNode(node);
-  node->SetOwnerPluginName(ownerPlugin->name().toLatin1().constData());
+  if (!this->m_SubjectHierarchyNode.GetPointer())
+    {
+    qCritical() << Q_FUNC_INFO << ": Invalid subject hierarchy node";
+    return NULL;
+    }
+
+  qSlicerSubjectHierarchyAbstractPlugin* ownerPlugin = this->findOwnerPluginForSubjectHierarchyItem(itemID);
+  this->m_SubjectHierarchyNode->SetItemOwnerPluginName(itemID, ownerPlugin->name().toLatin1().constData());
   return ownerPlugin;
 }
 
 //---------------------------------------------------------------------------
-qSlicerSubjectHierarchyAbstractPlugin* qSlicerSubjectHierarchyPluginHandler::getOwnerPluginForSubjectHierarchyNode(vtkMRMLSubjectHierarchyNode* node)
+qSlicerSubjectHierarchyAbstractPlugin* qSlicerSubjectHierarchyPluginHandler::getOwnerPluginForSubjectHierarchyItem(vtkIdType itemID)
 {
-  if (!node->GetOwnerPluginName())
+  if (!this->m_SubjectHierarchyNode.GetPointer())
     {
-    qCritical() << "qSlicerSubjectHierarchyPluginHandler::getOwnerPluginForSubjectHierarchyNode: Node '" << node->GetName()
-      << "' is not owned by any plugin!";
+    qCritical() << Q_FUNC_INFO << ": Invalid subject hierarchy node";
     return NULL;
     }
 
-  return this->pluginByName(node->GetOwnerPluginName());
+  std::string ownerPluginName = this->m_SubjectHierarchyNode->GetItemOwnerPluginName(itemID);
+  if (ownerPluginName.empty())
+    {
+    qCritical() << Q_FUNC_INFO << ": Item '" << this->m_SubjectHierarchyNode->GetItemName(itemID).c_str() << "' is not owned by any plugin!";
+    return NULL;
+    }
+
+  return this->pluginByName(ownerPluginName.c_str());
 }
 
 //---------------------------------------------------------------------------
@@ -318,7 +354,7 @@ qSlicerSubjectHierarchyAbstractPlugin* qSlicerSubjectHierarchyPluginHandler::sel
 {
   if (candidatePlugins.empty())
     {
-    qCritical() << "qSlicerSubjectHierarchyPluginHandler::selectPluginFromDialog: Empty candidate plugin list! Returning default plugin.";
+    qCritical() << Q_FUNC_INFO << ": Empty candidate plugin list! Returning default plugin.";
     return m_DefaultPlugin;
     }
 
@@ -345,71 +381,262 @@ qSlicerSubjectHierarchyAbstractPlugin* qSlicerSubjectHierarchyPluginHandler::sel
     }
 
   // User pressed cancel (or [1] failed to find the plugin)
-  qWarning() << "qSlicerSubjectHierarchyPluginHandler::selectPluginFromDialog: Plugin selection failed! Returning first available plugin";
+  qWarning() << Q_FUNC_INFO << ": Plugin selection failed! Returning first available plugin";
   return candidatePlugins[0];
 }
 
 //-----------------------------------------------------------------------------
-void qSlicerSubjectHierarchyPluginHandler::setScene(vtkMRMLScene* scene)
+void qSlicerSubjectHierarchyPluginHandler::setSubjectHierarchyNode(vtkMRMLSubjectHierarchyNode* shNode)
 {
-  m_Scene = scene;
-}
-
-//-----------------------------------------------------------------------------
-vtkMRMLScene* qSlicerSubjectHierarchyPluginHandler::scene()
-{
-  return m_Scene;
-}
-
-//-----------------------------------------------------------------------------
-void qSlicerSubjectHierarchyPluginHandler::setCurrentNode(vtkMRMLSubjectHierarchyNode* node)
-{
-  this->m_CurrentNodes.clear();
-  this->m_CurrentNodes.append(node);
-}
-
-//-----------------------------------------------------------------------------
-vtkMRMLSubjectHierarchyNode* qSlicerSubjectHierarchyPluginHandler::currentNode()
-{
-  if (this->m_CurrentNodes.size() != 1)
+  if (shNode == m_SubjectHierarchyNode)
     {
-    return NULL;
-    }
-  return this->m_CurrentNodes.at(0);
-}
-
-//-----------------------------------------------------------------------------
-void qSlicerSubjectHierarchyPluginHandler::setCurrentNodes(QList<vtkMRMLSubjectHierarchyNode*> nodes)
-{
-  this->m_CurrentNodes = nodes;
-}
-
-//-----------------------------------------------------------------------------
-QList<vtkMRMLSubjectHierarchyNode*> qSlicerSubjectHierarchyPluginHandler::currentNodes()
-{
-  return this->m_CurrentNodes;
-}
-
-//------------------------------------------------------------------------------
-void qSlicerSubjectHierarchyPluginHandler::reconnectOwnerPluginChanged(vtkObject* node, void* callData)
-{
-  char* oldPluginName = reinterpret_cast<char*>(callData);
-  vtkMRMLSubjectHierarchyNode* subjectHierarchyNode = vtkMRMLSubjectHierarchyNode::SafeDownCast(node);
-  if (!subjectHierarchyNode)
-    {
-    qCritical() << "qSlicerSubjectHierarchyPluginHandler::onOwnerPluginChanged: Invalid subject hierarchy node!";
     return;
     }
 
-  qSlicerSubjectHierarchyAbstractPlugin* oldPlugin = this->pluginByName(oldPluginName);
-  if (oldPlugin)
+  if (m_SubjectHierarchyNode)
     {
-    // Let the old plugin perform clean-up actions if necessary
-    // Note: qvtkConnect did not work, thus the manual emit. The connection was not established again after disconnect.
-    oldPlugin->emitOwnerPluginChanged(node, callData);
+    m_SubjectHierarchyNode->RemoveObserver(m_CallBack);
     }
 
-  // Let the new plugin perform steps on claiming the node if necessary
-  qSlicerSubjectHierarchyAbstractPlugin* newPlugin = this->pluginByName(subjectHierarchyNode->GetOwnerPluginName());
-  newPlugin->emitOwnerPluginChanged(node, callData);
+  m_SubjectHierarchyNode = shNode;
+
+  if (shNode)
+    {
+    this->setMRMLScene(shNode->GetScene());
+    
+    shNode->AddObserver(vtkMRMLSubjectHierarchyNode::SubjectHierarchyItemAddedEvent, m_CallBack);
+    shNode->AddObserver(vtkMRMLSubjectHierarchyNode::SubjectHierarchyItemOwnerPluginSearchRequested, m_CallBack);
+    }
+}
+
+//-----------------------------------------------------------------------------
+vtkMRMLSubjectHierarchyNode* qSlicerSubjectHierarchyPluginHandler::subjectHierarchyNode()const
+{
+  return m_SubjectHierarchyNode;
+}
+
+//-----------------------------------------------------------------------------
+void qSlicerSubjectHierarchyPluginHandler::setMRMLScene(vtkMRMLScene* scene)
+{
+  if (scene == this->m_MRMLScene)
+    {
+    return;
+    }
+
+  m_MRMLScene = scene;
+
+  if (scene)
+    {
+    scene->AddObserver(vtkMRMLScene::NodeRemovedEvent, m_CallBack);
+    }
+
+  // Use subject hierarchy node from the new scene
+  vtkMRMLSubjectHierarchyNode* shNode = vtkMRMLSubjectHierarchyNode::GetSubjectHierarchyNode(scene);
+  if (!shNode)
+    {
+    qCritical() << Q_FUNC_INFO << ": There must be a subject hierarchy node in the scene";
+    return;
+    }
+  this->setSubjectHierarchyNode(shNode);
+}
+
+//-----------------------------------------------------------------------------
+vtkMRMLScene* qSlicerSubjectHierarchyPluginHandler::mrmlScene()const
+{
+  return m_MRMLScene;
+}
+
+//-----------------------------------------------------------------------------
+qSlicerSubjectHierarchyPluginLogic* qSlicerSubjectHierarchyPluginHandler::pluginLogic()
+{
+  return m_PluginLogic;
+}
+
+//-----------------------------------------------------------------------------
+void qSlicerSubjectHierarchyPluginHandler::setPluginLogic(qSlicerSubjectHierarchyPluginLogic* pluginLogic)
+{
+  if (m_PluginLogic && pluginLogic != m_PluginLogic)
+    {
+    qCritical() << Q_FUNC_INFO << ": Subject hierarchy plugin logic is a singleton and must not change";
+    return;
+    }
+
+  m_PluginLogic = pluginLogic;
+}
+
+//-----------------------------------------------------------------------------
+void qSlicerSubjectHierarchyPluginHandler::setCurrentItem(vtkIdType itemID)
+{
+  this->m_CurrentItems.clear();
+  this->m_CurrentItems.append(itemID);
+}
+
+//-----------------------------------------------------------------------------
+vtkIdType qSlicerSubjectHierarchyPluginHandler::currentItem()
+{
+  if (this->m_CurrentItems.size() != 1)
+    {
+    return vtkMRMLSubjectHierarchyNode::INVALID_ITEM_ID;
+    }
+  return this->m_CurrentItems.at(0);
+}
+
+//-----------------------------------------------------------------------------
+void qSlicerSubjectHierarchyPluginHandler::setCurrentItems(QList<vtkIdType> items)
+{
+  this->m_CurrentItems = items;
+}
+
+//-----------------------------------------------------------------------------
+QList<vtkIdType> qSlicerSubjectHierarchyPluginHandler::currentItems()
+{
+  return this->m_CurrentItems;
+}
+
+//-----------------------------------------------------------------------------
+bool qSlicerSubjectHierarchyPluginHandler::autoDeleteSubjectHierarchyChildren()const
+{
+  QSettings* settings = qSlicerApplication::application()->settingsDialog()->settings();
+  if (settings->contains("SubjectHierarchy/AutoDeleteSubjectHierarchyChildren"))
+    {
+    return settings->value("SubjectHierarchy/AutoDeleteSubjectHierarchyChildren").toBool();
+    }
+
+  return false; // Default value
+}
+
+//-----------------------------------------------------------------------------
+void qSlicerSubjectHierarchyPluginHandler::setAutoDeleteSubjectHierarchyChildren(bool on)
+{
+  QSettings* settings = qSlicerApplication::application()->settingsDialog()->settings();
+  settings->setValue("SubjectHierarchy/AutoDeleteSubjectHierarchyChildren", on);
+}
+
+//-----------------------------------------------------------------------------
+bool qSlicerSubjectHierarchyPluginHandler::displayPatientIDInSubjectHierarchyItemName()const
+{
+  QSettings* settings = qSlicerApplication::application()->settingsDialog()->settings();
+  if (settings->contains("SubjectHierarchy/DisplayPatientIDInSubjectHierarchyItemName"))
+    {
+    return settings->value("SubjectHierarchy/DisplayPatientIDInSubjectHierarchyItemName").toBool();
+    }
+
+  return true; // Default value
+}
+
+//-----------------------------------------------------------------------------
+void qSlicerSubjectHierarchyPluginHandler::setDisplayPatientIDInSubjectHierarchyItemName(bool on)
+{
+  QSettings* settings = qSlicerApplication::application()->settingsDialog()->settings();
+  settings->setValue("SubjectHierarchy/DisplayPatientIDInSubjectHierarchyItemName", on);
+}
+
+//-----------------------------------------------------------------------------
+bool qSlicerSubjectHierarchyPluginHandler::displayPatientBirthDateInSubjectHierarchyItemName()const
+{
+  QSettings* settings = qSlicerApplication::application()->settingsDialog()->settings();
+  if (settings->contains("SubjectHierarchy/DisplayPatientBirthDateInSubjectHierarchyItemName"))
+    {
+    return settings->value("SubjectHierarchy/DisplayPatientBirthDateInSubjectHierarchyItemName").toBool();
+    }
+
+  return false; // Default value
+}
+
+//-----------------------------------------------------------------------------
+void qSlicerSubjectHierarchyPluginHandler::setDisplayPatientBirthDateInSubjectHierarchyItemName(bool on)
+{
+  QSettings* settings = qSlicerApplication::application()->settingsDialog()->settings();
+  settings->setValue("SubjectHierarchy/DisplayPatientBirthDateInSubjectHierarchyItemName", on);
+}
+
+//-----------------------------------------------------------------------------
+bool qSlicerSubjectHierarchyPluginHandler::displayStudyIDInSubjectHierarchyItemName()const
+{
+  QSettings* settings = qSlicerApplication::application()->settingsDialog()->settings();
+  if (settings->contains("SubjectHierarchy/DisplayStudyIDInSubjectHierarchyItemName"))
+    {
+    return settings->value("SubjectHierarchy/DisplayStudyIDInSubjectHierarchyItemName").toBool();
+    }
+
+  return false; // Default value
+}
+
+//-----------------------------------------------------------------------------
+void qSlicerSubjectHierarchyPluginHandler::setDisplayStudyIDInSubjectHierarchyItemName(bool on)
+{
+  QSettings* settings = qSlicerApplication::application()->settingsDialog()->settings();
+  settings->setValue("SubjectHierarchy/DisplayStudyIDInSubjectHierarchyItemName", on);
+}
+
+//-----------------------------------------------------------------------------
+bool qSlicerSubjectHierarchyPluginHandler::displayStudyDateInSubjectHierarchyItemName()const
+{
+  QSettings* settings = qSlicerApplication::application()->settingsDialog()->settings();
+  if (settings->contains("SubjectHierarchy/DisplayStudyDateInSubjectHierarchyItemName"))
+    {
+    return settings->value("SubjectHierarchy/DisplayStudyDateInSubjectHierarchyItemName").toBool();
+    }
+
+  return true; // Default value
+}
+
+//-----------------------------------------------------------------------------
+void qSlicerSubjectHierarchyPluginHandler::setDisplayStudyDateInSubjectHierarchyItemName(bool on)
+{
+  QSettings* settings = qSlicerApplication::application()->settingsDialog()->settings();
+  settings->setValue("SubjectHierarchy/DisplayStudyDateInSubjectHierarchyItemName", on);
+}
+
+//-----------------------------------------------------------------------------
+void qSlicerSubjectHierarchyPluginHandler::onSubjectHierarchyNodeEvent(
+  vtkObject* caller, unsigned long event, void* clientData, void* callData )
+{
+  vtkMRMLSubjectHierarchyNode* shNode = reinterpret_cast<vtkMRMLSubjectHierarchyNode*>(caller);
+  vtkMRMLScene* scene = reinterpret_cast<vtkMRMLScene*>(caller);
+  qSlicerSubjectHierarchyPluginHandler* pluginHandler = reinterpret_cast<qSlicerSubjectHierarchyPluginHandler*>(clientData);
+  if (!pluginHandler || (!shNode && !scene))
+    {
+    qCritical() << Q_FUNC_INFO << ": Invalid event parameters";
+    return;
+    }
+
+  // Handle subject hierarchy node events
+  if ( ( event == vtkMRMLSubjectHierarchyNode::SubjectHierarchyItemAddedEvent
+      || event == vtkMRMLSubjectHierarchyNode::SubjectHierarchyItemOwnerPluginSearchRequested )
+      && shNode->GetScene() && !shNode->GetScene()->IsImporting() )
+    {
+    // Get item ID
+    vtkIdType itemID = vtkMRMLSubjectHierarchyNode::INVALID_ITEM_ID;
+    if (callData)
+      {
+      vtkIdType* itemIdPtr = reinterpret_cast<vtkIdType*>(callData);
+      if (itemIdPtr)
+        {
+        itemID = *itemIdPtr;
+        }
+      }
+
+      // Find plugin for added subject hierarchy item and "claim" it
+      pluginHandler->findAndSetOwnerPluginForSubjectHierarchyItem(itemID);
+    }
+  // Handle scene events
+  else if (event == vtkMRMLScene::NodeRemovedEvent)
+    {
+    // Get node (if any)
+    vtkMRMLNode* node = vtkMRMLNode::SafeDownCast(reinterpret_cast<vtkObject*>(callData));
+
+    if (!scene->IsClosing() && node->IsA("vtkMRMLSubjectHierarchyNode"))
+      {
+      // Make sure there is one subject hierarchy node in the scene
+      vtkMRMLSubjectHierarchyNode* newSubjectHierarchyNode = vtkMRMLSubjectHierarchyNode::GetSubjectHierarchyNode(scene);
+      if (!newSubjectHierarchyNode)
+        {
+        qCritical() << Q_FUNC_INFO << ": No subject hierarchy node could be retrieved from the scene";
+        }
+
+      // Set the quasi-singleton subject hierarchy node to the plugin handler
+      pluginHandler->setSubjectHierarchyNode(newSubjectHierarchyNode);
+      }
+    }
 }

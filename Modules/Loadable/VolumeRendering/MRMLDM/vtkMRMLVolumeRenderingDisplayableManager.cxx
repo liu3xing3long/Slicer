@@ -21,7 +21,6 @@
 // Slicer includes
 #include "vtkImageGradientMagnitude.h"
 #include "vtkMRMLVolumeRenderingDisplayableManager.h"
-#include "vtkSlicerFixedPointVolumeRayCastMapper.h"
 #include "vtkSlicerVolumeRenderingLogic.h"
 
 #include "vtkMRMLCPURayCastVolumeRenderingDisplayNode.h"
@@ -63,10 +62,6 @@
 #include "vtkVolume.h"
 #include "vtkVolumeProperty.h"
 #include <vtkVersion.h>
-
-// ITKSys includes
-//#include <itksys/SystemTools.hxx>
-//#include <itksys/Directory.hxx>
 
 // STD includes
 #include <cassert>
@@ -280,55 +275,31 @@ void vtkMRMLVolumeRenderingDisplayableManager::SetupHistograms(vtkMRMLVolumeRend
 }
 
 //---------------------------------------------------------------------------
-int vtkMRMLVolumeRenderingDisplayableManager
-::GetMaxMemory(vtkVolumeMapper* volumeMapper,
+vtkIdType vtkMRMLVolumeRenderingDisplayableManager
+::GetMaxMemoryInBytes(vtkVolumeMapper* volumeMapper,
                vtkMRMLVolumeRenderingDisplayNode* vspNode)
 {
-
-  int memory = vspNode && vspNode->GetGPUMemorySize() ?
-    vspNode->GetGPUMemorySize() :
-    vtkMRMLVolumeRenderingDisplayableManager::DefaultGPUMemorySize;
-
-  int gpuRayCastMapper = 128*1024*1024;
-  if (memory <= 128)
+  int gpuMemorySize_megabytes = vtkMRMLVolumeRenderingDisplayableManager::DefaultGPUMemorySize;
+  if (vspNode && vspNode->GetGPUMemorySize() > 0)
     {
-    }
-  else if (memory <= 256)
-    {
-    gpuRayCastMapper = 256*1024*1024;
-    }
-  else if (memory <= 512)
-    {
-    gpuRayCastMapper = 512*1024*1024;
-    }
-  else if (memory <= 1024)
-    {
-    gpuRayCastMapper = 1024*1024*1024;
-    }
-  else if (memory <= 1536)
-    {
-    gpuRayCastMapper = 1536*1024*1024;
-    }
-  else if (memory <= 2048)
-    {
-    gpuRayCastMapper = 2047*1024*1024;
-    }
-  else if (memory <= 3072)
-    {
-    gpuRayCastMapper = 2047*1024*1024;
-    }
-  else if (memory <= 4096)
-    {
-    gpuRayCastMapper = 2047*1024*1024;
+    gpuMemorySize_megabytes = vspNode->GetGPUMemorySize();
     }
 
+  // Special case: for GPU volume raycast mapper, round up to nearest 128MB
   if (volumeMapper->IsA("vtkGPUVolumeRayCastMapper"))
     {
-    return gpuRayCastMapper;
+    if (gpuMemorySize_megabytes < 128)
+      {
+      gpuMemorySize_megabytes = 128;
+      }
+    else
+      {
+      gpuMemorySize_megabytes = ((gpuMemorySize_megabytes - 1) / 128 + 1) * 128;
+      }
     }
 
-  // By default, return the node memory
-  return memory * 1024 * 1024;
+  vtkIdType gpuMemorySize_bytes = vtkIdType(gpuMemorySize_megabytes) * vtkIdType(1024 * 1024);
+  return gpuMemorySize_bytes;
 }
 
 //---------------------------------------------------------------------------
@@ -448,7 +419,7 @@ void vtkMRMLVolumeRenderingDisplayableManager
   mapper->SetAutoAdjustSampleDistances( highDef ? 0 : 1);
   mapper->SetSampleDistance(this->GetSampleDistance(vspNode));
   mapper->SetImageSampleDistance(highDef ? 1. : 1.);
-  mapper->SetMaxMemoryInBytes(this->GetMaxMemory(mapper, vspNode));
+  mapper->SetMaxMemoryInBytes(this->GetMaxMemoryInBytes(mapper, vspNode));
 
   switch(vspNode->GetRaycastTechnique())
     {
@@ -668,27 +639,6 @@ void vtkMRMLVolumeRenderingDisplayableManager::UpdateClipping(
 
   vtkNew<vtkPlanes> planes;
   vspNode->GetROINode()->GetTransformedPlanes(planes.GetPointer());
-  if ( planes->GetTransform() )
-    {
-    double zero[3] = {0,0,0};
-    double translation[3];
-    planes->GetTransform()->TransformPoint(zero, translation);
-
-    // apply the translation to the planes
-
-    int numPlanes = planes->GetNumberOfPlanes();
-    vtkPoints *points = planes->GetPoints();
-    for (int i=0; i<numPlanes && i<6; i++)
-      {
-      vtkPlane *plane = planes->GetPlane(i);
-      double origin[3];
-      plane->GetOrigin(origin);
-      points->GetData()->SetTuple3(i,
-                                   origin[0]-translation[0],
-                                   origin[1]-translation[1],
-                                   origin[2]-translation[2]);
-      }
-    }
   volumeMapper->SetClippingPlanes(planes.GetPointer());
 }
 
@@ -797,6 +747,14 @@ void vtkMRMLVolumeRenderingDisplayableManager::OnVolumeRenderingDisplayNodeModif
       }
     return;
     }
+
+  if (dnode != this->DisplayedNode && !dnode->GetVisibility())
+    {
+    // one of the hidden (not active) volumes are modified
+    // we do not need to do anything
+    return;
+    }
+
   bool wasVolumeVisible = this->IsVolumeInView();
 
   this->UpdatePipelineFromDisplayNode(dnode);
@@ -1107,21 +1065,47 @@ bool vtkMRMLVolumeRenderingDisplayableManager::AddVolumeToView()
 //  vtkMRMLVolumeRenderingDisplayNode* vspNode = this->GetDisplayNode();
 
   // Only support 1 volume per view, remove any existing volume
+  bool needToAddVolume = true;
+  vtkNew<vtkVolumeCollection> volumesToRemoveFromRenderer;
+
+  vtkVolume *v = NULL;
+  vtkCollectionSimpleIterator it;
+
+  // Get list of volumes to remove from the renderer
+  // (make a copy of the collection as the renderer's collection
+  // will be modified and that could invalidate the iterator)
   vtkVolumeCollection *vols = this->GetRenderer()->GetVolumes();
-  vols->InitTraversal();
-  vtkVolume* firstVolume = vols ? vols->GetNextVolume() : 0;
-  if (firstVolume && firstVolume != this->GetVolumeActor())
+  if (vols)
     {
-    this->RemoveVolumeFromView(firstVolume);
+    for (vols->InitTraversal(it);
+      (v = vols->GetNextVolume(it));)
+      {
+      if (v == this->GetVolumeActor())
+        {
+        needToAddVolume = false;
+        }
+      else
+        {
+        volumesToRemoveFromRenderer->AddItem(v);
+        }
+      }
+    }
+
+  // remove other volume actors
+  for (volumesToRemoveFromRenderer->InitTraversal(it);
+    (v = volumesToRemoveFromRenderer->GetNextVolume(it));)
+    {
+    this->RemoveVolumeFromView(v);
     modified = true;
     }
 
-  if (vols != NULL && this->GetVolumeActor() &&
-     !vols->IsItemPresent(this->GetVolumeActor()) )
+  // add the current volume actor
+  if (needToAddVolume)
     {
-    this->GetRenderer()->AddVolume(this->GetVolumeActor() );
+    this->GetRenderer()->AddVolume(this->GetVolumeActor());
     modified = true;
     }
+
   return modified;
 }
 

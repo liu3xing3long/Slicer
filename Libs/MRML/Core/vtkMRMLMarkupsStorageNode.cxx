@@ -34,6 +34,7 @@ vtkMRMLNodeNewMacro(vtkMRMLMarkupsStorageNode);
 vtkMRMLMarkupsStorageNode::vtkMRMLMarkupsStorageNode()
 {
   this->CoordinateSystem = vtkMRMLMarkupsStorageNode::RAS;
+  this->DefaultWriteFileExtension = "mcsv";
 }
 
 //----------------------------------------------------------------------------
@@ -73,9 +74,7 @@ void vtkMRMLMarkupsStorageNode::WriteXML(ostream& of, int nIndent)
 {
   Superclass::WriteXML(of,nIndent);
 
-  vtkIndent indent(nIndent);
-
-  of << indent << " coordinateSystem=\"" << this->CoordinateSystem << "\"";
+  of << " coordinateSystem=\"" << this->CoordinateSystem << "\"";
 }
 
 //----------------------------------------------------------------------------
@@ -123,12 +122,6 @@ void vtkMRMLMarkupsStorageNode::InitializeSupportedReadFileTypes()
 void vtkMRMLMarkupsStorageNode::InitializeSupportedWriteFileTypes()
 {
   this->SupportedWriteFileTypes->InsertNextValue("Markups CSV (.mcsv)");
-}
-
-//----------------------------------------------------------------------------
-const char* vtkMRMLMarkupsStorageNode::GetDefaultWriteFileExtension()
-{
-  return "mcsv";
 }
 
 //----------------------------------------------------------------------------

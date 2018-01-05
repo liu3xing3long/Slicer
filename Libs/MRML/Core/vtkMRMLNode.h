@@ -22,7 +22,7 @@
 #include "vtkIntArray.h"
 
 class vtkMRMLScene;
-
+class vtkStringArray;
 
 // VTK includes
 #include <vtkObject.h>
@@ -141,7 +141,7 @@ class VTK_MRML_EXPORT vtkMRMLNode : public vtkObject
 
 public:
   vtkTypeMacro(vtkMRMLNode,vtkObject);
-  void PrintSelf(ostream& os, vtkIndent indent);
+  void PrintSelf(ostream& os, vtkIndent indent) VTK_OVERRIDE;
 
   /// \brief Create instance of the default node. Like New only virtual.
   ///
@@ -152,7 +152,7 @@ public:
   ///
   /// \note
   /// Subclasses should implement this method.
-  /// Call this method in the subclass impementation.
+  /// Call this method in the subclass implementation.
   virtual void ReadXMLAttributes(const char** atts);
 
   /// \brief The method should remove all pointers and observations to all nodes
@@ -185,6 +185,7 @@ public:
   /// \note
   /// Subclasses should implement this method.
   /// Call this method in the subclass implementation.
+  /// \param indent Deprecated argument that is kept for API backward-compatibility
   virtual void WriteXML(ostream& of, int indent);
 
   /// Write this node's body to a MRML file in XML format.
@@ -301,6 +302,9 @@ public:
   /// Get all attribute names.
   std::vector< std::string > GetAttributeNames();
 
+  /// Get all attribute names. Python-wrappable version.
+  void GetAttributeNames(vtkStringArray* attributeNames);
+
   /// Describes if the node is hidden.
   vtkGetMacro(HideFromEditors, int);
   vtkSetMacro(HideFromEditors, int);
@@ -331,11 +335,6 @@ public:
   /// Name of this node, to be set by the user
   vtkSetStringMacro(Name);
   vtkGetStringMacro(Name);
-
-
-  /// \brief Node's effect on indentation when displaying the
-  /// contents of a MRML file. (0, +1, -1)
-  vtkGetMacro(Indent, int);
 
   /// ID use by other nodes to reference this node in XML.
   //vtkSetStringMacro(ID);
@@ -428,7 +427,7 @@ public:
   /// of the instance variables).
   ///
   /// \sa GetDisableModifiedEvent()
-  virtual void Modified()
+  virtual void Modified() VTK_OVERRIDE
     {
     if (!this->GetDisableModifiedEvent())
       {
@@ -693,6 +692,17 @@ public:
   void GetNodeReferenceIDs(const char* referenceRole,
                            std::vector<const char*> &referencedNodeIDs);
 
+  /// Get reference roles of the present node references.
+  /// \sa GetNodeReferenceRoles(), GetNodeReferenceRoles(), GetNthNodeReferenceRole()
+  void GetNodeReferenceRoles(std::vector<std::string> &roles);
+
+  /// Get number of node reference role names.
+  /// \sa GetNodeReferenceRoles(), GetNodeReferenceRoles(), GetNthNodeReferenceRole()
+  int GetNumberOfNodeReferenceRoles();
+
+  /// Get a specific node reference role name.
+  /// \sa GetNodeReferenceRoles(), GetNodeReferenceRoles(), GetNthNodeReferenceRole()
+  const char* GetNthNodeReferenceRole(int n);
 
   /// HierarchyModifiedEvent is generated when the hierarchy node with which
   /// this node is associated changes
@@ -715,7 +725,7 @@ protected:
   public:
     vtkTypeMacro(vtkMRMLNodeReference,vtkObject);
     static vtkMRMLNodeReference *New();
-    void PrintSelf(ostream& vtkNotUsed(os), vtkIndent vtkNotUsed(indent)){};
+    void PrintSelf(ostream& vtkNotUsed(os), vtkIndent vtkNotUsed(indent)) VTK_OVERRIDE {};
 
   public:
     vtkSetStringMacro(ReferenceRole);
@@ -766,8 +776,6 @@ protected:
   virtual ~vtkMRMLNode();
   vtkMRMLNode(const vtkMRMLNode&);
   void operator=(const vtkMRMLNode&);
-
-  vtkSetMacro(Indent, int);
 
   /// a shared set of functions that call the
   /// virtual ProcessMRMLEvents
@@ -867,7 +875,6 @@ protected:
   char *Description;
   char *Name;
   char *ID;
-  int Indent;
   int HideFromEditors;
   int Selectable;
   int Selected;
@@ -885,7 +892,7 @@ protected:
 
   vtkObserverManager *MRMLObserverManager;
 
-  /// NodeReferences is a map that stores vector of refererences for each referenceRole,
+  /// NodeReferences is a map that stores vector of references for each referenceRole,
   /// the referenceRole can be any unique string, for example "display", "transform" etc.
   typedef std::vector< vtkSmartPointer<vtkMRMLNodeReference> > NodeReferenceListType;
   typedef std::map< std::string, NodeReferenceListType > NodeReferencesType;

@@ -579,7 +579,7 @@ void vtkMRMLAbstractDisplayableManager::CreateIfPossible()
 
     // Look for InteractionNode
     this->Internal->MRMLInteractionNode = vtkMRMLInteractionNode::SafeDownCast(
-        this->GetMRMLScene()->GetNthNodeByClass(0, "vtkMRMLInteractionNode"));
+        this->GetMRMLScene()->GetNodeByID("vtkMRMLInteractionNodeSingleton"));
     if (!this->Internal->MRMLInteractionNode)
       {
       vtkWarningMacro( << "CreateIfPossible - MRMLScene does NOT contain any InteractionNode");
@@ -587,7 +587,7 @@ void vtkMRMLAbstractDisplayableManager::CreateIfPossible()
 
     // Look for SelectionNode
     this->Internal->MRMLSelectionNode = vtkMRMLSelectionNode::SafeDownCast(
-        this->GetMRMLScene()->GetNthNodeByClass(0, "vtkMRMLSelectionNode"));
+        this->GetMRMLScene()->GetNodeByID("vtkMRMLSelectionNodeSingleton"));
     if (!this->Internal->MRMLSelectionNode)
       {
       vtkWarningMacro( << "CreateIfPossible - MRMLScene does NOT contain any SelectionNode");
@@ -806,7 +806,7 @@ void vtkMRMLAbstractDisplayableManager::SetAndObserveMRMLDisplayableNode(
 
     // Observe InteractionNode
     vtkMRMLInteractionNode *interactionNode = vtkMRMLInteractionNode::SafeDownCast (
-        sceneToObserve->GetNthNodeByClass(0, "vtkMRMLInteractionNode"));
+        sceneToObserve->GetNodeByID("vtkMRMLInteractionNodeSingleton"));
     if (interactionNode)
       {
       // Observe MRML InteractionNode only if a valid MRML DisplayableNode is set

@@ -20,9 +20,6 @@
 
 ==============================================================================*/
 
-// Qt includes
-#include <QtPlugin>
-
 // Slice includes
 #include <qSlicerCoreApplication.h>
 #include <qSlicerCoreIOManager.h>
@@ -40,7 +37,10 @@
 #include "qSlicerSubjectHierarchyTablesPlugin.h"
 
 //-----------------------------------------------------------------------------
+#if (QT_VERSION < QT_VERSION_CHECK(5, 0, 0))
+#include <QtPlugin>
 Q_EXPORT_PLUGIN2(qSlicerTablesModule, qSlicerTablesModule);
+#endif
 
 //-----------------------------------------------------------------------------
 /// \ingroup Slicer_QtModules_ExtensionTemplate
@@ -92,7 +92,7 @@ QString qSlicerTablesModule::helpText()const
 //-----------------------------------------------------------------------------
 QString qSlicerTablesModule::acknowledgementText()const
 {
-  return "This work was was partially funded by OCAIRO, the Applied Cancer Research Unit program of Cancer Care Ontario, and Department of Anesthesia and Critical Care Medicine, Children’s Hospital of Philadelphia.";
+  return "This work was was partially funded by OCAIRO, the Applied Cancer Research Unit program of Cancer Care Ontario, and Department of Anesthesia and Critical Care Medicine, Children's Hospital of Philadelphia.";
 }
 
 //-----------------------------------------------------------------------------
@@ -144,4 +144,10 @@ qSlicerAbstractModuleRepresentation * qSlicerTablesModule::createWidgetRepresent
 vtkMRMLAbstractLogic* qSlicerTablesModule::createLogic()
 {
   return vtkSlicerTablesLogic::New();
+}
+
+//-----------------------------------------------------------------------------
+QStringList qSlicerTablesModule::associatedNodeTypes() const
+{
+  return QStringList() << "vtkMRMLTableNode";
 }

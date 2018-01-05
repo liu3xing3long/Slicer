@@ -32,7 +32,6 @@ Version:   $Revision: 1.3 $
 
 //----------------------------------------------------------------------------
 vtkCxxSetReferenceStringMacro(vtkMRMLDisplayNode, ColorNodeID);
-vtkCxxSetReferenceStringMacro(vtkMRMLDisplayNode, ActiveScalarName);
 
 //----------------------------------------------------------------------------
 vtkMRMLDisplayNode::vtkMRMLDisplayNode()
@@ -40,6 +39,7 @@ vtkMRMLDisplayNode::vtkMRMLDisplayNode()
   this->HideFromEditors = 1;
 
   this->Opacity = 1.0;
+  this->SliceIntersectionOpacity = 1.0;
   this->Ambient = 0.0;
   this->Diffuse = 1.0;
   this->Specular = 0;
@@ -65,8 +65,7 @@ vtkMRMLDisplayNode::vtkMRMLDisplayNode()
   this->VectorVisibility = 0;
   this->TensorVisibility = 0;
   this->InterpolateTexture = 0;
-  this->ScalarRangeFlag = this->UseColorNodeScalarRange;
-  this->AutoScalarRange = 1;
+  this->ScalarRangeFlag = vtkMRMLDisplayNode::UseDataScalarRange;
 
   // Arrays
   this->ScalarRange[0] = 0;
@@ -111,73 +110,72 @@ void vtkMRMLDisplayNode::WriteXML(ostream& of, int nIndent)
 
   Superclass::WriteXML(of, nIndent);
 
-  vtkIndent indent(nIndent);
-
-  of << indent << " color=\"" << this->Color[0] << " "
+  of << " color=\"" << this->Color[0] << " "
     << this->Color[1] << " "
     << this->Color[2] << "\"";
 
-  of << indent << " edgeColor=\"" << this->EdgeColor[0] << " "
+  of << " edgeColor=\"" << this->EdgeColor[0] << " "
     << this->EdgeColor[1] << " " << this->EdgeColor[2] << "\"";
-  of << indent << " selectedColor=\"" << this->SelectedColor[0] << " "
+  of << " selectedColor=\"" << this->SelectedColor[0] << " "
     << this->SelectedColor[1] << " "
     << this->SelectedColor[2] << "\"";
 
-  of << indent << " selectedAmbient=\"" << this->SelectedAmbient << "\"";
+  of << " selectedAmbient=\"" << this->SelectedAmbient << "\"";
 
-  of << indent << " ambient=\"" << this->Ambient << "\"";
+  of << " ambient=\"" << this->Ambient << "\"";
 
-  of << indent << " diffuse=\"" << this->Diffuse << "\"";
+  of << " diffuse=\"" << this->Diffuse << "\"";
 
-  of << indent << " selectedSpecular=\"" << this->SelectedSpecular << "\"";
+  of << " selectedSpecular=\"" << this->SelectedSpecular << "\"";
 
-  of << indent << " specular=\"" << this->Specular << "\"";
+  of << " specular=\"" << this->Specular << "\"";
 
-  of << indent << " power=\"" << this->Power << "\"";
+  of << " power=\"" << this->Power << "\"";
 
-  of << indent << " opacity=\"" << this->Opacity << "\"";
+  of << " opacity=\"" << this->Opacity << "\"";
+  of << " sliceIntersectionOpacity=\"" << this->SliceIntersectionOpacity << "\"";
 
-  of << indent << " pointSize=\"" << this->PointSize << "\"";
-  of << indent << " lineWidth=\"" << this->LineWidth << "\"";
-  of << indent << " representation=\"" << this->Representation << "\"";
-  of << indent << " lighting=\"" << (this->Lighting? "true" : "false") << "\"";
-  of << indent << " interpolation=\"" << this->Interpolation << "\"";
-  of << indent << " shading=\"" << (this->Shading? "true" : "false") << "\"";
+  of << " pointSize=\"" << this->PointSize << "\"";
+  of << " lineWidth=\"" << this->LineWidth << "\"";
+  of << " representation=\"" << this->Representation << "\"";
+  of << " lighting=\"" << (this->Lighting? "true" : "false") << "\"";
+  of << " interpolation=\"" << this->Interpolation << "\"";
+  of << " shading=\"" << (this->Shading? "true" : "false") << "\"";
 
-  of << indent << " visibility=\"" << (this->Visibility ? "true" : "false") << "\"";
-  of << indent << " edgeVisibility=\"" << (this->EdgeVisibility? "true" : "false") << "\"";
-  of << indent << " clipping=\"" << (this->Clipping ? "true" : "false") << "\"";
+  of << " visibility=\"" << (this->Visibility ? "true" : "false") << "\"";
+  of << " edgeVisibility=\"" << (this->EdgeVisibility? "true" : "false") << "\"";
+  of << " clipping=\"" << (this->Clipping ? "true" : "false") << "\"";
 
-  of << indent << " sliceIntersectionVisibility=\"" << (this->SliceIntersectionVisibility ? "true" : "false") << "\"";
+  of << " sliceIntersectionVisibility=\"" << (this->SliceIntersectionVisibility ? "true" : "false") << "\"";
 
-  of << indent << " sliceIntersectionThickness=\"" << this->SliceIntersectionThickness << "\"";
+  of << " sliceIntersectionThickness=\"" << this->SliceIntersectionThickness << "\"";
 
-  of << indent << " frontfaceCulling=\"" << (this->FrontfaceCulling ? "true" : "false") << "\"";
-  of << indent << " backfaceCulling=\"" << (this->BackfaceCulling ? "true" : "false") << "\"";
+  of << " frontfaceCulling=\"" << (this->FrontfaceCulling ? "true" : "false") << "\"";
+  of << " backfaceCulling=\"" << (this->BackfaceCulling ? "true" : "false") << "\"";
 
-  of << indent << " scalarVisibility=\"" << (this->ScalarVisibility ? "true" : "false") << "\"";
+  of << " scalarVisibility=\"" << (this->ScalarVisibility ? "true" : "false") << "\"";
 
-  of << indent << " vectorVisibility=\"" << (this->VectorVisibility ? "true" : "false") << "\"";
+  of << " vectorVisibility=\"" << (this->VectorVisibility ? "true" : "false") << "\"";
 
-  of << indent << " tensorVisibility=\"" << (this->TensorVisibility ? "true" : "false") << "\"";
+  of << " tensorVisibility=\"" << (this->TensorVisibility ? "true" : "false") << "\"";
 
-  of << indent << " interpolateTexture=\"" << (this->InterpolateTexture ? "true" : "false") << "\"";
+  of << " interpolateTexture=\"" << (this->InterpolateTexture ? "true" : "false") << "\"";
 
-  of << indent << " scalarRangeFlag=\"" << this->ScalarRangeFlag << "\"";
+  of << " scalarRangeFlag=\"" << this->GetScalarRangeFlagTypeAsString(this->ScalarRangeFlag) << "\"";
 
-  of << indent << " autoScalarRange=\"" << (this->AutoScalarRange ? "true" : "false") << "\"";
-
-  of << indent << " scalarRange=\"" << this->ScalarRange[0] << " "
+  of << " scalarRange=\"" << this->ScalarRange[0] << " "
      << this->ScalarRange[1] << "\"";
 
   if (this->ColorNodeID != NULL)
     {
-    of << indent << " colorNodeID=\"" << this->ColorNodeID << "\"";
+    of << " colorNodeID=\"" << this->ColorNodeID << "\"";
     }
 
   if (this->ActiveScalarName != NULL)
     {
-    of << indent << " activeScalarName=\"" << this->ActiveScalarName << "\"";
+    of << " activeScalarName=\"" << this->ActiveScalarName << "\"";
+    of << " activeAttributeLocation=\"" << vtkMRMLDisplayNode::GetAttributeLocationAsString(
+        this->GetActiveAttributeLocation()) << "\"";
     }
 
   std::stringstream ss;
@@ -192,7 +190,7 @@ void vtkMRMLDisplayNode::WriteXML(ostream& of, int nIndent)
     }
   if (this->ViewNodeIDs.size() > 0)
     {
-    of << indent << " viewNodeRef=\"" << ss.str().c_str() << "\"";
+    of << " viewNodeRef=\"" << ss.str().c_str() << "\"";
     }
 
   of << " ";
@@ -324,6 +322,12 @@ void vtkMRMLDisplayNode::ReadXMLAttributes(const char** atts)
       std::stringstream ss;
       ss << attValue;
       ss >> Opacity;
+      }
+    else if (!strcmp(attName, "sliceIntersectionOpacity"))
+      {
+      std::stringstream ss;
+      ss << attValue;
+      ss >> SliceIntersectionOpacity;
       }
     else if (!strcmp(attName, "pointSize"))
       {
@@ -495,11 +499,11 @@ void vtkMRMLDisplayNode::ReadXMLAttributes(const char** atts)
       {
       if (!strcmp(attValue,"true"))
         {
-        this->AutoScalarRange = 1;
+        this->SetScalarRangeFlag(vtkMRMLDisplayNode::UseDataScalarRange);
         }
       else
         {
-        this->AutoScalarRange = 0;
+        this->SetScalarRangeFlag(vtkMRMLDisplayNode::UseManualScalarRange);
         }
       }
     else if (!strcmp(attName, "colorNodeID") ||
@@ -510,6 +514,18 @@ void vtkMRMLDisplayNode::ReadXMLAttributes(const char** atts)
     else if (!strcmp(attName, "activeScalarName"))
       {
       this->SetActiveScalarName(attValue);
+      }
+    else if (!strcmp(attName, "activeAttributeLocation"))
+      {
+      int id = this->GetAttributeLocationFromString(attValue);
+      if (id<0)
+        {
+        vtkWarningMacro("Invalid activeAttributeLocation: " << (attValue ? attValue : "(none)"));
+        }
+      else
+        {
+        this->SetActiveAttributeLocation(id);
+        }
       }
     else if (!strcmp(attName, "viewNodeRef"))
       {
@@ -548,6 +564,7 @@ void vtkMRMLDisplayNode::Copy(vtkMRMLNode *anode)
   this->SetSelectedAmbient(node->SelectedAmbient);
   this->SetSelectedSpecular(node->SelectedSpecular);
   this->SetOpacity(node->Opacity);
+  this->SetSliceIntersectionOpacity(node->SliceIntersectionOpacity);
   this->SetAmbient(node->Ambient);
   this->SetDiffuse(node->Diffuse);
   this->SetSpecular(node->Specular);
@@ -558,7 +575,6 @@ void vtkMRMLDisplayNode::Copy(vtkMRMLNode *anode)
   this->SetTensorVisibility(node->TensorVisibility);
   this->SetInterpolateTexture(node->InterpolateTexture);
   this->SetScalarRangeFlag(node->ScalarRangeFlag);
-  this->SetAutoScalarRange(node->AutoScalarRange);
   this->SetBackfaceCulling(node->BackfaceCulling);
   this->SetClipping(node->Clipping);
   this->SetSliceIntersectionVisibility(node->SliceIntersectionVisibility);
@@ -583,11 +599,25 @@ void vtkMRMLDisplayNode::PrintSelf(ostream& os, vtkIndent indent)
 
   Superclass::PrintSelf(os,indent);
 
-  os << indent << "Color:             " << this->Color << "\n";
-  os << indent << "SelectedColor:     " << this->SelectedColor << "\n";
+  os << indent << "Color:             ";
+  for (idx = 0; idx < 3; ++idx)
+    {
+    os << this->Color[idx] << ((idx == 2) ? "\n" : ", ");
+    }
+  os << indent << "SelectedColor:     ";
+  for (idx = 0; idx < 3; ++idx)
+    {
+    os << this->SelectedColor[idx] << ((idx == 2) ? "\n" : ", ");
+    }
+  os << indent << "EdgeColor:         ";
+  for (idx = 0; idx < 3; ++idx)
+    {
+    os << this->EdgeColor[idx] << ((idx == 2) ? "\n" : ", ");
+    }
   os << indent << "SelectedAmbient:   " << this->SelectedAmbient << "\n";
   os << indent << "SelectedSpecular:  " << this->SelectedSpecular << "\n";
   os << indent << "Opacity:           " << this->Opacity << "\n";
+  os << indent << "SliceIntersectionOpacity:           " << this->SliceIntersectionOpacity << "\n";
   os << indent << "Ambient:           " << this->Ambient << "\n";
   os << indent << "Diffuse:           " << this->Diffuse << "\n";
   os << indent << "Specular:          " << this->Specular << "\n";
@@ -598,7 +628,6 @@ void vtkMRMLDisplayNode::PrintSelf(ostream& os, vtkIndent indent)
   os << indent << "TensorVisibility:  " << this->TensorVisibility << "\n";
   os << indent << "InterpolateTexture:" << this->InterpolateTexture << "\n";
   os << indent << "ScalarRangeFlag:   " << this->ScalarRangeFlag << "\n";
-  os << indent << "AutoScalarRange:   " << this->AutoScalarRange << "\n";
   os << indent << "BackfaceCulling:   " << this->BackfaceCulling << "\n";
   os << indent << "Clipping:          " << this->Clipping << "\n";
   os << indent << "SliceIntersectionVisibility: " << this->SliceIntersectionVisibility << "\n";
@@ -629,6 +658,17 @@ vtkMRMLDisplayableNode* vtkMRMLDisplayNode::GetDisplayableNode()
     {
     return NULL;
     }
+  // It is an expensive operation to determine the displayable node
+  // (need to iterate through the scene), so the last found value
+  // is cached. If it is still valid then we use it.
+  if (this->LastFoundDisplayableNode != NULL)
+    {
+    if (this->LastFoundDisplayableNode->GetScene() == this->Scene
+      && this->LastFoundDisplayableNode->HasDisplayNodeID(this->GetID()))
+      {
+      return this->LastFoundDisplayableNode;
+      }
+    }
   vtkMRMLNode* node = NULL;
   vtkCollectionSimpleIterator it;
   vtkCollection* sceneNodes = this->Scene->GetNodes();
@@ -639,9 +679,11 @@ vtkMRMLDisplayableNode* vtkMRMLDisplayNode::GetDisplayableNode()
       vtkMRMLDisplayableNode::SafeDownCast(node);
     if (displayableNode && displayableNode->HasDisplayNodeID(this->GetID()))
       {
+      this->LastFoundDisplayableNode = displayableNode;
       return displayableNode;
       }
     }
+  this->LastFoundDisplayableNode = NULL;
   return NULL;
 }
 
@@ -786,7 +828,7 @@ void vtkMRMLDisplayNode::ProcessMRMLEvents ( vtkObject *caller,
 
   vtkMRMLColorNode* cnode = vtkMRMLColorNode::SafeDownCast(caller);
   if (cnode != NULL &&
-      this->ColorNodeID != NULL &&
+      this->ColorNodeID != NULL && cnode->GetID() != NULL &&
       strcmp(this->ColorNodeID, cnode->GetID()) == 0 &&
       event ==  vtkCommand::ModifiedEvent)
     {
@@ -940,4 +982,86 @@ bool vtkMRMLDisplayNode::GetVisibility(const char* viewNodeID)
   bool res = this->GetVisibility() != 0;
   res = res && this->IsDisplayableInView(viewNodeID);
   return res;
+}
+
+//-------------------------------------------------------
+void vtkMRMLDisplayNode::SetAutoScalarRange(int b)
+{
+  if(b)
+    {
+    this->AutoScalarRangeOn();
+    }
+  else
+    {
+    this->AutoScalarRangeOff();
+    }
+}
+
+//-------------------------------------------------------
+int vtkMRMLDisplayNode::GetAutoScalarRange()
+{
+  return (this->GetScalarRangeFlag() == vtkMRMLDisplayNode::UseDataScalarRange);
+}
+
+//-------------------------------------------------------
+void vtkMRMLDisplayNode::AutoScalarRangeOn()
+{
+  this->SetScalarRangeFlag(vtkMRMLDisplayNode::UseDataScalarRange);
+}
+
+//-------------------------------------------------------
+void vtkMRMLDisplayNode::AutoScalarRangeOff()
+{
+  this->SetScalarRangeFlag(vtkMRMLDisplayNode::UseManualScalarRange);
+}
+
+//-------------------------------------------------------
+const char* vtkMRMLDisplayNode
+::GetScalarRangeFlagTypeAsString(int flag)
+{
+  switch (flag)
+    {
+    case UseManualScalarRange: return "UseManual";
+    case UseDataScalarRange: return "UseData";
+    case UseColorNodeScalarRange: return "UseColorNode";
+    case UseDataTypeScalarRange: return "UseDataType";
+    default:
+      // invalid id
+      return "";
+    }
+}
+
+//-----------------------------------------------------------
+const char* vtkMRMLDisplayNode::GetAttributeLocationAsString(int id)
+{
+  switch (id)
+    {
+    case vtkAssignAttribute::POINT_DATA: return "point";
+    case vtkAssignAttribute::CELL_DATA: return "cell";
+    case vtkAssignAttribute::VERTEX_DATA: return "vertex";
+    case vtkAssignAttribute::EDGE_DATA: return "edge";
+    default:
+      // invalid id
+      return "";
+    }
+}
+
+//-----------------------------------------------------------
+int vtkMRMLDisplayNode::GetAttributeLocationFromString(const char* name)
+{
+  if (name == NULL)
+    {
+    // invalid name
+    return -1;
+    }
+  for (int i = 0; i < vtkAssignAttribute::NUM_ATTRIBUTE_LOCS; i++)
+    {
+    if (strcmp(name, vtkMRMLDisplayNode::GetAttributeLocationAsString(i)) == 0)
+      {
+      // found a matching name
+      return i;
+      }
+    }
+  // name not found
+  return -1;
 }

@@ -89,6 +89,9 @@ public:
   /// the slice composite nodes
   bool sliceIntersectionsVisible();
 
+  virtual bool setEditedNode(vtkMRMLNode* node, QString role = QString(), QString context = QString());
+  virtual double nodeEditable(vtkMRMLNode* node);
+
 public slots:
 
   /// Respond to the scene events
@@ -215,7 +218,7 @@ public slots:
   /// active
   void onActiveMarkupsNodePointModifiedEvent(vtkObject *caller, vtkObject *callData);
   /// Update the table with the new markup if the node is active
-  void onActiveMarkupsNodeMarkupAddedEvent();//vtkMRMLNode *markupsNode);
+  void onActiveMarkupsNodeMarkupAddedEvent(vtkObject *caller, vtkObject *callData);
   /// Update the table for the removed markup if the node is active
   void onActiveMarkupsNodeMarkupRemovedEvent();//vtkMRMLNode *markupsNode);
   /// Update a table row from a modified markup

@@ -41,30 +41,30 @@ class VTK_MRML_EXPORT vtkMRMLChartNode : public vtkMRMLNode
   static vtkMRMLChartNode *New();
   vtkTypeMacro(vtkMRMLChartNode,vtkMRMLNode);
 
-  void PrintSelf(ostream& os, vtkIndent indent);
+  void PrintSelf(ostream& os, vtkIndent indent) VTK_OVERRIDE;
 
-  virtual vtkMRMLNode* CreateNodeInstance();
+  virtual vtkMRMLNode* CreateNodeInstance() VTK_OVERRIDE;
 
   ///
   /// Set node attributes
-  virtual void ReadXMLAttributes( const char** atts);
+  virtual void ReadXMLAttributes( const char** atts) VTK_OVERRIDE;
 
   ///
   /// Write this node's information to a MRML file in XML format.
-  virtual void WriteXML(ostream& of, int indent);
+  virtual void WriteXML(ostream& of, int indent) VTK_OVERRIDE;
 
   ///
   /// Copy the node's attributes to this object
-  virtual void Copy(vtkMRMLNode *node);
+  virtual void Copy(vtkMRMLNode *node) VTK_OVERRIDE;
 
   ///
   /// Get node XML tag name (like Volume, Model)
-  virtual const char* GetNodeTagName()
-    {return "Chart";};
+  virtual const char* GetNodeTagName() VTK_OVERRIDE
+    {return "Chart";}
 
   ///
   /// Method to propagate events generated in mrml
-  virtual void ProcessMRMLEvents ( vtkObject *caller, unsigned long event, void *callData );
+  virtual void ProcessMRMLEvents ( vtkObject *caller, unsigned long event, void *callData ) VTK_OVERRIDE;
 
   //----------------------------------------------------------------
   /// Access methods
@@ -129,8 +129,10 @@ class VTK_MRML_EXPORT vtkMRMLChartNode : public vtkMRMLNode
   ///
   /// \li  "showLines" - show lines "on" or "off"
   /// \li  "showMarkers" - show markers "on" or "off"
+  /// \li  "size" - marker size is an integer larger than 0 and smaller than 2^32 - 1
   /// \li  "linePattern" - line pattern can be "solid", "dashed", "dotted",
   ///                      "dashed-dotted"
+  /// \li  "lineWidth" - line width is an integer larger than 0 and smaller than 2^32 - 1
   /// \li  "color" - color to use for the array lines and points (<code>\#RRGGBB</code>)
   /// \li  "lookupTable" - MRMLID of a ColorNode to use to color individual
   ///         bars in bar chart (useful with categorical data)
@@ -156,16 +158,16 @@ class VTK_MRML_EXPORT vtkMRMLChartNode : public vtkMRMLNode
 
   /// Updates this node if it depends on other nodes
   /// when the node is deleted in the scene
-  virtual void SetSceneReferences();
+  virtual void SetSceneReferences() VTK_OVERRIDE;
 
   ///
   /// Updates this node if it depends on other nodes
   /// when the node is deleted in the scene
-  virtual void UpdateReferences();
+  virtual void UpdateReferences() VTK_OVERRIDE;
 
   ///
   /// Update the stored reference to another node in the scene
-  virtual void UpdateReferenceID(const char *oldID, const char *newID);
+  virtual void UpdateReferenceID(const char *oldID, const char *newID) VTK_OVERRIDE;
 
  protected:
   //----------------------------------------------------------------

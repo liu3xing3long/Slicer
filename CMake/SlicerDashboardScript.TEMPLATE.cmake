@@ -12,7 +12,7 @@
 #     'glxinfo | grep OpenGL' to obtain GPU details.
 ####################################################################################
 
-cmake_minimum_required(VERSION 2.8.9)
+cmake_minimum_required(VERSION 3.5)
 
 #
 # For additional information, see http://www.slicer.org/slicerWiki/index.php/Documentation/Nightly/Developers/Tutorials/DashboardSetup
@@ -41,8 +41,12 @@ set(SCRIPT_MODE "Nightly") # "Experimental", "Continuous", "Nightly"
 #-----------------------------------------------------------------------------
 set(MY_OPERATING_SYSTEM   "Linux") # Windows, Linux, Darwin...
 set(MY_COMPILER           "g++4.4.3")
+# Qt4:
 set(MY_QT_VERSION         "4.7.4")
 set(QT_QMAKE_EXECUTABLE   "$ENV{HOME}/Dashboards/Support/QtSDK-1.2/Desktop/Qt/474/gcc/bin/qmake")
+# Qt5:
+#set(MY_QT_VERSION         "5.7.1")
+#set(Qt5_DIR               "$ENV{HOME}/Qt5.7.1/5.7/gcc_64/lib/cmake/Qt5")
 set(CTEST_SITE            "karakoram.kitware") # for example: mymachine.kitware, mymachine.bwh.harvard.edu, ...
 set(CTEST_DASHBOARD_ROOT  "$ENV{HOME}/Dashboards/${SCRIPT_MODE}")
 
@@ -138,20 +142,6 @@ set(CTEST_NOTES_FILES "${CTEST_SCRIPT_DIRECTORY}/${CTEST_SCRIPT_NAME}")
 #
 set(CTEST_PROJECT_NAME "Slicer4")
 set(CTEST_BUILD_NAME "${MY_OPERATING_SYSTEM}-${MY_COMPILER}-${BUILD_OPTIONS_STRING}-${CTEST_BUILD_CONFIGURATION}")
-
-#
-# Display build info
-#
-message("CTEST_SITE ................: ${CTEST_SITE}")
-message("CTEST_BUILD_NAME ..........: ${CTEST_BUILD_NAME}")
-message("SCRIPT_MODE ...............: ${SCRIPT_MODE}")
-message("CTEST_BUILD_CONFIGURATION .: ${CTEST_BUILD_CONFIGURATION}")
-message("WITH_KWSTYLE ..............: ${WITH_KWSTYLE}")
-message("WITH_COVERAGE: ............: ${WITH_COVERAGE}")
-message("WITH_MEMCHECK .............: ${WITH_MEMCHECK}")
-message("WITH_PACKAGES .............: ${WITH_PACKAGES}")
-message("WITH_DOCUMENTATION ........: ${WITH_DOCUMENTATION}")
-message("DOCUMENTATION_ARCHIVES_OUTPUT_DIRECTORY: ${DOCUMENTATION_ARCHIVES_OUTPUT_DIRECTORY}")
 
 #
 # Convenient function allowing to download a file

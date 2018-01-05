@@ -1,27 +1,20 @@
 
 #-----------------------------------------------------------------------------
-cmake_minimum_required(VERSION 2.8.4)
+cmake_minimum_required(VERSION 3.5)
 #-----------------------------------------------------------------------------
 
-if(NOT Slicer_SOURCE_DIR)
-  if(APPLE)
-    # Note: By setting CMAKE_OSX_* variables before any enable_language() or project() calls,
-    #       we ensure that the bitness will be properly detected.
-    include(${CMAKE_CURRENT_SOURCE_DIR}/../../CMake/SlicerBlockSetCMakeOSXVariables.cmake)
-  endif()
+if(Slicer_SOURCE_DIR)
+  message(FATAL_ERROR "Building extensions within Slicer is not supported any more. Instead consider
+building this project specifying -DSlicer_DIR:PATH=/path/to/Slicer-SuperBuild/Slicer-build.")
 endif()
 
-if(POLICY CMP0048)
-  cmake_policy(SET CMP0048 NEW) # CMake 3.0.0
+if(APPLE)
+  # Note: By setting CMAKE_OSX_* variables before any enable_language() or project() calls,
+  #       we ensure that the bitness will be properly detected.
+  include(${CMAKE_CURRENT_SOURCE_DIR}/../../CMake/SlicerBlockSetCMakeOSXVariables.cmake)
 endif()
+
 project(SlicerExtensions)
-
-#-----------------------------------------------------------------------------
-# See http://cmake.org/cmake/help/cmake-2-8-docs.html#section_Policies for details
-#-----------------------------------------------------------------------------
-if(POLICY CMP0017)
-  cmake_policy(SET CMP0017 OLD)
-endif()
 
 #-----------------------------------------------------------------------------
 set(_url $ENV{MIDAS_PACKAGE_URL})
@@ -55,51 +48,33 @@ set(default_local_extension_dir ${default_extension_description_dir})
 
 set(Slicer_EXTENSIONS_TRACK_QUALIFIER "master" CACHE STRING "CDash extensions track qualifier (master, 4.4, ...)")
 
-if(NOT Slicer_SOURCE_DIR)
-  #-----------------------------------------------------------------------------
-  # Set a default build type if none was specified
-  #-----------------------------------------------------------------------------
-  if(NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES)
-    message(STATUS "Setting build type to 'Debug' as none was specified.")
-    set(CMAKE_BUILD_TYPE Debug CACHE STRING "Choose the type of build." FORCE)
-    # Set the possible values of build type for cmake-gui
-    set_property(CACHE CMAKE_BUILD_TYPE PROPERTY STRINGS "Debug" "Release"
-      "MinSizeRel" "RelWithDebInfo")
-  endif()
+#-----------------------------------------------------------------------------
+# Prerequisites
+#-----------------------------------------------------------------------------
+include(ExternalProject)
+find_package(Slicer REQUIRED)
+find_package(Git REQUIRED)
+find_package(Subversion REQUIRED)
 
-  #-----------------------------------------------------------------------------
-  # Prerequisites
-  #-----------------------------------------------------------------------------
-  include(ExternalProject)
-  find_package(Slicer REQUIRED)
-  find_package(Git REQUIRED)
-  find_package(Subversion REQUIRED)
+#-----------------------------------------------------------------------------
+# Set a default build type if none was specified
+#-----------------------------------------------------------------------------
+include(SlicerInitializeBuildType)
 
-  #-----------------------------------------------------------------------------
-  # Options
-  #-----------------------------------------------------------------------------
-  set(Slicer_BUILD_EXTENSIONS ON CACHE INTERNAL "Build Slicer extensions.")
-  set(Slicer_EXTENSION_DESCRIPTION_DIR "${default_extension_description_dir}" CACHE STRING "Path to folder containing *.s4ext files to consider.")
-  set(Slicer_LOCAL_EXTENSIONS_DIR "${default_local_extension_dir}" CACHE STRING "Path to extension sources locally available")
-  option(BUILD_TESTING "Test extensions." ${Slicer_BUILD_TESTING})
-else()
-  set(Slicer_EXTENSION_DESCRIPTION_DIR ${default_extension_description_dir})
-  set(Slicer_LOCAL_EXTENSIONS_DIR ${default_local_extension_dir})
-  set(Slicer_DIR ${Slicer_BINARY_DIR}/${Slicer_BINARY_INNER_SUBDIR})
-  option(Slicer_BUILD_TESTING_EXTENSIONS "Build Slicer testing extensions" OFF)
-  set(Slicer_BUILD_EXTENSIONS ${Slicer_BUILD_TESTING_EXTENSIONS} CACHE INTERNAL "Build Slicer testing extensions" FORCE)
+#-----------------------------------------------------------------------------
+# Options
+#-----------------------------------------------------------------------------
+set(Slicer_BUILD_EXTENSIONS ON CACHE INTERNAL "Build Slicer extensions.")
+set(Slicer_EXTENSION_DESCRIPTION_DIR "${default_extension_description_dir}" CACHE PATH "Path to folder containing *.s4ext files to consider.")
+set(Slicer_LOCAL_EXTENSIONS_DIR "${default_local_extension_dir}" CACHE STRING "Path to extension sources locally available")
+option(BUILD_TESTING "Test extensions." ${Slicer_BUILD_TESTING})
 
-  include(SlicerMacroExtractRepositoryInfo)
-  SlicerMacroExtractRepositoryInfo(VAR_PREFIX Slicer)
-endif()
+option(Slicer_UPLOAD_EXTENSIONS "Build, test, package and upload extensions" OFF)
+set(CTEST_DROP_SITE "slicer.cdash.org" CACHE STRING "Dashboard results are uploaded to this URL.")
 
-include(CMakeDependentOption)
-CMAKE_DEPENDENT_OPTION(
-  Slicer_UPLOAD_EXTENSIONS "Build, test, package and upload extensions" OFF
-  "Slicer_BUILD_EXTENSIONS" OFF
+configure_file(
+  CTestConfig.cmake.in
+  ${CMAKE_BINARY_DIR}/CTestConfig.cmake
   )
 
-
-if(Slicer_BUILD_EXTENSIONS)
-  include(SlicerBlockBuildPackageAndUploadExtensions)
-endif()
+include(SlicerBlockBuildPackageAndUploadExtensions)

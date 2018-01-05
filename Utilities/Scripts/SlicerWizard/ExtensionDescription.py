@@ -1,4 +1,5 @@
 import glob
+import logging
 import os
 import re
 
@@ -17,6 +18,8 @@ class ExtensionDescription(object):
   """
 
   _reParam = re.compile(r"([a-zA-Z][a-zA-Z0-9_]*)\s+(.+)")
+
+  DESCRIPTION_FILE_TEMPLATE = None
 
   #---------------------------------------------------------------------------
   def __init__(self, repo=None, filepath=None, sourcedir=None):
@@ -115,6 +118,13 @@ class ExtensionDescription(object):
         setattr(self, "scmurl", repo.url)
         setattr(self, "scmrevision", repo.last_change_revision)
         sourcedir = repo.wc_root
+
+      # Handle local source directory
+      elif hasattr(repo, "relative_directory"):
+        setattr(self, "scm", "local")
+        setattr(self, "scmurl", repo.relative_directory)
+        setattr(self, "scmrevision", "NA")
+        sourcedir = os.path.join(repo.root, repo.relative_directory)
 
     else:
       setattr(self, "scm", "local")
@@ -226,9 +236,55 @@ class ExtensionDescription(object):
       self._read(fp)
 
   #---------------------------------------------------------------------------
+  @staticmethod
+  def _findOccurences(a_str, sub):
+    start = 0
+    while True:
+        start = a_str.find(sub, start)
+        if start == -1: return
+        yield start
+        start += len(sub)
+
+  #---------------------------------------------------------------------------
   def _write(self, fp):
-    for key in sorted(self.__dict__):
-      fp.write(("%s %s" % (key, getattr(self, key))).strip() + "\n")
+    # Creation of the map
+    dictio = dict()
+    dictio["scm_type"] = getattr(self, "scm")
+    dictio["scm_url"] = getattr(self, "scmurl")
+    dictio["MY_EXTENSION_WC_REVISION"] = getattr(self, "scmrevision")
+    dictio["MY_EXTENSION_DEPENDS"] = getattr(self, "depends")
+    dictio["MY_EXTENSION_BUILD_SUBDIRECTORY"] = getattr(self, "build_subdirectory")
+    dictio["MY_EXTENSION_HOMEPAGE"] = getattr(self, "homepage")
+    dictio["MY_EXTENSION_CONTRIBUTORS"] = getattr(self, "contributors")
+    dictio["MY_EXTENSION_CATEGORY"] = getattr(self, "category")
+    dictio["MY_EXTENSION_ICONURL"] = getattr(self, "iconurl")
+    dictio["MY_EXTENSION_STATUS"] = getattr(self, "status")
+    dictio["MY_EXTENSION_DESCRIPTION"] = getattr(self, "description")
+    dictio["MY_EXTENSION_SCREENSHOTURLS"] = getattr(self, "screenshoturls")
+    dictio["MY_EXTENSION_ENABLED"] = getattr(self, "enabled")
+
+    if self.DESCRIPTION_FILE_TEMPLATE is not None:
+      extDescriptFile = open(self.DESCRIPTION_FILE_TEMPLATE,'r')
+      for line in extDescriptFile.readlines() :
+        if "${" in line:
+          variables = self._findOccurences(line, "$")
+          temp = line
+          for variable in variables:
+            if line[variable] is '$' and line[variable + 1] is '{':
+              var = ""
+              i = variable + 2
+              while line[i] is not '}':
+                var+=line[i]
+                i+=1
+              temp = temp.replace("${" + var + "}", dictio[var])
+          fp.write(temp)
+        else:
+          fp.write(line)
+    else:
+      logging.warning("failed to generate description file using template")
+      logging.warning("generating description file using fallback method")
+      for key in sorted(self.__dict__):
+        fp.write(("%s %s" % (key, getattr(self, key))).strip() + "\n")
 
   #---------------------------------------------------------------------------
   def write(self, out):

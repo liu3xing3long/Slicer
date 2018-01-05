@@ -47,18 +47,15 @@ void vtkMRMLAnnotationPointDisplayNode::WriteXML(ostream& of, int nIndent)
 
   Superclass::WriteXML(of, nIndent);
 
-  vtkIndent indent(nIndent);
   of << " glyphScale=\"" << this->GlyphScale << "\"";
   of << " glyphType=\"" << this->GlyphType << "\"";
   of << " sliceProjection=\"" << this->SliceProjection << "\"";
 
-  if (this->ProjectedColor)
-    {
-    of << indent << " projectedColor=\"" << this->ProjectedColor[0] << " "
-       << this->ProjectedColor[1] << " "
-       << this->ProjectedColor[2] << "\"";
-    }
-  of << indent << " projectedOpacity=\"" << this->ProjectedOpacity << "\"";
+  of << " projectedColor=\"" << this->ProjectedColor[0] << " "
+     << this->ProjectedColor[1] << " "
+     << this->ProjectedColor[2] << "\"";
+
+  of << " projectedOpacity=\"" << this->ProjectedOpacity << "\"";
  }
 
 //----------------------------------------------------------------------------

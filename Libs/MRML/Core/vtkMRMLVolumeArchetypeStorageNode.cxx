@@ -35,6 +35,7 @@ Version:   $Revision: 1.6 $
 // VTK includes
 #include <vtkCallbackCommand.h>
 #include <vtkDataArray.h>
+#include <vtkErrorCode.h>
 #include <vtkImageChangeInformation.h>
 #include <vtkNew.h>
 #include <vtkPointData.h>
@@ -55,6 +56,7 @@ vtkMRMLVolumeArchetypeStorageNode::vtkMRMLVolumeArchetypeStorageNode()
   this->CenterImage = 0;
   this->SingleFile  = 0;
   this->UseOrientationFromFile = 1;
+  this->DefaultWriteFileExtension = "nrrd";
 }
 
 //----------------------------------------------------------------------------
@@ -66,22 +68,18 @@ vtkMRMLVolumeArchetypeStorageNode::~vtkMRMLVolumeArchetypeStorageNode()
 void vtkMRMLVolumeArchetypeStorageNode::WriteXML(ostream& of, int nIndent)
 {
   Superclass::WriteXML(of, nIndent);
-  vtkIndent indent(nIndent);
   {
   std::stringstream ss;
   ss << this->CenterImage;
-  of << indent << " centerImage=\"" << ss.str() << "\"";
-  }
-  {
-  std::stringstream ss;
-  ss << this->SingleFile;
-  of << indent << " singleFile=\"" << ss.str() << "\"";
+  of << " centerImage=\"" << ss.str() << "\"";
   }
   {
   std::stringstream ss;
   ss << this->UseOrientationFromFile;
-  of << indent << " UseOrientationFromFile=\"" << ss.str() << "\"";
+  of << " UseOrientationFromFile=\"" << ss.str() << "\"";
   }
+  // SingleFile attribute is not written to file. GetNumberOfFileNames()
+  // is used to determine if reader should read from single/multiple files.
 }
 
 //----------------------------------------------------------------------------
@@ -103,12 +101,6 @@ void vtkMRMLVolumeArchetypeStorageNode::ReadXMLAttributes(const char** atts)
       ss << attValue;
       ss >> this->CenterImage;
       }
-    if (!strcmp(attName, "singleFile"))
-      {
-      std::stringstream ss;
-      ss << attValue;
-      ss >> this->SingleFile;
-      }
     if (!strcmp(attName, "UseOrientationFromFile"))
       {
       std::stringstream ss;
@@ -116,6 +108,12 @@ void vtkMRMLVolumeArchetypeStorageNode::ReadXMLAttributes(const char** atts)
       ss >> this->UseOrientationFromFile;
       }
     }
+
+  // SingleFile attribute used to be read from the scene, but often
+  // its value was inconsistent with GetNumberOfFileNames() for color volumes.
+  // We now initialize SingleFile based on GetNumberOfFileNames(), ignoring
+  // any singleFile attribute that may be found in the XML stream.
+  this->SingleFile = (this->GetNumberOfFileNames() <= 1);
 
   this->EndModify(disabledModify);
 }
@@ -344,19 +342,32 @@ int vtkMRMLVolumeArchetypeStorageNode::ReadDataInternal(vtkMRMLNode *refNode)
     reader->SetUseNativeOriginOn();
     }
 
+  bool readingWorked = true;
+  std::string errorMessage = "";
   try
     {
     vtkDebugMacro("ReadData: right before reader update, reader num files = " << reader->GetNumberOfFileNames());
     reader->Update();
+    if (reader->GetErrorCode() != vtkErrorCode::NoError)
+      {
+      readingWorked = false;
+      errorMessage = std::string(vtkErrorCode::GetStringFromErrorCode(reader->GetErrorCode()));
+      }
     }
   catch (itk::ExceptionObject& e)
+    {
+    readingWorked = false;
+    errorMessage = std::string("ITK exception info: error in ") + e.GetLocation() + "\n"
+                                                + e.GetDescription() + "\n";
+    }
+  if (!readingWorked)
     {
     std::string reader0thFileName;
     if (reader->GetFileName(0) != NULL)
       {
       reader0thFileName = std::string("reader 0th file name = ") + std::string(reader->GetFileName(0));
       }
-    vtkErrorMacro("ReadData: Cannot read file as a volume of type "
+    vtkErrorMacro(<< "ReadData: Cannot read file as a volume of type "
                   << (refNode ? refNode->GetNodeTagName() : "null")
                   << "[" << "fullName = " << fullName << "]\n"
                   << "\tNumber of files listed in the node = "
@@ -365,8 +376,7 @@ int vtkMRMLVolumeArchetypeStorageNode::ReadDataInternal(vtkMRMLNode *refNode)
                   << reader->GetNumberOfFileNames() << " files.\n"
                   << "\tFile reader used the archetype file name of " << reader->GetArchetype()
                   << " [" << reader0thFileName.c_str() << "]\n"
-                  << "ITK exception info: error in " << e.GetLocation() << "\n"
-                  << e.GetDescription() << "\n");
+                  << errorMessage << "\n");
     return 0;
     }
 
@@ -403,7 +413,7 @@ int vtkMRMLVolumeArchetypeStorageNode::ReadDataInternal(vtkMRMLNode *refNode)
     }
 
   // Set volume attributes
-  volNode->SetMetaDataDictionary( reader->GetMetaDataDictionary() );
+  vtkMRMLVolumeArchetypeStorageNode::SetMetaDataDictionaryFromReader(volNode, reader);
 
   // Get all the file names from the reader
   if (reader->GetNumberOfFileNames() > 1)
@@ -612,12 +622,6 @@ void vtkMRMLVolumeArchetypeStorageNode::InitializeSupportedWriteFileTypes()
                                                      supportedFormats->GetValue(i));
       }
     }
-}
-
-//----------------------------------------------------------------------------
-const char* vtkMRMLVolumeArchetypeStorageNode::GetDefaultWriteFileExtension()
-{
-  return "nrrd";
 }
 
 //----------------------------------------------------------------------------
@@ -890,4 +894,13 @@ std::string vtkMRMLVolumeArchetypeStorageNode::UpdateFileList(vtkMRMLNode *refNo
 void vtkMRMLVolumeArchetypeStorageNode::ConfigureForDataExchange()
 {
   this->UseCompressionOff();
+}
+
+//----------------------------------------------------------------------------
+void vtkMRMLVolumeArchetypeStorageNode::SetMetaDataDictionaryFromReader(vtkMRMLVolumeNode *volNode, vtkITKArchetypeImageSeriesReader *reader)
+{
+  if (volNode && reader)
+    {
+    volNode->SetMetaDataDictionary( reader->GetMetaDataDictionary() );
+    }
 }

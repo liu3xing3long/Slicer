@@ -21,10 +21,14 @@
 #ifndef __vtkMRMLAbstractViewNode_h
 #define __vtkMRMLAbstractViewNode_h
 
+// VTK includes
+#include <vtkSmartPointer.h>
+
 // MRML includes
 #include "vtkMRMLNode.h"
 
 class vtkMRMLModelNode;
+class vtkStringArray;
 
 /// \brief Abstract MRML node to represent a view.
 /// The class holds the properties common to any view type (3D, slice, chart..)
@@ -34,7 +38,7 @@ class VTK_MRML_EXPORT vtkMRMLAbstractViewNode
 {
 public:
   vtkTypeMacro(vtkMRMLAbstractViewNode,vtkMRMLNode);
-  void PrintSelf(ostream& os, vtkIndent indent);
+  void PrintSelf(ostream& os, vtkIndent indent) VTK_OVERRIDE;
 
   //--------------------------------------------------------------------------
   /// MRMLNode methods
@@ -42,19 +46,19 @@ public:
 
   ///
   /// Read node attributes from XML file
-  virtual void ReadXMLAttributes( const char** atts);
+  virtual void ReadXMLAttributes( const char** atts) VTK_OVERRIDE;
 
   ///
   /// Write this node's information to a MRML file in XML format.
-  virtual void WriteXML(ostream& of, int indent);
+  virtual void WriteXML(ostream& of, int indent) VTK_OVERRIDE;
 
   ///
   /// Copy the node's attributes to this object
-  virtual void Copy(vtkMRMLNode *node);
+  virtual void Copy(vtkMRMLNode *node) VTK_OVERRIDE;
 
   /// \brief Reimplemented to preserve layout label when reset.
   /// \sa GetLayoutLabel()
-  virtual void Reset(vtkMRMLNode* defaultNode);
+  virtual void Reset(vtkMRMLNode* defaultNode) VTK_OVERRIDE;
 
   ///
   /// Name of the layout. Must be unique between all the view nodes of the
@@ -65,6 +69,20 @@ public:
   /// \sa SetSingletonTag(), SetViewLabel()
   inline void SetLayoutName(const char *layoutName);
   inline const char *GetLayoutName();
+
+  ///
+  /// An optional identifier to link groups of views. Views that have matching
+  /// ViewGroup value are in the same group.
+  /// ViewGroup is used for restricting scope of:
+  /// \li Linked slice view property changes (is slices are linked, a property change
+  ///     will only change views in the same group)
+  /// \li Crosshair jump to slice (if crosshair is moved with shift+mousemove and slice
+  ///     jump is enabled, only those slices will be moved that are in the same group as
+  ///     the view where the mouse was)
+  /// \li Slice intersection display (slice intersections will only shown of those slices
+  ///     that are in the same group)
+  vtkSetMacro(ViewGroup, int);
+  vtkGetMacro(ViewGroup, int);
 
   ///
   /// Label for the view. Usually a 1 character label, e.g. R, 1, 2, etc.
@@ -194,12 +212,30 @@ public:
     RulerType_Last // insert valid types above this line
   };
 
+  ///
+  /// Get/Set labels of coordinate system axes.
+  /// Order of labels: -X, +X, -Y, +Y, -Z, +Z.
+  /// Default: L, R, P, A, I, S
+  /// Note that these labels are used for display only (for example, showing organ specific
+  /// directions, such as "Temporal" and "Nasal" instead of "Left" and "Right").
+  /// Therefore, changing labels will not change orientation of displayed data in the view.
+  const char* GetAxisLabel(int labelIndex);
+  void SetAxisLabel(int labelIndex, const char* label);
+
+  ///
+  /// Total number of coordinate system axis labels
+  static const int AxisLabelsCount;
+
 protected:
   vtkMRMLAbstractViewNode();
   ~vtkMRMLAbstractViewNode();
 
   vtkMRMLAbstractViewNode(const vtkMRMLAbstractViewNode&);
   void operator=(const vtkMRMLAbstractViewNode&);
+
+  ///
+  /// Views with the same ViewGroup value are in the same group.
+  int ViewGroup;
 
   ///
   /// Label to show for the view (shortcut for the name)
@@ -239,6 +275,10 @@ protected:
   /// these parameters define how to display the ruler.
   bool RulerEnabled;
   int RulerType;
+
+  ///
+  /// Labels of coordinate system axes
+  vtkSmartPointer<vtkStringArray> AxisLabels;
 };
 
 //------------------------------------------------------------------------------

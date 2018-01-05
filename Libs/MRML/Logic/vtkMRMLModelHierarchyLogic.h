@@ -93,10 +93,10 @@ protected:
   void operator=(const vtkMRMLModelHierarchyLogic&);
 
   /// Reimplemented to observe the scene
-  virtual void SetMRMLSceneInternal(vtkMRMLScene* newScene);
+  virtual void SetMRMLSceneInternal(vtkMRMLScene* newScene) VTK_OVERRIDE;
 
   /// Delete the hierarchy node when a model is removed from the scene
-  virtual void OnMRMLSceneNodeRemoved(vtkMRMLNode* removedNode);
+  virtual void OnMRMLSceneNodeRemoved(vtkMRMLNode* removedNode) VTK_OVERRIDE;
 
   ///
   /// Create model to hierarchy map,
@@ -109,8 +109,8 @@ protected:
   typedef std::map<std::string, std::vector< vtkMRMLModelHierarchyNode *> > HierarchyChildrenNodesType;
   HierarchyChildrenNodesType HierarchyChildrenNodes;
 
-  unsigned long ModelHierarchyNodesMTime;
-  unsigned long HierarchyChildrenNodesMTime;
+  vtkMTimeType ModelHierarchyNodesMTime;
+  vtkMTimeType HierarchyChildrenNodesMTime;
 
   static int ChildrenVisibilitySetBatchUpdateThreshold;
 };

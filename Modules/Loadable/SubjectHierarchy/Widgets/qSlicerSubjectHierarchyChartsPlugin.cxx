@@ -20,16 +20,11 @@
 
 ==============================================================================*/
 
-// SubjectHierarchy MRML includes
-#include "vtkMRMLSubjectHierarchyNode.h"
-#include "vtkMRMLSubjectHierarchyConstants.h"
-
 // SubjectHierarchy Plugins includes
 #include "qSlicerSubjectHierarchyPluginHandler.h"
 #include "qSlicerSubjectHierarchyChartsPlugin.h"
 
 // MRML includes
-#include <vtkMRMLNode.h>
 #include <vtkMRMLScene.h>
 #include <vtkMRMLChartNode.h>
 #include <vtkMRMLLayoutNode.h>
@@ -80,10 +75,18 @@ qSlicerSubjectHierarchyChartsPluginPrivate::qSlicerSubjectHierarchyChartsPluginP
   this->HiddenIcon = QIcon(":Icons/VisibleOff.png");
 }
 
+//------------------------------------------------------------------------------
+void qSlicerSubjectHierarchyChartsPluginPrivate::init()
+{
+}
+
 //-----------------------------------------------------------------------------
 qSlicerSubjectHierarchyChartsPluginPrivate::~qSlicerSubjectHierarchyChartsPluginPrivate()
 {
 }
+
+//-----------------------------------------------------------------------------
+// qSlicerSubjectHierarchyChartsPlugin methods
 
 //-----------------------------------------------------------------------------
 qSlicerSubjectHierarchyChartsPlugin::qSlicerSubjectHierarchyChartsPlugin(QObject* parent)
@@ -96,23 +99,19 @@ qSlicerSubjectHierarchyChartsPlugin::qSlicerSubjectHierarchyChartsPlugin(QObject
   d->init();
 }
 
-//------------------------------------------------------------------------------
-void qSlicerSubjectHierarchyChartsPluginPrivate::init()
-{
-}
-
 //-----------------------------------------------------------------------------
 qSlicerSubjectHierarchyChartsPlugin::~qSlicerSubjectHierarchyChartsPlugin()
 {
 }
 
 //----------------------------------------------------------------------------
-double qSlicerSubjectHierarchyChartsPlugin::canAddNodeToSubjectHierarchy(vtkMRMLNode* node, vtkMRMLSubjectHierarchyNode* parent/*=NULL*/)const
+double qSlicerSubjectHierarchyChartsPlugin::canAddNodeToSubjectHierarchy(
+  vtkMRMLNode* node, vtkIdType parentItemID/*=vtkMRMLSubjectHierarchyNode::INVALID_ITEM_ID*/)const
 {
-  Q_UNUSED(parent);
+  Q_UNUSED(parentItemID);
   if (!node)
     {
-    qCritical() << "qSlicerSubjectHierarchyChartsPlugin::canAddNodeToSubjectHierarchy: Input node is NULL!";
+    qCritical() << Q_FUNC_INFO << ": Input node is NULL!";
     return 0.0;
     }
   else if (node->IsA("vtkMRMLChartNode"))
@@ -125,16 +124,22 @@ double qSlicerSubjectHierarchyChartsPlugin::canAddNodeToSubjectHierarchy(vtkMRML
 }
 
 //---------------------------------------------------------------------------
-double qSlicerSubjectHierarchyChartsPlugin::canOwnSubjectHierarchyNode(vtkMRMLSubjectHierarchyNode* node)const
+double qSlicerSubjectHierarchyChartsPlugin::canOwnSubjectHierarchyItem(vtkIdType itemID)const
 {
-  if (!node)
+  if (!itemID)
     {
-    qCritical() << "qSlicerSubjectHierarchyChartsPlugin::canOwnSubjectHierarchyNode: Input node is NULL!";
+    qCritical() << Q_FUNC_INFO << ": Invalid input item";
+    return 0.0;
+    }
+  vtkMRMLSubjectHierarchyNode* shNode = qSlicerSubjectHierarchyPluginHandler::instance()->subjectHierarchyNode();
+  if (!shNode)
+    {
+    qCritical() << Q_FUNC_INFO << ": Failed to access subject hierarchy node";
     return 0.0;
     }
 
   // Chart
-  vtkMRMLNode* associatedNode = node->GetAssociatedNode();
+  vtkMRMLNode* associatedNode = shNode->GetItemDataNode(itemID);
   if (associatedNode && associatedNode->IsA("vtkMRMLChartNode"))
     {
     return 0.5; // There may be other plugins that can handle special charts better
@@ -150,22 +155,22 @@ const QString qSlicerSubjectHierarchyChartsPlugin::roleForPlugin()const
 }
 
 //---------------------------------------------------------------------------
-QIcon qSlicerSubjectHierarchyChartsPlugin::icon(vtkMRMLSubjectHierarchyNode* node)
+QIcon qSlicerSubjectHierarchyChartsPlugin::icon(vtkIdType itemID)
 {
-  if (!node)
+  if (!itemID)
     {
-    qCritical() << "qSlicerSubjectHierarchyChartsPlugin::icon: NULL node given!";
+    qCritical() << Q_FUNC_INFO << ": Invalid input item";
     return QIcon();
     }
 
   Q_D(qSlicerSubjectHierarchyChartsPlugin);
 
-  if (this->canOwnSubjectHierarchyNode(node))
+  if (this->canOwnSubjectHierarchyItem(itemID))
     {
     return d->ChartIcon;
     }
 
-  // Node unknown by plugin
+  // Item unknown by plugin
   return QIcon();
 }
 
@@ -185,39 +190,42 @@ QIcon qSlicerSubjectHierarchyChartsPlugin::visibilityIcon(int visible)
 }
 
 //---------------------------------------------------------------------------
-void qSlicerSubjectHierarchyChartsPlugin::setDisplayVisibility(vtkMRMLSubjectHierarchyNode* node, int visible)
+void qSlicerSubjectHierarchyChartsPlugin::setDisplayVisibility(vtkIdType itemID, int visible)
 {
-  if (!node)
+  if (!itemID)
     {
-    qCritical() << "qSlicerSubjectHierarchyChartsPlugin::setDisplayVisibility: NULL node!";
+    qCritical() << Q_FUNC_INFO << ": Invalid input item";
     return;
     }
-  vtkMRMLScene* scene = qSlicerSubjectHierarchyPluginHandler::instance()->scene();
+  vtkMRMLSubjectHierarchyNode* shNode = qSlicerSubjectHierarchyPluginHandler::instance()->subjectHierarchyNode();
+  if (!shNode)
+    {
+    qCritical() << Q_FUNC_INFO << ": Failed to access subject hierarchy node";
+    return;
+    }
+  vtkMRMLScene* scene = qSlicerSubjectHierarchyPluginHandler::instance()->mrmlScene();
   if (!scene)
     {
-    qCritical() << "qSlicerSubjectHierarchyChartsPlugin::setDisplayVisibility: Invalid MRML scene!";
+    qCritical() << Q_FUNC_INFO << ": Invalid MRML scene!";
     return;
     }
-  if (this->getDisplayVisibility(node) == visible)
+
+  if (this->getDisplayVisibility(itemID) == visible)
     {
     return;
     }
 
   // Get layout node
-  vtkSmartPointer<vtkCollection> layoutNodes =
-    vtkSmartPointer<vtkCollection>::Take( scene->GetNodesByClass("vtkMRMLLayoutNode") );
-  layoutNodes->InitTraversal();
-  vtkObject* layoutNodeVtkObject = layoutNodes->GetNextItemAsObject();
-  vtkMRMLLayoutNode* layoutNode = vtkMRMLLayoutNode::SafeDownCast(layoutNodeVtkObject);
+  vtkMRMLLayoutNode* layoutNode = vtkMRMLLayoutNode::SafeDownCast(scene->GetFirstNodeByClass("vtkMRMLLayoutNode"));
   if (!layoutNode)
     {
-    qCritical() << "qSlicerSubjectHierarchyChartsPlugin::getChartViewNode: Unable to get layout node!";
+    qCritical() << Q_FUNC_INFO << ": Unable to get layout node!";
     return;
     }
 
   vtkMRMLChartViewNode* chartViewNode = this->getChartViewNode();
 
-  vtkMRMLChartNode* associatedChartNode = vtkMRMLChartNode::SafeDownCast(node->GetAssociatedNode());
+  vtkMRMLChartNode* associatedChartNode = vtkMRMLChartNode::SafeDownCast(shNode->GetItemDataNode(itemID));
   if (associatedChartNode && visible)
     {
     // Switch to four-up quantitative layout
@@ -234,13 +242,11 @@ void qSlicerSubjectHierarchyChartsPlugin::setDisplayVisibility(vtkMRMLSubjectHie
     if ( chartViewNode->GetChartNodeID()
       && strcmp(chartViewNode->GetChartNodeID(), associatedChartNode->GetID()) )
       {
-      vtkMRMLSubjectHierarchyNode* currentChartShNode =
-        vtkMRMLSubjectHierarchyNode::GetAssociatedSubjectHierarchyNode(
-        scene->GetNodeByID(chartViewNode->GetChartNodeID()) );
-      if (currentChartShNode)
+      vtkIdType chartItemID = shNode->GetItemByDataNode(scene->GetNodeByID(chartViewNode->GetChartNodeID()));
+      if (chartItemID)
         {
         chartViewNode->SetChartNodeID(NULL);
-        currentChartShNode->Modified();
+        shNode->ItemModified(chartItemID);
         }
       }
 
@@ -254,15 +260,21 @@ void qSlicerSubjectHierarchyChartsPlugin::setDisplayVisibility(vtkMRMLSubjectHie
     }
 
   // Trigger icon update
-  node->Modified();
+  shNode->ItemModified(itemID);
 }
 
 //-----------------------------------------------------------------------------
-int qSlicerSubjectHierarchyChartsPlugin::getDisplayVisibility(vtkMRMLSubjectHierarchyNode* node)const
+int qSlicerSubjectHierarchyChartsPlugin::getDisplayVisibility(vtkIdType itemID)const
 {
-  if (!node)
+  if (!itemID)
     {
-    qCritical() << "qSlicerSubjectHierarchyChartsPlugin::getDisplayVisibility: NULL node!";
+    qCritical() << Q_FUNC_INFO << ": Invalid input item";
+    return -1;
+    }
+  vtkMRMLSubjectHierarchyNode* shNode = qSlicerSubjectHierarchyPluginHandler::instance()->subjectHierarchyNode();
+  if (!shNode)
+    {
+    qCritical() << Q_FUNC_INFO << ": Failed to access subject hierarchy node";
     return -1;
     }
 
@@ -282,8 +294,8 @@ int qSlicerSubjectHierarchyChartsPlugin::getDisplayVisibility(vtkMRMLSubjectHier
     return 0;
     }
 
-  // Return shown if chart in chart view is the examined node's associated data node
-  vtkMRMLChartNode* associatedChartNode = vtkMRMLChartNode::SafeDownCast(node->GetAssociatedNode());
+  // Return shown if chart in chart view is the examined item's associated data node
+  vtkMRMLChartNode* associatedChartNode = vtkMRMLChartNode::SafeDownCast(shNode->GetItemDataNode(itemID));
   if ( associatedChartNode && chartViewNode->GetChartNodeID()
     && !strcmp(chartViewNode->GetChartNodeID(), associatedChartNode->GetID()) )
     {
@@ -296,29 +308,25 @@ int qSlicerSubjectHierarchyChartsPlugin::getDisplayVisibility(vtkMRMLSubjectHier
 }
 
 //---------------------------------------------------------------------------
-void qSlicerSubjectHierarchyChartsPlugin::editProperties(vtkMRMLSubjectHierarchyNode* node)
+void qSlicerSubjectHierarchyChartsPlugin::editProperties(vtkIdType itemID)
 {
-  Q_UNUSED(node);
+  Q_UNUSED(itemID);
   // No module to edit Charts, just switch layout
 }
 
 //---------------------------------------------------------------------------
 vtkMRMLChartViewNode* qSlicerSubjectHierarchyChartsPlugin::getChartViewNode()const
 {
-  vtkMRMLScene* scene = qSlicerSubjectHierarchyPluginHandler::instance()->scene();
+  vtkMRMLScene* scene = qSlicerSubjectHierarchyPluginHandler::instance()->mrmlScene();
   if (!scene)
     {
-    qCritical() << "qSlicerSubjectHierarchyChartsPlugin::getChartViewNode: Invalid MRML scene!";
+    qCritical() << Q_FUNC_INFO << ": Invalid MRML scene!";
     return NULL;
     }
 
-  vtkSmartPointer<vtkCollection> chartViewNodes =
-    vtkSmartPointer<vtkCollection>::Take( scene->GetNodesByClass("vtkMRMLChartViewNode") );
-  chartViewNodes->InitTraversal();
-  vtkMRMLChartViewNode* chartViewNode = vtkMRMLChartViewNode::SafeDownCast( chartViewNodes->GetNextItemAsObject() );
+  vtkMRMLChartViewNode* chartViewNode = vtkMRMLChartViewNode::SafeDownCast(scene->GetFirstNodeByClass("vtkMRMLChartViewNode"));
   if (!chartViewNode)
     {
-    qCritical() << "qSlicerSubjectHierarchyChartsPlugin::getChartViewNode: Unable to get chart view node!";
     return NULL;
     }
 

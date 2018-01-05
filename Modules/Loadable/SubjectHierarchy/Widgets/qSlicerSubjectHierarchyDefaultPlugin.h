@@ -32,8 +32,6 @@
 #include "qSlicerSubjectHierarchyModuleWidgetsExport.h"
 
 class qSlicerSubjectHierarchyDefaultPluginPrivate;
-class vtkMRMLNode;
-class vtkMRMLSubjectHierarchyNode;
 class QIcon;
 
 /// \ingroup Slicer_QtModules_SubjectHierarchy_Widgets
@@ -50,13 +48,13 @@ public:
   virtual ~qSlicerSubjectHierarchyDefaultPlugin();
 
 public:
-  /// Determines if the actual plugin can handle a subject hierarchy node. The plugin with
-  /// the highest confidence number will "own" the node in the subject hierarchy (set icon, tooltip,
+  /// Determines if the actual plugin can handle a subject hierarchy item. The plugin with
+  /// the highest confidence number will "own" the item in the subject hierarchy (set icon, tooltip,
   /// set context menu etc.)
-  /// \param node Note to handle in the subject hierarchy tree
+  /// \param item Item to handle in the subject hierarchy tree
   /// \return Floating point confidence number between 0 and 1, where 0 means that the plugin cannot handle the
-  ///   node, and 1 means that the plugin is the only one that can handle the node (by node type or identifier attribute)
-  virtual double canOwnSubjectHierarchyNode(vtkMRMLSubjectHierarchyNode* node)const;
+  ///   item, and 1 means that the plugin is the only one that can handle the item (by node type or identifier attribute)
+  virtual double canOwnSubjectHierarchyItem(vtkIdType itemID)const;
 
   /// Get role that the plugin assigns to the subject hierarchy node.
   ///   Each plugin should provide only one role.
@@ -65,19 +63,34 @@ public:
   /// Get help text for plugin to be added in subject hierarchy module widget help box
   virtual const QString helpText()const;
 
-  /// Get icon of an owned subject hierarchy node
+  /// Get icon of an owned subject hierarchy item
   /// \return Icon to set, NULL if nothing to set
-  virtual QIcon icon(vtkMRMLSubjectHierarchyNode* node);
+  virtual QIcon icon(vtkIdType itemID);
 
   /// Get visibility icon for a visibility state
   virtual QIcon visibilityIcon(int visible);
 
-  /// Open module belonging to node and set inputs in opened module
-  virtual void editProperties(vtkMRMLSubjectHierarchyNode* node);
+  /// Get visibility context menu item actions to add to tree view.
+  /// These item visibility context menu actions can be shown in the implementations of \sa showVisibilityContextMenuActionsForItem
+  virtual QList<QAction*> visibilityContextMenuActions()const;
+
+  /// Show visibility context menu actions valid for a given subject hierarchy item.
+  /// \param itemID Subject Hierarchy item to show the visibility context menu items for
+  virtual void showVisibilityContextMenuActionsForItem(vtkIdType itemID);
 
 public:
   /// Set default visibility icons owned by the scene model so that the default plugin can set them
   void setDefaultVisibilityIcons(QIcon visibleIcon, QIcon hiddenIcon, QIcon partiallyVisibleIcon);
+
+public slots:
+  /// Toggle visibility for current item
+  void toggleVisibility();
+
+  /// Show all direct children of current item
+  void showAllChildren();
+
+  /// Hide all direct children of current item
+  void hideAllChildren();
 
 protected:
   QScopedPointer<qSlicerSubjectHierarchyDefaultPluginPrivate> d_ptr;

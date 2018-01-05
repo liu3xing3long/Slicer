@@ -29,10 +29,11 @@
 // DICOMLib includes
 #include "qSlicerDICOMLibModuleWidgetsExport.h"
 
+// MRML includes
+#include "vtkMRMLSubjectHierarchyNode.h"
+
 class qSlicerDICOMExportDialogPrivate;
 class vtkMRMLScene;
-class vtkMRMLSubjectHierarchyNode;
-class vtkMRMLNode;
 class QItemSelection;
 
 /// \ingroup Slicer_QtModules_SubjectHierarchy_Widgets
@@ -49,35 +50,46 @@ public:
 public:
   /// Show dialog
   /// \param nodeToSelect Node is selected in the tree if given
-  virtual bool exec(vtkMRMLSubjectHierarchyNode* nodeToSelect=NULL);
+  virtual bool exec(vtkIdType itemToSelect=vtkMRMLSubjectHierarchyNode::INVALID_ITEM_ID);
 
   /// Set MRML scene
   Q_INVOKABLE void setMRMLScene(vtkMRMLScene* scene);
 
   /// Python compatibility function for showing dialog (calls \a exec)
-  Q_INVOKABLE bool execDialog(vtkMRMLSubjectHierarchyNode* nodeToSelect=NULL) { return this->exec(nodeToSelect); };
+  Q_INVOKABLE bool execDialog(vtkIdType itemToSelect=vtkMRMLSubjectHierarchyNode::INVALID_ITEM_ID)
+    { return this->exec(itemToSelect); };
 
   /// Show DICOM browser and update database to show new items
   Q_INVOKABLE void showUpdatedDICOMBrowser();
 
 protected slots:
-  /// Select node that was passed with \sa exec() in subject hierarchy tree
-  void selectNode();
+  /// Make selections in the shown dialog, including select the item that was
+  /// passed with \sa exec() in subject hierarchy tree
+  void makeDialogSelections();
 
   /// Handles change of export series or entire scene radio button selection
   void onExportSeriesRadioButtonToggled(bool);
 
-  /// Triggers examining node when selection changes
-  void onCurrentNodeChanged(vtkMRMLNode*);
+  /// Triggers examining item when selection changes
+  void onCurrentItemChanged(vtkIdType itemID);
 
   /// Show exportables returned by the plugins for selected node
-  void examineSelectedNode();
+  void examineSelectedItem();
 
-  /// Populates DICOM tags based on selection
+  /// Populate DICOM tags based on selection
   void onExportableSelectedAtRow(int);
 
-  /// Calls export series or entire scene based on radio button selection
+  /// Save tags into subject hierarchy items
+  void onTagEdited();
+
+  /// Call export series or entire scene based on radio button selection
   void onExport();
+
+  /// Handle save tags checkbox toggles
+  void onSaveTagsCheckBoxToggled(bool);
+
+  /// Handle import exported dataset checkbox toggles
+  void onImportExportedDatasetCheckBoxToggled(bool);
 
 protected:
   /// Export selected node based on the selected exportable

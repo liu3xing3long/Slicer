@@ -9,9 +9,9 @@
 #  (1) build the standard 'package' target,
 #  (2) extract the list of generated packages from its standard output,
 #  (3) append the list of generated package filepaths to a file named PACKAGES.txt,
-#  (4) upload the extension packages on midas.
+#  (4) upload the first package on midas.
 #
-# The following variables are expected to be defined in the calling scope:
+# The following variables are expected to be defined in the including scope:
 #  CMAKE_SOURCE_DIR
 #  EXTENSION_SUPERBUILD_BINARY_DIR
 #  EXTENSION_BUILD_SUBDIRECTORY
@@ -32,12 +32,57 @@
 #  EXTENSION_OPERATING_SYSTEM
 #  EXTENSION_ARCHITECTURE
 #
+# Then, using  the 'SlicerMacroExtractRepositoryInfo' CMake module, the script
+# will also set the following variables:
+#  EXTENSION_WC_TYPE
+#  EXTENSION_WC_URL
+#  EXTENSION_WC_REVISION
+#
+# Finally, each time the 'packageupload' target is built, this same module will be
+# executed with all variables previously defined as arguments.
+#
+
+# Macro allowing to set a variable to its default value if not already defined.
+# The default value is set with:
+#  (1) if set, the value environment variable <var>.
+#  (2) if set, the value of local variable variable <var>.
+#  (3) if none of the above, the value passed as a parameter.
+# Setting the optional parameter 'OBFUSCATE' will display 'OBFUSCATED' instead of the real value.
+macro(_seput_set_if_not_defined var defaultvalue)
+  set(_obfuscate FALSE)
+  foreach(arg ${ARGN})
+    if(arg STREQUAL "OBFUSCATE")
+      set(_obfuscate TRUE)
+    endif()
+  endforeach()
+  if(DEFINED ENV{${var}} AND NOT DEFINED ${var})
+    set(_value "$ENV{${var}}")
+    if(_obfuscate)
+      set(_value "OBFUSCATED")
+    endif()
+    message(STATUS "Setting '${var}' variable with environment variable value '${_value}'")
+    set(${var} $ENV{${var}})
+  endif()
+  if(NOT DEFINED ${var})
+    set(_value "${defaultvalue}")
+    if(_obfuscate)
+      set(_value "OBFUSCATED")
+    endif()
+    message(STATUS "Setting '${var}' variable with default value '${_value}'")
+    set(${var} "${defaultvalue}")
+  endif()
+endmacro()
 
 if(NOT DEFINED PACKAGEUPLOAD)
   set(PACKAGEUPLOAD 0)
 endif()
 
 if(NOT PACKAGEUPLOAD)
+
+  _seput_set_if_not_defined(CTEST_MODEL "Experimental")
+  _seput_set_if_not_defined(MIDAS_PACKAGE_URL "http://slicer.kitware.com/midas3")
+  _seput_set_if_not_defined(MIDAS_PACKAGE_EMAIL "MIDAS_PACKAGE_EMAIL-NOTDEFINED" OBFUSCATE)
+  _seput_set_if_not_defined(MIDAS_PACKAGE_API_KEY "MIDAS_PACKAGE_API_KEY-NOTDEFINED" OBFUSCATE)
 
   set(script_vars
     Slicer_CMAKE_DIR
@@ -98,10 +143,14 @@ set(${varname} \"${${varname}}\")")
   set(script_args_file ${CMAKE_CURRENT_BINARY_DIR}/midas_api_upload_extension-command-args.cmake)
   file(WRITE ${script_args_file} ${script_arg_list})
 
+  set(_cpack_output_file ${EXTENSION_BINARY_DIR}/packageupload_cpack_output.txt)
+
   add_custom_target(packageupload
+    COMMAND ${CMAKE_COMMAND} -E echo "CPack log: ${_cpack_output_file}"
     COMMAND ${CMAKE_COMMAND}
       -DPACKAGEUPLOAD:BOOL=1
       -DCONFIG:STRING=${CMAKE_CFG_INTDIR}
+      -DCPACK_OUTPUT_FILE:FILEPATH=${_cpack_output_file}
       -DSCRIPT_ARGS_FILE:FILEPATH=${script_args_file}
       -P ${CMAKE_CURRENT_LIST_FILE}
     COMMENT "Package and upload extension"
@@ -123,6 +172,7 @@ include(${SCRIPT_ARGS_FILE})
 # Sanity checks
 set(expected_defined_vars
   CONFIG
+  CPACK_OUTPUT_FILE
   )
 foreach(var ${expected_defined_vars})
   if(NOT DEFINED ${var})
@@ -139,13 +189,12 @@ endforeach()
 # to wait for a rebuild of the project.
 set(_build_target 1)
 
-set(cpack_output_file ${EXTENSION_BINARY_DIR}/package_target_output.txt)
 if(_build_target)
   execute_process(
     COMMAND ${CMAKE_COMMAND} --build ${EXTENSION_BINARY_DIR} --target package --config ${CONFIG}
     WORKING_DIRECTORY ${EXTENSION_BINARY_DIR}
     OUTPUT_STRIP_TRAILING_WHITESPACE
-    OUTPUT_FILE ${cpack_output_file}
+    OUTPUT_FILE ${CPACK_OUTPUT_FILE}
     RESULT_VARIABLE rv
     )
 else()
@@ -153,7 +202,7 @@ else()
 endif()
 
 # Display CPack output
-file(READ ${cpack_output_file} cpack_output)
+file(READ ${CPACK_OUTPUT_FILE} cpack_output)
 message(${cpack_output})
 
 if(NOT rv EQUAL 0)
@@ -170,7 +219,7 @@ file(WRITE ${package_list_file} "")
 # Extract list of generated packages
 set(regexp ".*CPack: - package: (.*) generated\\.")
 set(raw_package_list)
-file(STRINGS ${cpack_output_file} raw_package_list REGEX ${regexp})
+file(STRINGS ${CPACK_OUTPUT_FILE} raw_package_list REGEX ${regexp})
 
 foreach(package ${raw_package_list})
   string(REGEX REPLACE ${regexp} "\\1" package_path "${package}" )
@@ -180,7 +229,7 @@ endforeach()
 
 #-----------------------------------------------------------------------------
 # The following code will read the list of created packages from PACKAGES.txt
-# file and upload each one of them to midas.
+# file and upload the first one to midas.
 
 # Current assumption: Exactly one extension package is expected. If this
 # even change. The following code would have to be updated.

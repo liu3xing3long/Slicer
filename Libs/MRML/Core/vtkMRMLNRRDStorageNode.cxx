@@ -39,6 +39,7 @@ vtkMRMLNodeNewMacro(vtkMRMLNRRDStorageNode);
 vtkMRMLNRRDStorageNode::vtkMRMLNRRDStorageNode()
 {
   this->CenterImage = 0;
+  this->DefaultWriteFileExtension = "nhdr";
 }
 
 //----------------------------------------------------------------------------
@@ -50,12 +51,10 @@ vtkMRMLNRRDStorageNode::~vtkMRMLNRRDStorageNode()
 void vtkMRMLNRRDStorageNode::WriteXML(ostream& of, int nIndent)
 {
   Superclass::WriteXML(of, nIndent);
-  vtkIndent indent(nIndent);
 
   std::stringstream ss;
   ss << this->CenterImage;
-  of << indent << " centerImage=\"" << ss.str() << "\"";
-
+  of << " centerImage=\"" << ss.str() << "\"";
 }
 
 //----------------------------------------------------------------------------
@@ -167,7 +166,7 @@ int vtkMRMLNRRDStorageNode::ReadDataInternal(vtkMRMLNode *refNode)
 
   std::string fullName = this->GetFullNameFromFileName();
 
-  if (fullName == std::string(""))
+  if (fullName.empty())
     {
     vtkErrorMacro("ReadData: File name not specified");
     return 0;
@@ -357,7 +356,7 @@ int vtkMRMLNRRDStorageNode::WriteDataInternal(vtkMRMLNode *refNode)
     }
 
   std::string fullName = this->GetFullNameFromFileName();
-  if (fullName == std::string(""))
+  if (fullName.empty())
     {
     vtkErrorMacro("WriteData: File name not specified");
     return 0;
@@ -515,12 +514,6 @@ void vtkMRMLNRRDStorageNode::InitializeSupportedWriteFileTypes()
 {
   this->SupportedWriteFileTypes->InsertNextValue("NRRD (.nrrd)");
   this->SupportedWriteFileTypes->InsertNextValue("NRRD (.nhdr)");
-}
-
-//----------------------------------------------------------------------------
-const char* vtkMRMLNRRDStorageNode::GetDefaultWriteFileExtension()
-{
-  return "nhdr";
 }
 
 //----------------------------------------------------------------------------

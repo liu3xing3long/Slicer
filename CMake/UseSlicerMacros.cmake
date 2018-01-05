@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 2.8.4)
+cmake_minimum_required(VERSION 3.5)
 
 # Given a variable name, this function will display messages indicating what the current
 # value of the variable.
@@ -47,8 +47,14 @@ endfunction()
 # If the variable is not defined, it will display:
 #   "-- Setting <varname> ........: <NOT DEFINED>"
 #
-# If the optional argument 'SKIP_TRUNCATE' is provided, the
+# If the option 'SKIP_TRUNCATE' is provided, the
 # text will NOT be truncated it too long.
+#
+# If the option 'OBFUSCATE' is provided, 'OBFUSCATED' will
+# be displayed instead of the variable value.
+#
+# If the optional argument `PRETEXT <pretext>` is provided,
+# `<pretext` will be displaying instead of `Setting <varname>`.
 #
 # In the current implementation, the padding is hardcoded to a length of 40
 # and the total text will be truncated if longer than 120 characters.
@@ -63,11 +69,28 @@ endfunction()
 #   -- Setting SHORTNAME ........: This is short variable name
 #   -- Setting LONGLONGNAME .....: This is a longer variable name
 #
+include(CMakeParseArguments)
 function(slicer_setting_variable_message varname)
+  set(options      OBFUSCATE SKIP_TRUNCATE)
+  set(oneValueArgs PRETEXT)
+  set(multiValueArgs )
+  CMAKE_PARSE_ARGUMENTS(LOCAL
+    "${options}"
+    "${oneValueArgs}"
+    "${multiValueArgs}"
+    ${ARGN}
+    )
   set(truncate TRUE)
-  if("${ARGV1}" STREQUAL "SKIP_TRUNCATE")
+  if(LOCAL_SKIP_TRUNCATE)
     set(truncate FALSE)
+    endif()
+  set(obfuscate ${LOCAL_OBFUSCATE})
+
+  set(pretext "Setting ${varname}")
+  if(DEFINED LOCAL_PRETEXT)
+    set(pretext ${LOCAL_PRETEXT})
   endif()
+
   set(pretext_right_jusitfy_length 45)
   set(fill_char ".")
   set(truncated_text_length 120)
@@ -77,16 +100,20 @@ function(slicer_setting_variable_message varname)
     set(value "NOT DEFINED")
   endif()
 
-  set(pretext "Setting ${varname}")
+  set(_value ${value})
+  if(obfuscate)
+    set(_value "OBFUSCATED")
+  endif()
+
   string(LENGTH ${pretext} pretext_length)
   math(EXPR pad_length "${pretext_right_jusitfy_length} - ${pretext_length} - 1")
   if(pad_length GREATER 0)
     string(RANDOM LENGTH ${pad_length} ALPHABET ${fill_char} pretext_dots)
-    set(text "${pretext} ${pretext_dots}: ${value}")
+    set(text "${pretext} ${pretext_dots}: ${_value}")
   elseif(pad_length EQUAL 0)
-    set(text "${pretext} : ${value}")
+    set(text "${pretext} : ${_value}")
   else()
-    set(text "${pretext}: ${value}")
+    set(text "${pretext}: ${_value}")
   endif()
   string(LENGTH "${text}" text_length)
   if(${truncate} AND ${text_length} GREATER ${truncated_text_length})
@@ -122,6 +149,14 @@ function(slicer_setting_variable_message_test)
 
   set(THIS_IS_A_LONG_VARIABLE_NAME_OVER_FORTY_FIVE_CHARS "This is a long variable name over forty five characters")
   slicer_setting_variable_message("THIS_IS_A_LONG_VARIABLE_NAME_OVER_FORTY_FIVE_CHARS")
+
+  set(YOU_SHOULD_NOT_SEE_THE_VALUE "You should not see this")
+  slicer_setting_variable_message("YOU_SHOULD_NOT_SEE_THE_VALUE" OBFUSCATE)
+
+  set(YOU_SHOULD_SEE_DIFFERENT_PRETEXT "good")
+  slicer_setting_variable_message(
+    "YOU_SHOULD_SEE_DIFFERENT_PRETEXT"
+    PRETEXT "This is different pretext")
 
   message("SUCCESS")
 endfunction()

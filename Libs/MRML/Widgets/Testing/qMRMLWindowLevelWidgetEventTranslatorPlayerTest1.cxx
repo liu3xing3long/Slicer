@@ -26,6 +26,9 @@
 #include <QTimer>
 #include <QTreeView>
 
+// Slicer includes
+#include "vtkSlicerConfigure.h"
+
 // CTK includes
 #include "ctkCallback.h"
 #include "ctkEventTranslatorPlayerWidget.h"
@@ -35,11 +38,15 @@
 #include "qMRMLWindowLevelWidget.h"
 
 // MRML includes
+#include <vtkMRMLApplicationLogic.h>
 #include <vtkMRMLScene.h>
 #include <vtkMRMLVolumeNode.h>
 
 // VTK includes
 #include <vtkNew.h>
+#ifdef Slicer_VTK_USE_QVTKOPENGLWIDGET
+#include <QVTKOpenGLWidget.h>
+#endif
 
 // STD includes
 #include <cstdlib>
@@ -59,6 +66,13 @@ void checkFinalWidgetState(void* data)
 //-----------------------------------------------------------------------------
 int qMRMLWindowLevelWidgetEventTranslatorPlayerTest1(int argc, char * argv [] )
 {
+#ifdef Slicer_VTK_USE_QVTKOPENGLWIDGET
+  // Set default surface format for QVTKOpenGLWidget
+  QSurfaceFormat format = QVTKOpenGLWidget::defaultFormat();
+  format.setSamples(0);
+  QSurfaceFormat::setDefaultFormat(format);
+#endif
+
   QApplication app(argc, argv);
 
   QString xmlDirectory = QString(argv[1]) + "/Libs/MRML/Widgets/Testing/";
@@ -70,10 +84,11 @@ int qMRMLWindowLevelWidgetEventTranslatorPlayerTest1(int argc, char * argv [] )
 
   // Test case 1
   vtkNew<vtkMRMLScene> scene;
+  vtkNew<vtkMRMLApplicationLogic> applicationLogic;
+  applicationLogic->SetMRMLScene(scene.GetPointer());
   scene->SetURL(argv[2]);
   scene->Connect();
-  scene->InitTraversal();
-  vtkMRMLNode* node = scene->GetNextNodeByClass("vtkMRMLScalarVolumeNode");
+  vtkMRMLNode* node = scene->GetFirstNodeByClass("vtkMRMLScalarVolumeNode");
   vtkMRMLVolumeNode* volumeNode = vtkMRMLVolumeNode::SafeDownCast(node);
 
   qMRMLWindowLevelWidget windowLevel;

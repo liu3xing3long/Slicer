@@ -59,6 +59,12 @@ set(${KIT}_SRCS
   qMRMLNodeAttributeTableWidgetPlugin.h
   qMRMLNodeComboBoxPlugin.cxx
   qMRMLNodeComboBoxPlugin.h
+  qMRMLPlotViewControllerWidgetPlugin.cxx
+  qMRMLPlotViewControllerWidgetPlugin.h
+  qMRMLPlotViewInformationWidgetPlugin.cxx
+  qMRMLPlotViewInformationWidgetPlugin.h
+  qMRMLPlotWidgetPlugin.cxx
+  qMRMLPlotWidgetPlugin.h
   qMRMLRangeWidgetPlugin.cxx
   qMRMLRangeWidgetPlugin.h
   qMRMLROIWidgetPlugin.cxx
@@ -77,6 +83,10 @@ set(${KIT}_SRCS
   qMRMLSliderWidgetPlugin.h
   qMRMLSpinBoxPlugin.cxx
   qMRMLSpinBoxPlugin.h
+  qMRMLTableViewPlugin.cxx
+  qMRMLTableViewPlugin.h
+  qMRMLThreeDViewInformationWidgetPlugin.cxx
+  qMRMLThreeDViewInformationWidgetPlugin.h
   qMRMLThreeDViewPlugin.cxx
   qMRMLThreeDViewPlugin.h
   qMRMLTransformSlidersPlugin.cxx
@@ -119,6 +129,9 @@ set(${KIT}_MOC_SRCS
   qMRMLNodeAttributeTableViewPlugin.h
   qMRMLNodeAttributeTableWidgetPlugin.h
   qMRMLNodeComboBoxPlugin.h
+  qMRMLPlotViewControllerWidgetPlugin.h
+  qMRMLPlotViewInformationWidgetPlugin.h
+  qMRMLPlotWidgetPlugin.h
   qMRMLRangeWidgetPlugin.h
   qMRMLROIWidgetPlugin.h
   qMRMLScalarInvariantComboBoxPlugin.h
@@ -128,6 +141,8 @@ set(${KIT}_MOC_SRCS
   qMRMLSliceWidgetPlugin.h
   qMRMLSliderWidgetPlugin.h
   qMRMLSpinBoxPlugin.h
+  qMRMLTableViewPlugin.h
+  qMRMLThreeDViewInformationWidgetPlugin.h
   qMRMLThreeDViewPlugin.h
   qMRMLTransformSlidersPlugin.h
   qMRMLTreeViewPlugin.h

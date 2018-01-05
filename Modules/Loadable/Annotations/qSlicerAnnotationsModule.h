@@ -17,7 +17,10 @@ class Q_SLICER_QTMODULES_ANNOTATIONS_EXPORT qSlicerAnnotationsModule :
   public qSlicerLoadableModule
 {
   Q_OBJECT
-  Q_INTERFACES(qSlicerLoadableModule)
+#ifdef Slicer_HAVE_QT5
+  Q_PLUGIN_METADATA(IID "org.slicer.modules.loadable.qSlicerLoadableModule/1.0");
+#endif
+  Q_INTERFACES(qSlicerLoadableModule);
 public:
 
   typedef qSlicerLoadableModule Superclass;
@@ -28,11 +31,15 @@ public:
   virtual QString helpText()const;
   virtual QString acknowledgementText()const;
   virtual QStringList contributors()const;
+  virtual QStringList dependencies() const;
 
   /// Return the icon of the Annotation module.
   virtual QIcon icon()const;
 
   virtual QStringList categories()const;
+
+  /// Specify editable node types
+  virtual QStringList associatedNodeTypes()const;
 
   qSlicerGetTitleMacro(QTMODULE_TITLE);
 

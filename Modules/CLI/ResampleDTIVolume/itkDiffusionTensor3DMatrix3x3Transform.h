@@ -11,8 +11,8 @@
   See License.txt or http://www.slicer.org/copyright/copyright.txt for details.
 
 ==========================================================================*/
-#ifndef __itkDiffusionTensor3DMatrix3x3Transform_h
-#define __itkDiffusionTensor3DMatrix3x3Transform_h
+#ifndef itkDiffusionTensor3DMatrix3x3Transform_h
+#define itkDiffusionTensor3DMatrix3x3Transform_h
 
 #include "itkDiffusionTensor3DTransform.h"
 #include <itkVector.h>
@@ -61,7 +61,7 @@ public:
   void SetCenter( PointType center );
 
   // /Evaluate the position of the transformed tensor in the output image
-  PointType EvaluateTensorPosition( const PointType & point );
+  PointType EvaluateTensorPosition( const PointType & point ) ITK_OVERRIDE;
 
   // /Set the 3x3 transform matrix
   virtual void SetMatrix3x3( MatrixTransformType & matrix );
@@ -72,7 +72,7 @@ public:
   // /Evaluate the transformed tensor
   virtual TensorDataType EvaluateTransformedTensor( TensorDataType & tensor );
 
-  virtual TensorDataType EvaluateTransformedTensor( TensorDataType & tensor, PointType & outputPosition ); // dummy
+  virtual TensorDataType EvaluateTransformedTensor( TensorDataType & tensor, PointType & outputPosition ) ITK_OVERRIDE; // dummy
                                                                                                            // output
                                                                                                            // position;
                                                                                                            // to be
@@ -81,7 +81,7 @@ public:
                                                                                                            // non-rigid
                                                                                                            // transforms
 
-  virtual typename Transform<double, 3, 3>::Pointer GetTransform();
+  virtual typename Transform<double, 3, 3>::Pointer GetTransform() ITK_OVERRIDE;
 
 protected:
   void ComputeOffset();
@@ -92,7 +92,7 @@ protected:
   InternalMatrixTransformType m_TransformMatrix;
   InternalMatrixTransformType m_Transform;
   InternalMatrixTransformType m_TransformT;
-  unsigned long               latestTime;
+  unsigned long               m_LatestTime;
   VectorType                  m_Translation;
   VectorType                  m_Offset;
   PointType                   m_Center;

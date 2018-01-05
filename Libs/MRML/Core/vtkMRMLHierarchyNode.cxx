@@ -31,7 +31,7 @@ vtkCxxSetReferenceStringMacro(vtkMRMLHierarchyNode, AssociatedNodeIDReference);
 typedef std::map<std::string, std::vector< vtkMRMLHierarchyNode *> > HierarchyChildrenNodesType;
 
 std::map< vtkMRMLScene*, HierarchyChildrenNodesType> vtkMRMLHierarchyNode::SceneHierarchyChildrenNodes = std::map< vtkMRMLScene*, HierarchyChildrenNodesType>();
-std::map< vtkMRMLScene*, unsigned long> vtkMRMLHierarchyNode::SceneHierarchyChildrenNodesMTime = std::map< vtkMRMLScene*, unsigned long>();
+std::map< vtkMRMLScene*, vtkMTimeType> vtkMRMLHierarchyNode::SceneHierarchyChildrenNodesMTime = std::map< vtkMRMLScene*, vtkMTimeType>();
 
 double vtkMRMLHierarchyNode::MaximumSortingValue = 0;
 
@@ -39,7 +39,7 @@ typedef std::map<std::string, vtkMRMLHierarchyNode *> AssociatedHierarchyNodesTy
 
 std::map< vtkMRMLScene*, AssociatedHierarchyNodesType> vtkMRMLHierarchyNode::SceneAssociatedHierarchyNodes = std::map< vtkMRMLScene*, AssociatedHierarchyNodesType>();
 
-std::map< vtkMRMLScene*, unsigned long> vtkMRMLHierarchyNode::SceneAssociatedHierarchyNodesMTime = std::map< vtkMRMLScene*, unsigned long>();;
+std::map< vtkMRMLScene*, vtkMTimeType> vtkMRMLHierarchyNode::SceneAssociatedHierarchyNodesMTime = std::map< vtkMRMLScene*, vtkMTimeType>();;
 
 typedef vtkMRMLHierarchyNode* const vtkMRMLHierarchyNodePointer;
 bool vtkMRMLHierarchyNodeSortPredicate(vtkMRMLHierarchyNodePointer d1, vtkMRMLHierarchyNodePointer d2);
@@ -85,18 +85,16 @@ void vtkMRMLHierarchyNode::WriteXML(ostream& of, int nIndent)
 {
   Superclass::WriteXML(of, nIndent);
 
-  vtkIndent indent(nIndent);
-
   if (this->ParentNodeIDReference != NULL)
     {
-    of << indent << " parentNodeRef=\"" << this->ParentNodeIDReference << "\"";
+    of << " parentNodeRef=\"" << this->ParentNodeIDReference << "\"";
     }
   if (this->AssociatedNodeIDReference != NULL)
     {
-    of << indent << " associatedNodeRef=\"" << this->AssociatedNodeIDReference << "\"";
+    of << " associatedNodeRef=\"" << this->AssociatedNodeIDReference << "\"";
     }
-  of << indent << " sortingValue=\"" << this->SortingValue << "\"";
-  of << indent << " allowMultipleChildren=\"" << (this->AllowMultipleChildren ? "true" : "false") << "\"";
+  of << " sortingValue=\"" << this->SortingValue << "\"";
+  of << " allowMultipleChildren=\"" << (this->AllowMultipleChildren ? "true" : "false") << "\"";
 }
 
 //----------------------------------------------------------------------------
@@ -561,7 +559,7 @@ void vtkMRMLHierarchyNode::UpdateChildrenMap()
     SceneHierarchyChildrenNodesMTime[this->GetScene()] = 0;
     }
 
-  std::map< vtkMRMLScene*, unsigned long>::iterator titer =
+  std::map< vtkMRMLScene*, vtkMTimeType>::iterator titer =
         SceneHierarchyChildrenNodesMTime.find(this->GetScene());
 
   std::map<std::string, std::vector< vtkMRMLHierarchyNode *> >::iterator iter;
@@ -733,7 +731,7 @@ int vtkMRMLHierarchyNode::UpdateAssociatedToHierarchyMap(vtkMRMLScene *scene)
     SceneAssociatedHierarchyNodesMTime[scene] = 0;
     }
 
-  std::map< vtkMRMLScene*, unsigned long>::iterator titer =
+  std::map< vtkMRMLScene*, vtkMTimeType>::iterator titer =
         SceneAssociatedHierarchyNodesMTime.find(scene);
 
   if (scene->GetNodes()->GetMTime() > titer->second)

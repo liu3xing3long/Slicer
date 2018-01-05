@@ -41,13 +41,15 @@ public:
   qSlicerVolumesModuleWidget(QWidget *parent=0);
   virtual ~qSlicerVolumesModuleWidget();
 
+  virtual bool setEditedNode(vtkMRMLNode* node, QString role = QString(), QString context = QString());
+
 protected:
   virtual void setup();
 
 protected slots:
   void nodeSelectionChanged(vtkMRMLNode*);
   void updateWidgetFromMRML();
-  void convertToLabelmap();
+  void convertVolume();
 
 protected:
   QScopedPointer<qSlicerVolumesModuleWidgetPrivate> d_ptr;

@@ -15,6 +15,7 @@ Version:   $Revision: 1.1.1.1 $
 
 // MRML includes
 #include "vtkCacheManager.h"
+#include "vtkDataFileFormatHelper.h"
 #include "vtkDataIOManager.h"
 #include "vtkMRMLStorableNode.h"
 #include "vtkMRMLStorageNode.h"
@@ -22,6 +23,7 @@ Version:   $Revision: 1.1.1.1 $
 
 // VTK includes
 #include <vtkCommand.h>
+#include <vtkNew.h>
 #include <vtkStringArray.h>
 #include <vtkURIHandler.h>
 
@@ -106,7 +108,6 @@ vtkMRMLStorageNode::~vtkMRMLStorageNode()
 void vtkMRMLStorageNode::WriteXML(ostream& of, int nIndent)
 {
   Superclass::WriteXML(of, nIndent);
-  vtkIndent indent(nIndent);
 
   if (this->FileName != NULL)
     {
@@ -117,7 +118,7 @@ void vtkMRMLStorageNode::WriteXML(ostream& of, int nIndent)
       name = vtksys::SystemTools::RelativePath(this->GetScene()->GetRootDirectory(), this->FileName);
       }
 
-    of << indent << " fileName=\"" << vtkMRMLNode::URLEncodeString(name.c_str()) << "\"";
+    of << " fileName=\"" << vtkMRMLNode::URLEncodeString(name.c_str()) << "\"";
 
     // if there is a file list, add the archetype to it. add file will check
     // that it's not already there. currently needed for reading in multi
@@ -154,7 +155,7 @@ void vtkMRMLStorageNode::WriteXML(ostream& of, int nIndent)
       name = vtksys::SystemTools::RelativePath(this->GetScene()->GetRootDirectory(), this->GetNthFileName(i));
       }
 
-    of << indent << " fileListMember" << i << "=\"" << vtkMRMLNode::URLEncodeString(name.c_str()) << "\"";
+    of << " fileListMember" << i << "=\"" << vtkMRMLNode::URLEncodeString(name.c_str()) << "\"";
     if (this->GetScene() && this->IsFilePathRelative(this->GetNthFileName(i)))
       {
       // go back to absolute
@@ -173,19 +174,24 @@ void vtkMRMLStorageNode::WriteXML(ostream& of, int nIndent)
 
   if (this->URI != NULL)
     {
-    of << indent << " uri=\"" << vtkMRMLNode::URLEncodeString(this->URI) << "\"";
+    of << " uri=\"" << vtkMRMLNode::URLEncodeString(this->URI) << "\"";
     }
   for (int i = 0; i < this->GetNumberOfURIs(); i++)
     {
-    of << indent << " uriListMember" << i << "=\"" << vtkMRMLNode::URLEncodeString(this->GetNthURI(i)) << "\"";
+    of << " uriListMember" << i << "=\"" << vtkMRMLNode::URLEncodeString(this->GetNthURI(i)) << "\"";
     }
 
   std::stringstream ss;
   ss << this->UseCompression;
-  of << indent << " useCompression=\"" << ss.str() << "\"";
+  of << " useCompression=\"" << ss.str() << "\"";
 
-  of << indent << " readState=\"" << this->ReadState <<  "\"";
-  of << indent << " writeState=\"" << this->WriteState <<  "\"";
+  if (this->GetDefaultWriteFileExtension() != NULL)
+    {
+    of << " defaultWriteFileExtension=\"" << this->GetDefaultWriteFileExtension() << "\"";
+    }
+
+  of << " readState=\"" << this->ReadState <<  "\"";
+  of << " writeState=\"" << this->WriteState <<  "\"";
 }
 
 //----------------------------------------------------------------------------
@@ -287,6 +293,11 @@ void vtkMRMLStorageNode::ReadXMLAttributes(const char** atts)
       std::string uri = vtkMRMLNode::URLDecodeString(attValue);
       this->AddURI(uri.c_str());
       }
+    else if (!strncmp(attName, "defaultWriteFileExtension", 25))
+      {
+      this->SetDefaultWriteFileExtension(attValue);
+      }
+
     else if (!strcmp(attName, "useCompression"))
       {
       std::stringstream ss;
@@ -330,6 +341,7 @@ void vtkMRMLStorageNode::Copy(vtkMRMLNode *anode)
   this->SetUseCompression(node->UseCompression);
   this->SetReadState(node->ReadState);
   this->SetWriteState(node->WriteState);
+  this->SetDefaultWriteFileExtension(node->GetDefaultWriteFileExtension());
 
   this->EndModify(disabledModify);
 }
@@ -363,6 +375,8 @@ void vtkMRMLStorageNode::PrintSelf(ostream& os, vtkIndent indent)
     }
   os << indent << "WriteFileFormat: " <<
     (this->WriteFileFormat ? this->WriteFileFormat : "(none)") << "\n";
+  os << indent << "DefaultWriteFileExtension: " <<
+    (this->GetDefaultWriteFileExtension() ? this->GetDefaultWriteFileExtension() : "(none)") << "\n";
 
   os << indent << "TempFileName: " << (this->TempFileName ? this->TempFileName : "(none)") << "\n";
 }
@@ -676,42 +690,15 @@ int vtkMRMLStorageNode::SupportedFileType(const char *fileName)
     {
     return 0;
     }
-  vtkStringArray* supportedReadFileTypes = this->GetSupportedReadFileTypes();
-  // No supported read type means all extensions are supported
-  if (supportedReadFileTypes->GetNumberOfTuples() == 0)
+
+  // Check if any extension is matched with readable file extensions
+  std::string extension = this->GetSupportedFileExtension(name.c_str(), true, false);
+  if (!extension.empty())
     {
+    // exact match found
     return 1;
     }
-  std::string extension = vtkMRMLStorageNode::GetLowercaseExtensionFromFileName(name);
 
-  for (int i = 0; i < supportedReadFileTypes->GetNumberOfTuples(); ++i)
-    {
-    std::string supportedFileType = supportedReadFileTypes->GetValue(i); // "Color Table (.ctbl)"
-    std::string::size_type extensionPos = supportedFileType.find_last_of(".");
-    std::string supportedExtension;
-    if( extensionPos != std::string::npos )
-      {
-      supportedExtension = vtksys::SystemTools::LowerCase( supportedFileType.substr(extensionPos) ); // ".ctbl"
-      }
-
-    if (supportedExtension.empty())
-      {
-      // No extension means all extensions are supported
-      return 1;
-      }
-    if (supportedExtension.size() >=2 && supportedExtension[1] == '*' && !extension.empty() )
-      {
-      // .* supported extension means all extensions are supported
-      return 1;
-      }
-    // Only compare up to the length of extension, as supportedExtension usually contains some
-    // additional character, such as parentheses. For example: .ctbl
-    // XXX It would be nicer to parse the supportedFileType string properly and do an exact comparison
-    if (extension.compare(0, extension.size(), supportedExtension, 0, extension.size()) == 0)
-      {
-      return 1;
-      }
-    }
   return 0;
 }
 
@@ -917,9 +904,16 @@ void vtkMRMLStorageNode::SetURIPrefix(const char *uriPrefix)
 //----------------------------------------------------------------------------
 vtkStringArray* vtkMRMLStorageNode::GetSupportedReadFileTypes()
 {
-  if(this->SupportedReadFileTypes->GetNumberOfTuples()==0)
+  if (this->SupportedReadFileTypes->GetNumberOfTuples() == 0)
     {
+    // File types list has not been initialized yet
     this->InitializeSupportedReadFileTypes();
+    if (this->SupportedReadFileTypes->GetNumberOfTuples() == 0)
+      {
+      // InitializeSupportedReadFileTypes has not added any specific file formats,
+      // which means that all file types are supported.
+      this->SupportedReadFileTypes->InsertNextValue("All files (.*)");
+      }
     }
   return this->SupportedReadFileTypes;
 }
@@ -929,10 +923,128 @@ vtkStringArray* vtkMRMLStorageNode::GetSupportedWriteFileTypes()
 {
   if(this->SupportedWriteFileTypes->GetNumberOfTuples()==0)
     {
+    // File types list has not been initialized yet
     this->InitializeSupportedWriteFileTypes();
     }
   return this->SupportedWriteFileTypes;
 }
+
+//------------------------------------------------------------------------------
+const char* vtkMRMLStorageNode::GetDefaultWriteFileExtension()
+{
+  // for backward compatibility, we return NULL by default
+  if (this->DefaultWriteFileExtension.empty())
+    {
+    return NULL;
+    }
+  return this->DefaultWriteFileExtension.c_str();
+};
+
+//------------------------------------------------------------------------------
+void vtkMRMLStorageNode::GetFileExtensionsFromFileTypes(vtkStringArray* inputFileTypes, vtkStringArray* outputFileExtensions)
+{
+  if (inputFileTypes == 0 || outputFileExtensions == 0)
+    {
+    vtkErrorMacro("vtkMRMLStorageNode::GetSupportedReadFileExtensions failed: invalid inputs");
+    return;
+    }
+  outputFileExtensions->Reset();
+  const int formatCount = inputFileTypes->GetNumberOfValues();
+  for (int formatIt = 0; formatIt < formatCount; ++formatIt)
+    {
+    std::string format = inputFileTypes->GetValue(formatIt);
+    std::string ext = vtkDataFileFormatHelper::GetFileExtensionFromFormatString(format.c_str());
+    if (ext.empty())
+      {
+      ext = ".*";
+      }
+    if (outputFileExtensions->LookupValue(ext) >= 0)
+      {
+      // already in the list
+      continue;
+      }
+    outputFileExtensions->InsertNextValue(ext);
+    }
+}
+
+//------------------------------------------------------------------------------
+std::string vtkMRMLStorageNode::GetSupportedFileExtension(const char* fileName /* =NULL */, bool includeReadable /* =true */, bool includeWriteable /* =true */)
+{
+  std::string fileNameStr;
+  if (fileName)
+    {
+    fileNameStr = fileName;
+    }
+  else
+    {
+    fileNameStr = this->GetFullNameFromFileName();
+    }
+  std::string longestFoundExtension;
+  fileNameStr = vtksys::SystemTools::LowerCase(fileNameStr);
+  vtkNew<vtkStringArray> supportedFileExtensions;
+  if (includeReadable)
+    {
+    this->GetFileExtensionsFromFileTypes(this->GetSupportedReadFileTypes(), supportedFileExtensions.GetPointer());
+    }
+  if (includeWriteable)
+    {
+    vtkNew<vtkStringArray> supportedWriteFileExtensions;
+    this->GetFileExtensionsFromFileTypes(this->GetSupportedWriteFileTypes(), supportedWriteFileExtensions.GetPointer());
+    supportedFileExtensions->InsertTuples(0, supportedWriteFileExtensions->GetNumberOfValues(), 0, supportedWriteFileExtensions.GetPointer());
+    }
+
+  const int extCount = supportedFileExtensions->GetNumberOfValues();
+  bool wildcardMatchEnabled = false;
+  for (int extIt = 0; extIt < extCount; ++extIt)
+    {
+    std::string ext = vtksys::SystemTools::LowerCase(supportedFileExtensions->GetValue(extIt));
+    std::string foundExt;
+    if (ext != ".*")
+      {
+      if (fileNameStr.length() > ext.length() &&
+        fileNameStr.compare(fileNameStr.length() - ext.length(), ext.length(), ext) == 0)
+        {
+        foundExt = ext;
+        }
+      }
+    else
+      {
+      wildcardMatchEnabled = true;
+      }
+    if (foundExt.size() > longestFoundExtension.size())
+      {
+      longestFoundExtension = foundExt;
+      }
+    }
+  // If any specific extension is matched then use that (ignore wildcard;
+  // this allows using dots in the filename).
+  if (!longestFoundExtension.empty())
+  {
+    return longestFoundExtension;
+  }
+  if (wildcardMatchEnabled)
+  {
+    // extension is *, match last extension
+    longestFoundExtension = vtksys::SystemTools::GetFilenameExtension(fileNameStr); // include everything after the first . (. included)
+    if (longestFoundExtension.empty())
+    {
+      longestFoundExtension = ".";
+    }
+  }
+  return longestFoundExtension;
+}
+
+//------------------------------------------------------------------------------
+void vtkMRMLStorageNode::SetDefaultWriteFileExtension(const char* ext)
+{
+  std::string extStr = (ext ? ext : "");
+  if (extStr == this->DefaultWriteFileExtension)
+    {
+    return;
+    }
+  this->DefaultWriteFileExtension = extStr;
+  this->Modified();
+};
 
 //----------------------------------------------------------------------------
 void vtkMRMLStorageNode::InitializeSupportedReadFileTypes()
@@ -1136,4 +1248,29 @@ std::string vtkMRMLStorageNode::GetLowercaseExtensionFromFileName(const std::str
                 vtksys::SystemTools::GetFilenameLastExtension(filename);
     }
   return vtksys::SystemTools::LowerCase(extension);
+}
+
+//------------------------------------------------------------------------------
+std::string vtkMRMLStorageNode::GetFileNameWithoutExtension(const char* filePath /* =NULL */)
+{
+  std::string filePathStd = (filePath ? filePath : "");
+  if (filePathStd.empty())
+    {
+    // If filePath is not specified then use current filename
+    filePathStd = (this->GetFileName() ? this->GetFileName() : "");
+    }
+  if (filePathStd.empty())
+    {
+    return "";
+    }
+  std::string fileName = vtksys::SystemTools::GetFilenameName(filePathStd);
+  std::string extension = this->GetSupportedFileExtension(fileName.c_str());
+
+  if (fileName.length() < extension.length() ||
+    fileName.compare(fileName.length() - extension.length(), extension.length(), extension) != 0)
+    {
+    // extension not matched to the end of filename
+    return fileName;
+    }
+  return fileName.substr(0, fileName.length() - extension.length());
 }

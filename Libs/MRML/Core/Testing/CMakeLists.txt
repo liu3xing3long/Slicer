@@ -50,6 +50,9 @@ create_test_sourcelist(Tests ${KIT}CxxTests.cxx
   vtkMRMLNodeTest1.cxx
   vtkMRMLNonlinearTransformNodeTest1.cxx
   vtkMRMLPETProceduralColorNodeTest1.cxx
+  vtkMRMLPlotChartNodeTest1.cxx
+  vtkMRMLPlotDataNodeTest1.cxx
+  vtkMRMLPlotViewNodeTest1.cxx
   vtkMRMLProceduralColorNodeTest1.cxx
   vtkMRMLProceduralColorStorageNodeTest1.cxx
   vtkMRMLROIListNodeTest1.cxx
@@ -66,6 +69,7 @@ create_test_sourcelist(Tests ${KIT}CxxTests.cxx
   vtkMRMLSceneImportTest.cxx
   vtkMRMLSceneTest1.cxx
   vtkMRMLSceneTest2.cxx
+  vtkMRMLSceneDefaultNodeTest.cxx
   vtkMRMLSceneViewNodeImportSceneTest.cxx
   vtkMRMLSceneViewNodeEventsTest.cxx
   vtkMRMLSceneViewNodeRestoreSceneTest.cxx
@@ -80,6 +84,7 @@ create_test_sourcelist(Tests ${KIT}CxxTests.cxx
   vtkMRMLStorageNodeTest1.cxx
   vtkMRMLTableNodeTest1.cxx
   vtkMRMLTableStorageNodeTest1.cxx
+  vtkMRMLTableSQLiteStorageNodeTest.cxx
   vtkMRMLTableViewNodeTest1.cxx
   vtkMRMLTensorVolumeNodeTest1.cxx
   vtkMRMLTransformableNodeReferenceSaveImportTest.cxx
@@ -89,9 +94,6 @@ create_test_sourcelist(Tests ${KIT}CxxTests.cxx
   vtkMRMLTransformStorageNodeTest1.cxx
   vtkMRMLTransformableNodeTest1.cxx
   vtkMRMLUnitNodeTest1.cxx
-  vtkMRMLUnstructuredGridDisplayNodeTest1.cxx
-  vtkMRMLUnstructuredGridNodeTest1.cxx
-  vtkMRMLUnstructuredGridStorageNodeTest1.cxx
   vtkMRMLVectorVolumeDisplayNodeTest1.cxx
   vtkMRMLVectorVolumeNodeTest1.cxx
   vtkMRMLViewNodeTest1.cxx
@@ -101,6 +103,7 @@ create_test_sourcelist(Tests ${KIT}CxxTests.cxx
   vtkMRMLVolumeNodeEventsTest.cxx
   vtkMRMLVolumeNodeTest1.cxx
   vtkMRMLdGEMRICProceduralColorNodeTest1.cxx
+  vtkCodedEntryTest1.cxx
   vtkObserverManagerTest1.cxx
   vtkOrientedBSplineTransformTest1.cxx
   vtkOrientedGridTransformTest1.cxx
@@ -158,12 +161,15 @@ simple_test( vtkMRMLLinearTransformNodeTest1 )
 simple_test( vtkMRMLModelDisplayNodeTest1 )
 simple_test( vtkMRMLModelHierarchyNodeTest1 )
 simple_test( vtkMRMLModelNodeTest1 )
-simple_test( vtkMRMLModelStorageNodeTest1 )
+simple_test( vtkMRMLModelStorageNodeTest1 ${TEMP})
 simple_test( vtkMRMLNodeTest1 )
 simple_test( vtkMRMLLinearTransformNodeEventsTest )
 simple_test( vtkMRMLNonlinearTransformNodeTest1 ${CMAKE_CURRENT_SOURCE_DIR}/NonLinearTransformScene.mrml)
 simple_test( vtkMRMLNRRDStorageNodeTest1 )
 simple_test( vtkMRMLPETProceduralColorNodeTest1 )
+simple_test( vtkMRMLPlotChartNodeTest1 )
+simple_test( vtkMRMLPlotDataNodeTest1 )
+simple_test( vtkMRMLPlotViewNodeTest1 )
 simple_test( vtkMRMLProceduralColorNodeTest1 )
 simple_test( vtkMRMLProceduralColorStorageNodeTest1 )
 simple_test( vtkMRMLROIListNodeTest1 )
@@ -178,6 +184,7 @@ simple_test( vtkMRMLSceneImportIDModelHierarchyConflictTest )
 simple_test( vtkMRMLSceneImportIDModelHierarchyParentIDConflictTest )
 simple_test( vtkMRMLSceneIDTest )
 simple_test( vtkMRMLSceneTest1 )
+simple_test( vtkMRMLSceneDefaultNodeTest )
 simple_test( vtkMRMLSceneViewNodeImportSceneTest )
 simple_test( vtkMRMLSceneViewNodeEventsTest )
 simple_test( vtkMRMLSceneViewNodeRestoreSceneTest )
@@ -191,7 +198,7 @@ simple_test( vtkMRMLSnapshotClipNodeTest1 )
 simple_test( vtkMRMLStorableNodeTest1 )
 simple_test( vtkMRMLStorageNodeTest1 )
 simple_test( vtkMRMLTableNodeTest1 )
-simple_test( vtkMRMLTableStorageNodeTest1 )
+simple_test( vtkMRMLTableStorageNodeTest1 ${TEMP})
 simple_test( vtkMRMLTableViewNodeTest1 )
 simple_test( vtkMRMLTensorVolumeNodeTest1 )
 simple_test( vtkMRMLTransformableNodeReferenceSaveImportTest )
@@ -201,9 +208,6 @@ simple_test( vtkMRMLTransformDisplayNodeTest1 )
 simple_test( vtkMRMLTransformNodeTest1 )
 simple_test( vtkMRMLTransformStorageNodeTest1 )
 simple_test( vtkMRMLUnitNodeTest1 )
-simple_test( vtkMRMLUnstructuredGridDisplayNodeTest1 )
-simple_test( vtkMRMLUnstructuredGridNodeTest1 )
-simple_test( vtkMRMLUnstructuredGridStorageNodeTest1 )
 simple_test( vtkMRMLVectorVolumeDisplayNodeTest1 )
 simple_test( vtkMRMLVectorVolumeNodeTest1 )
 simple_test( vtkMRMLViewNodeTest1 )
@@ -233,7 +237,7 @@ set( ScenesToTest
   multi_display.mrml
   name.mrml
   SlicePipeline.mrml
-  unstruct_grid.mrml
+  volumetric_mesh.mrml
   vol_and_cube_camera.mrml
   vol_and_cube.mrml
   vol.mrml

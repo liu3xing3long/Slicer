@@ -1,5 +1,5 @@
-#ifndef _itkGrowCutSegmentationImageFilter_txx_
-#define _itkGrowCutSegmentationImageFilter_txx_
+#ifndef itkGrowCutSegmentationImageFilter_txx
+#define itkGrowCutSegmentationImageFilter_txx
 
 
 #include "itkGrowCutSegmentationImageFilter.h"
@@ -20,11 +20,13 @@
 #include "itkProgressReporter.h"
 # include "itkIterationReporter.h"
 
-#include <vcl_map.h>
-#include <vcl_string.h>
-#include <vcl_cmath.h>
-#include <vcl_algorithm.h>
-#include <vcl_utility.h>
+#include <map>
+#include <string>
+#include <cmath>
+#include <vcl_compiler.h>
+#include <iostream>
+#include <algorithm>
+#include <utility>
 
 #include <iostream>
 #include <ctime>
@@ -125,7 +127,7 @@ GrowCutSegmentationImageFilter< TInputImage, TOutputImage, TWeightPixelType >
 ::GetStateImage()
 {
   typename OutputImageType::Pointer stateImage = OutputImageType::New();
-  stateImage->Graft(this->ProcessObject::GetInput(3));
+  stateImage->Graft(static_cast< OutputImageType *>(this->ProcessObject::GetInput(3)));
   return stateImage;
 }
 
@@ -147,7 +149,7 @@ GrowCutSegmentationImageFilter< TInputImage, TOutputImage, TWeightPixelType >
 ::GetDistancesImage()
 {
   typename WeightImageType::Pointer distanceImage = WeightImageType::New();
-  distanceImage->Graft(this->ProcessObject::GetInput(4));
+  distanceImage->Graft(static_cast< WeightImageType *>(this->ProcessObject::GetInput(4)));
   return distanceImage;
   //return const_cast< WeightImageType*> (this->ProcessObject::GetInput(4));
 }
@@ -171,7 +173,7 @@ GrowCutSegmentationImageFilter<TInputImage, TOutputImage, TWeightPixelType>
 ::GetMaxSaturationImage()
 {
   typename WeightImageType::Pointer maxSaturationImage = WeightImageType::New();
-  maxSaturationImage->Graft(this->ProcessObject::GetInput(5));
+  maxSaturationImage->Graft(static_cast< WeightImageType*>(this->ProcessObject::GetInput(5)));
   return maxSaturationImage;
   //return const_cast< WeightImageType*> (this->ProcessObject::GetInput(5));
 }
@@ -195,7 +197,7 @@ GrowCutSegmentationImageFilter<TInputImage, TOutputImage, TWeightPixelType>
 ::GetStrengthImage()
 {
   typename WeightImageType::Pointer weightImage = WeightImageType::New();
-  weightImage->Graft(this->ProcessObject::GetInput(2));
+  weightImage->Graft(static_cast< WeightImageType*> (this->ProcessObject::GetInput(2)));
   return weightImage;
 }
 
@@ -253,15 +255,15 @@ GrowCutSegmentationImageFilter<TInputImage, TOutputImage, TWeightPixelType>
 
 template<class TInputImage, class TOutputImage, class TWeightPixelType>
 void GrowCutSegmentationImageFilter< TInputImage, TOutputImage, TWeightPixelType>::
-ComputeLabelVolumes(TOutputImage *outputImage, vcl_vector< unsigned > &volumes,
-                    vcl_vector< unsigned > &physicalVolumes)
+ComputeLabelVolumes(TOutputImage *outputImage, std::vector< unsigned > &volumes,
+                    std::vector< unsigned > &physicalVolumes)
 {
   //volumes.resize(3);
 
 #ifndef USE_LABELSHAPEFILTER
 
-  vcl_map<unsigned short, unsigned int>labelMap;
-  vcl_vector< unsigned short > labels;
+  std::map<unsigned short, unsigned int>labelMap;
+  std::vector< unsigned short > labels;
   unsigned int index = 0;
   ImageRegionConstIteratorWithIndex< OutputImageType > label( outputImage,
                                                               outputImage->GetBufferedRegion());
@@ -270,10 +272,10 @@ ComputeLabelVolumes(TOutputImage *outputImage, vcl_vector< unsigned > &volumes,
     {
 
     unsigned short pix = static_cast<unsigned short>(label.Get());
-    vcl_map<unsigned short, unsigned int>::iterator it = labelMap.find(pix);
+    std::map<unsigned short, unsigned int>::iterator it = labelMap.find(pix);
     if(it == labelMap.end())
       {
-      labelMap.insert(vcl_pair<unsigned short, unsigned int>(pix, index));
+      labelMap.insert(std::pair<unsigned short, unsigned int>(pix, index));
       volumes.push_back(1);
       labels.push_back(pix);
       ++index;
@@ -287,7 +289,7 @@ ComputeLabelVolumes(TOutputImage *outputImage, vcl_vector< unsigned > &volumes,
   // std::cout<<" label \t "<<" volume "<<std::endl;
   // for (unsigned int i = 0; i < index; i++)
   //   {
-  //   vcl_map<unsigned short, unsigned int>::iterator it = labelMap.find(labels[i]);
+  //   std::map<unsigned short, unsigned int>::iterator it = labelMap.find(labels[i]);
   //   std::cout<<labels[i]<<"\t"<<volumes[it->second]<<std::endl;
   //   }
 
@@ -314,7 +316,6 @@ ComputeLabelVolumes(TOutputImage *outputImage, vcl_vector< unsigned > &volumes,
 }
 
 
-
 template<class TInputImage, class TOutputImage, class TWeightPixelType>
 bool GrowCutSegmentationImageFilter<TInputImage, TOutputImage, TWeightPixelType>::
 InitializeStateImage( OutputImageType *stateImage)
@@ -323,7 +324,7 @@ InitializeStateImage( OutputImageType *stateImage)
   //  bool setEnd = false;
 
   typename OutputImageType::Pointer labelImage = OutputImageType::New();
-  labelImage->Graft(this->ProcessObject::GetInput(1));
+  labelImage->Graft(static_cast< OutputImageType*> (this->ProcessObject::GetInput(1)));
 
   typename OutputImageType::SizeType lsize =
     labelImage->GetBufferedRegion().GetSize();
@@ -334,8 +335,8 @@ InitializeStateImage( OutputImageType *stateImage)
                                                 stateImage->GetBufferedRegion());
 
   for (unsigned i = 0; i < labelImage->GetImageDimension(); i++){
-  m_roiStart[i] = 0;
-  m_roiEnd[i] = 0;
+  m_RoiStart[i] = 0;
+  m_RoiEnd[i] = 0;
   }
 
   bool foundLabels = false;
@@ -350,21 +351,21 @@ InitializeStateImage( OutputImageType *stateImage)
 
       if(!setStart)
         {
-        m_roiStart = idx;
-        m_roiEnd = idx;
+        m_RoiStart = idx;
+        m_RoiEnd = idx;
         setStart = true;
         }
       else
         {
         for (unsigned i = 0; i < labelImage->GetImageDimension(); i++)
           {
-          if(idx[i] <= m_roiStart[i])
+          if(idx[i] <= m_RoiStart[i])
             {
-            m_roiStart[i] = idx[i];
+            m_RoiStart[i] = idx[i];
             }
-          if(idx[i] >= m_roiEnd[i])
+          if(idx[i] >= m_RoiEnd[i])
             {
-            m_roiEnd[i] = idx[i];
+            m_RoiEnd[i] = idx[i];
             }
           }
         }
@@ -381,9 +382,9 @@ InitializeStateImage( OutputImageType *stateImage)
    (midROI[i]+m_ObjectRadius) : lsize[i]-1; //m_roiEnd[i];
       */
 
-    m_roiStart[i] = (m_roiStart[i] - m_ObjectRadius >= 0)? (m_roiStart[i] - m_ObjectRadius) : 0;
-    m_roiEnd[i] = (static_cast<unsigned int>(m_roiEnd[i] + m_ObjectRadius) < lsize[i]) ?
-      (m_roiEnd[i] + m_ObjectRadius) : lsize[i]-1;
+    m_RoiStart[i] = (m_RoiStart[i] - m_ObjectRadius >= 0)? (m_RoiStart[i] - m_ObjectRadius) : 0;
+    m_RoiEnd[i] = (static_cast<unsigned int>(m_RoiEnd[i] + m_ObjectRadius) < lsize[i]) ?
+      (m_RoiEnd[i] + m_ObjectRadius) : lsize[i]-1;
     }
 
   if(!foundLabels)
@@ -478,8 +479,6 @@ MaskSegmentedImageByWeight( float confThresh)
 }
 
 
-
-
 template <class TInputImage, class TOutputImage, class TWeightPixelType>
 void
 GrowCutSegmentationImageFilter<TInputImage, TOutputImage, TWeightPixelType>
@@ -506,7 +505,7 @@ GrowCutSegmentationImageFilter<TInputImage, TOutputImage, TWeightPixelType>
   unsigned int ndims = static_cast< unsigned int>(output->GetImageDimension());
 
   typename InputImageType::Pointer inputImage = InputImageType::New();
-  inputImage->Graft( this->ProcessObject::GetInput(0));
+  inputImage->Graft( static_cast< InputImageType*>(this->ProcessObject::GetInput(0)));
 
   typename OutputImageType::Pointer pixelStateImage = OutputImageType::New();
   typename WeightImageType::Pointer maxDistancesImage = WeightImageType::New();
@@ -619,19 +618,19 @@ GrowCutSegmentationImageFilter<TInputImage, TOutputImage, TWeightPixelType>
   for (unsigned n = 0; n < ndims; n++)
     {
     //prevUnlabeledPix *= (m_roiEnd[n]-m_roiStart[n]);
-    totalROIVolume *= (m_roiEnd[n]-m_roiStart[n]);
+    totalROIVolume *= (m_RoiEnd[n]-m_RoiStart[n]);
 
     if(n == 0)
       {
-      maxRadius = m_roiEnd[n]-m_roiStart[n];
+      maxRadius = m_RoiEnd[n]-m_RoiStart[n];
       }
-    else if(maxRadius < (m_roiEnd[n]-m_roiStart[n]))
+    else if(maxRadius < (m_RoiEnd[n]-m_RoiStart[n]))
       {
-      maxRadius = m_roiEnd[n]-m_roiStart[n];
+      maxRadius = m_RoiEnd[n]-m_RoiStart[n];
       }
     }
 
-  maxRadius = static_cast< unsigned int>(vcl_ceil(maxRadius*0.5));
+  maxRadius = static_cast< unsigned int>(std::ceil(maxRadius*0.5));
 
   // float threshSaturation = .96; //.999; // Determine the saturation according to the size of the object
   // float threshUnchanged = 0.05;
@@ -671,7 +670,9 @@ GrowCutSegmentationImageFilter<TInputImage, TOutputImage, TWeightPixelType>
     unsigned relUnlabeled = (unlabeled*100)/totalROIVolume;
     unsigned relSaturated = ((currSaturatedPix+currLocallySaturatedPix)*100)/totalROIVolume;
 
-    // unsigned permodified = (currModified > prevModifiedPix) ? ((currModified-prevModifiedPix)*100)/(vcl_max(static_cast<unsigned int>(1), vcl_max(currModified, prevModifiedPix))) : ((prevModifiedPix - currModified)*100)/(vcl_max(static_cast<unsigned int>(1), vcl_max(currModified, prevModifiedPix)));
+    // unsigned permodified = (currModified > prevModifiedPix) ?
+    //  ((currModified-prevModifiedPix)*100)/(std::max(static_cast<unsigned int>(1), std::max(currModified, prevModifiedPix))) :
+    //  ((prevModifiedPix - currModified)*100)/(std::max(static_cast<unsigned int>(1), std::max(currModified, prevModifiedPix)));
 
     converged = (prevModifiedPix == currModified) ||
       (relUnlabeled < threshUnchanged && relSaturated > threshSaturation);
@@ -714,7 +715,7 @@ GrowCutSegmentationImageFilter<TInputImage, TOutputImage, TWeightPixelType>
 
 
   this->UpdateProgress(1.0);
-  m_WeightImage = singleIteration->GetUpdatedStrengthImage() ;
+  m_WeightImage = singleIteration->GetUpdatedStrengthImage();
   m_LabelImage = singleIteration->GetOutput();
 
   this->MaskSegmentedImageByWeight(m_ConfThresh);
@@ -723,8 +724,8 @@ GrowCutSegmentationImageFilter<TInputImage, TOutputImage, TWeightPixelType>
 
   time(&end);
 
-  vcl_vector< unsigned > labelVolumes;
-  vcl_vector< unsigned > physicalVolumes;
+  std::vector< unsigned > labelVolumes;
+  std::vector< unsigned > physicalVolumes;
 
   this->ComputeLabelVolumes(m_LabelImage, labelVolumes, physicalVolumes);
 
@@ -739,7 +740,7 @@ GrowCutSegmentationImageFilter<TInputImage, TOutputImage, TWeightPixelType>
   typedef ImageFileWriter < OutputImageType > WriterType;
   typename WriterType::Pointer writer = WriterType::New();
 
-  vcl_string outfilename = "segmented_img.mhd";
+  std::string outfilename = "segmented_img.mhd";
   writer->SetFileName(outfilename.c_str());
   writer->SetInput(m_LabelImage);
   writer->Update();
@@ -750,7 +751,6 @@ GrowCutSegmentationImageFilter<TInputImage, TOutputImage, TWeightPixelType>
 }
 
 
-
 template <class TInputImage, class TOutputImage, class TWeightPixelType>
 void GrowCutSegmentationImageFilter<TInputImage, TOutputImage, TWeightPixelType>
   ::ThreadedGenerateData( const OutputImageRegionType &outputRegionForThread,
@@ -758,22 +758,22 @@ void GrowCutSegmentationImageFilter<TInputImage, TOutputImage, TWeightPixelType>
 {
   // make a shallow copy of the image to break the pipeline from re-executing in each thread
   typename InputImageType::Pointer inputImage = InputImageType::New();
-  inputImage->Graft( this->ProcessObject::GetInput(0));
+  inputImage->Graft( static_cast< InputImageType*>(this->ProcessObject::GetInput(0)));
 
   typename OutputImageType::Pointer labelImage = OutputImageType::New();
-  labelImage->Graft(this->ProcessObject::GetInput(1) );
+  labelImage->Graft(static_cast< OutputImageType*>(this->ProcessObject::GetInput(1)) );
 
   typename WeightImageType::Pointer weightImage = WeightImageType::New();
-  weightImage->Graft(this->ProcessObject::GetInput(2) );
+  weightImage->Graft(static_cast< WeightImageType*>(this->ProcessObject::GetInput(2)) );
 
   typename OutputImageType::Pointer stateImage = OutputImageType::New();
-  stateImage->Graft(this->ProcessObject::GetInput(3) );
+  stateImage->Graft(static_cast< OutputImageType*>(this->ProcessObject::GetInput(3)) );
 
   typename WeightImageType::Pointer distanceImage = WeightImageType::New();
-  distanceImage->Graft(this->ProcessObject::GetInput(4) );
+  distanceImage->Graft(static_cast< WeightImageType*>(this->ProcessObject::GetInput(4)) );
 
   typename WeightImageType::Pointer maxSaturationImage = WeightImageType::New();
-  maxSaturationImage->Graft(this->ProcessObject::GetInput(5) );
+  maxSaturationImage->Graft(static_cast< WeightImageType*>(this->ProcessObject::GetInput(5)) );
   //maxSaturationImage->Graft(m_MaxSaturationImage );
 
   typename OutputImageType::Pointer outputImage = OutputImageType::New();
@@ -799,13 +799,13 @@ void GrowCutSegmentationImageFilter<TInputImage, TOutputImage, TWeightPixelType>
 
   for (unsigned d = 0; d < Dimension; d++)
     {
-    unsigned long int x = m_roiEnd[d]-m_roiStart[d]+1; // > 0 ? m_roiEnd[d]-m_roiStart[d] : 0;
-    iIndex[d] = m_roiStart[d] > regionStart[d] ? m_roiStart[d] : regionStart[d];
+    unsigned long int x = m_RoiEnd[d]-m_RoiStart[d]+1; // > 0 ? m_roiEnd[d]-m_roiStart[d] : 0;
+    iIndex[d] = m_RoiStart[d] > regionStart[d] ? m_RoiStart[d] : regionStart[d];
     iSize[d] = x < regionSize[d] ? (x > 0 ? x : 1) : regionSize[d];
 
     }
 
-  typedef typename InputImageType::RegionType InputRegionType;
+  typedef typename InputImageType::RegionType  InputRegionType;
   typedef typename OutputImageType::RegionType OutputRegionType;
   typedef typename WeightImageType::RegionType WeightRegionType;
 
@@ -822,12 +822,12 @@ void GrowCutSegmentationImageFilter<TInputImage, TOutputImage, TWeightPixelType>
   weight.SetSize( iSize);
 
   typedef ConstNeighborhoodIterator<InputImageType> InputIteratorType;
-  typedef typename InputIteratorType::RadiusType InputRadiusType;
+  typedef typename InputIteratorType::RadiusType    InputRadiusType;
 
-  typedef NeighborhoodIterator<OutputImageType> LabelIteratorType;
+  typedef NeighborhoodIterator<OutputImageType>  LabelIteratorType;
   typedef typename LabelIteratorType::RadiusType LabelRadiusType;
 
-  typedef NeighborhoodIterator<WeightImageType> WeightIteratorType;
+  typedef NeighborhoodIterator<WeightImageType>   WeightIteratorType;
   typedef typename WeightIteratorType::RadiusType WeightRadiusType;
 
 
@@ -1059,7 +1059,7 @@ GrowCutSegmentationImageFilter<TInputImage, TOutputImage, TWeightPixelType>
   m_Saturated = 0;
 
   typename OutputImageType::Pointer stateImage = OutputImageType::New();
-  stateImage->Graft(this->ProcessObject::GetInput(3) );
+  stateImage->Graft(static_cast< OutputImageType*>(this->ProcessObject::GetInput(3)) );
 
   ImageRegionIterator< OutputImageType > state(stateImage, stateImage->GetBufferedRegion());
   ImageRegionIterator< WeightImageType > weight(m_WeightImage, m_WeightImage->GetBufferedRegion());
@@ -1082,8 +1082,6 @@ GrowCutSegmentationImageFilter<TInputImage, TOutputImage, TWeightPixelType>
 
     }
 }
-
-
 
 }//namespace itk
 

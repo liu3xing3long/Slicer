@@ -34,6 +34,7 @@ vtkMRMLNodeNewMacro(vtkMRMLMarkupsFiducialStorageNode);
 //----------------------------------------------------------------------------
 vtkMRMLMarkupsFiducialStorageNode::vtkMRMLMarkupsFiducialStorageNode()
 {
+  this->DefaultWriteFileExtension = "fcsv";
 }
 
 //----------------------------------------------------------------------------
@@ -82,7 +83,7 @@ int vtkMRMLMarkupsFiducialStorageNode::ReadDataInternal(vtkMRMLNode *refNode)
 
   std::string fullName = this->GetFullNameFromFileName();
 
-  if (fullName == std::string(""))
+  if (fullName.empty())
     {
     vtkErrorMacro("vtkMRMLMarkupsFiducialStorageNode: File name not specified");
     return 0;
@@ -381,8 +382,8 @@ int vtkMRMLMarkupsFiducialStorageNode::ReadDataInternal(vtkMRMLNode *refNode)
             if (component.size())
               {
               vtkDebugMacro("Got label = " << component.c_str());
-              label = component;
-              markupsNode->SetNthMarkupLabelFromStorage(thisMarkupNumber,label);
+              label = this->ConvertStringFromStorageFormat(component);
+              markupsNode->SetNthMarkupLabel(thisMarkupNumber, label);
               }
             else
               {
@@ -406,8 +407,8 @@ int vtkMRMLMarkupsFiducialStorageNode::ReadDataInternal(vtkMRMLNode *refNode)
             if (component.size())
               {
               vtkDebugMacro("Got desc = " << component.c_str());
-              desc = component;
-              markupsNode->SetNthMarkupDescriptionFromStorage(thisMarkupNumber,desc);
+              desc = this->ConvertStringFromStorageFormat(component);
+              markupsNode->SetNthMarkupDescription(thisMarkupNumber, desc);
               }
             else
               {
@@ -461,7 +462,7 @@ int vtkMRMLMarkupsFiducialStorageNode::ReadDataInternal(vtkMRMLNode *refNode)
 int vtkMRMLMarkupsFiducialStorageNode::WriteDataInternal(vtkMRMLNode *refNode)
 {
   std::string fullName = this->GetFullNameFromFileName();
-  if (fullName == std::string(""))
+  if (fullName.empty())
     {
     vtkErrorMacro("vtkMRMLMarkupsFiducialStorageNode: File name not specified");
     return 0;
@@ -535,12 +536,8 @@ int vtkMRMLMarkupsFiducialStorageNode::WriteDataInternal(vtkMRMLNode *refNode)
     bool sel = markupsNode->GetNthMarkupSelected(i);
     bool lock = markupsNode->GetNthMarkupLocked(i);
 
-    std::string label = markupsNode->GetNthMarkupLabelForStorage(i);
-    std::string desc = markupsNode->GetNthMarkupDescriptionForStorage(i);
-    if (desc.size() == 0)
-      {
-      desc = std::string("");
-      }
+    std::string label = this->ConvertStringToStorageFormat(markupsNode->GetNthMarkupLabel(i));
+    std::string desc = this->ConvertStringToStorageFormat(markupsNode->GetNthMarkupDescription(i));
 
     std::string associatedNodeID = markupsNode->GetNthMarkupAssociatedNodeID(i);
     if (associatedNodeID.size() == 0)
@@ -573,10 +570,4 @@ void vtkMRMLMarkupsFiducialStorageNode::InitializeSupportedReadFileTypes()
 void vtkMRMLMarkupsFiducialStorageNode::InitializeSupportedWriteFileTypes()
 {
   this->SupportedWriteFileTypes->InsertNextValue("Markups Fiducial CSV (.fcsv)");
-}
-
-//----------------------------------------------------------------------------
-const char* vtkMRMLMarkupsFiducialStorageNode::GetDefaultWriteFileExtension()
-{
-  return "fcsv";
 }

@@ -37,6 +37,7 @@ vtkMRMLNodeNewMacro(vtkMRMLTransformStorageNode);
 vtkMRMLTransformStorageNode::vtkMRMLTransformStorageNode()
 {
   this->PreferITKv3CompatibleTransforms = 0;
+  this->DefaultWriteFileExtension = "h5";
   vtkITKTransformConverter::RegisterInverseTransformTypes();
 }
 
@@ -49,8 +50,8 @@ vtkMRMLTransformStorageNode::~vtkMRMLTransformStorageNode()
 void vtkMRMLTransformStorageNode::WriteXML(ostream& of, int nIndent)
 {
   Superclass::WriteXML(of, nIndent);
-  vtkIndent indent(nIndent);
-  of << indent << " preferITKv3CompatibleTransforms=\"" << (this->PreferITKv3CompatibleTransforms ? "true" : "false") << "\"";
+
+  of << " preferITKv3CompatibleTransforms=\"" << (this->PreferITKv3CompatibleTransforms ? "true" : "false") << "\"";
 }
 
 //----------------------------------------------------------------------------
@@ -477,7 +478,10 @@ int vtkMRMLTransformStorageNode::WriteToTransformFile(vtkMRMLNode *refNode)
 
   // Convert VTK transform to ITK transform
   itk::Object::Pointer secondaryTransformItk; // only used for ITKv3 compatibility
-  itk::Object::Pointer transformItk = vtkITKTransformConverter::CreateITKTransformFromVTK(this, transformVtk, secondaryTransformItk, this->PreferITKv3CompatibleTransforms);
+  // ITK transform is created without initialization, because initialization may take a long time for certain transform types
+  // which would slow down saving. Initialization is only needed for computing transformations, not necessary for file writing.
+  itk::Object::Pointer transformItk = vtkITKTransformConverter::CreateITKTransformFromVTK(
+    this, transformVtk, secondaryTransformItk, this->PreferITKv3CompatibleTransforms, false);
   if (transformItk.IsNull())
     {
     vtkErrorMacro("WriteTransform failed: cannot to convert VTK transform to ITK transform");
@@ -608,40 +612,24 @@ void vtkMRMLTransformStorageNode::InitializeSupportedWriteFileTypes()
   this->SupportedWriteFileTypes->InsertNextValue("Displacement field (.nii)");
   this->SupportedWriteFileTypes->InsertNextValue("Displacement field (.nii.gz)");
 }
-//----------------------------------------------------------------------------
-const char* vtkMRMLTransformStorageNode::GetDefaultWriteFileExtension()
-{
-  return "h5";
-}
 
 //----------------------------------------------------------------------------
 bool vtkMRMLTransformStorageNode::IsImageFile(const std::string &filename)
 {
   // determine file type
-  std::string extension = vtkMRMLStorageNode::GetLowercaseExtensionFromFileName(filename);
+  std::string extension = this->GetSupportedFileExtension(filename.c_str());
   if( extension.empty() )
     {
     vtkErrorMacro("ReadData: no file extension specified: " << filename.c_str());
     return false;
     }
-
   if ( !extension.compare(".nrrd")
       || !extension.compare(".nhdr")
       || !extension.compare(".mha")
       || !extension.compare(".mhd")
-      || !extension.compare(".nii") )
+      || !extension.compare(".nii")
+      || !extension.compare(".nii.gz"))
     {
-    return true;
-    }
-
-  // extension may contain only the last extension, which is not enough if we want to detect .nii.gz,
-  // so handle that case separately here
-  std::string filenameLowercase = vtksys::SystemTools::LowerCase(filename);
-  std::string ending=".nii.gz";
-  if (filenameLowercase.length() > ending.length()
-      && (0 == filenameLowercase.compare (filenameLowercase.length() - ending.length(), ending.length(), ending)) )
-    {
-    // filename ends with .nii.gz
     return true;
     }
 

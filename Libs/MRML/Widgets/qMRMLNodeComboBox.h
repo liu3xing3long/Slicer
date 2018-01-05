@@ -95,7 +95,7 @@ public:
   /// Get MRML scene that has been set by setMRMLScene(), there is no scene
   /// by default (0).
   /// \sa setMRMLScene
-  vtkMRMLScene* mrmlScene()const;
+  Q_INVOKABLE vtkMRMLScene* mrmlScene()const;
 
   /// Set/Get node types to display in the list
   /// NodeTypes are the class names, i.e. vtkMRMLViewNode,
@@ -147,6 +147,13 @@ public:
   /// If nodeType is not specified for baseName() then base name of the first node type is returned.
   void setBaseName(const QString& baseName, const QString& nodeType = "");
   QString baseName(const QString& nodeType = "")const;
+
+  /// NodeTypeLabel is the name displayed to the user as node type. By default the node's tag is used.
+  /// Configuration is useful for cases when a more specific type name is preferred (e.g., instead of
+  /// the generic "Create new SubjectHierarchy" option, a module can set up the widget to show
+  /// "Create new Measurements"). If label is set to empty then the default label is used.
+  Q_INVOKABLE void setNodeTypeLabel(const QString& label, const QString& nodeType);
+  Q_INVOKABLE QString nodeTypeLabel(const QString& nodeType)const;
 
   /// return the number of nodes. it can be different from count()
   /// as count includes the "AddNode", "Remove Node"... items

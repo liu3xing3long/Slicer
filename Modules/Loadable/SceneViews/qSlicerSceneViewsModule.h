@@ -17,7 +17,10 @@ class Q_SLICER_QTMODULES_SCENEVIEWS_EXPORT qSlicerSceneViewsModule :
   public qSlicerLoadableModule
 {
   Q_OBJECT
-  Q_INTERFACES(qSlicerLoadableModule)
+#ifdef Slicer_HAVE_QT5
+  Q_PLUGIN_METADATA(IID "org.slicer.modules.loadable.qSlicerLoadableModule/1.0");
+#endif
+  Q_INTERFACES(qSlicerLoadableModule);
 public:
 
   typedef qSlicerLoadableModule Superclass;
@@ -32,6 +35,9 @@ public:
   /// Return the icon of the SceneViews module.
   virtual QIcon icon()const;
   virtual QStringList categories()const;
+
+  /// Specify editable node types
+  virtual QStringList associatedNodeTypes()const;
 
   qSlicerGetTitleMacro(QTMODULE_TITLE);
 

@@ -50,9 +50,13 @@ public slots:
   bool loadDicomData();
   void editApplicationSettings();
   bool presentTutorials();
+  bool exploreLoadedData();
 
 protected:
   virtual void setup();
+
+protected slots:
+  void loadSource(QWidget*);
 
 protected:
   QScopedPointer<qSlicerWelcomeModuleWidgetPrivate> d_ptr;

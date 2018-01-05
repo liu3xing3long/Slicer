@@ -24,6 +24,7 @@
 #include <QFileInfo>
 #include <QHBoxLayout>
 #include <QListView>
+#include <QMimeData>
 #include <QStandardItemModel>
 #include <QUrl>
 
@@ -247,7 +248,6 @@ void qSlicerDirectoryListView::setDirectoryList(const QStringList& paths)
 //---------------------------------------------------------------------------
 void qSlicerDirectoryListView::dragEnterEvent(QDragEnterEvent *event)
 {
-  Q_D(qSlicerDirectoryListView);
   event->mimeData()->hasFormat("text/uri-list");
     {
     event->accept();
@@ -257,8 +257,6 @@ void qSlicerDirectoryListView::dragEnterEvent(QDragEnterEvent *event)
 //-----------------------------------------------------------------------------
 void qSlicerDirectoryListView::dropEvent(QDropEvent *event)
 {
-  Q_D(qSlicerDirectoryListView);
-  bool pathAdded = false;
   foreach(QUrl url, event->mimeData()->urls())
     {
     if (!url.isValid() || url.isEmpty())

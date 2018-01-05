@@ -67,8 +67,6 @@ void vtkMRMLColorNode::WriteXML(ostream& of, int nIndent)
 
   Superclass::WriteXML(of, nIndent);
 
-  vtkIndent indent(nIndent);
-
   of << " type=\"" << this->GetType() << "\"";
 
   if (this->FileName != NULL)
@@ -110,18 +108,7 @@ void vtkMRMLColorNode::ReadXMLAttributes(const char** atts)
       if (this->GetStorageNode() == NULL)
         {
         vtkWarningMacro("A color node has a file name, but no storage node, trying to create one");
-        vtkSmartPointer<vtkMRMLStorageNode> snode = this->CreateDefaultStorageNode();
-        if (snode && this->GetScene())
-          {
-          snode->SetFileName(attValue);
-          this->GetScene()->AddNode(snode);
-          this->SetAndObserveStorageNodeID(snode->GetID());
-          }
-        else
-          {
-          vtkErrorMacro("Unable to create or add to scene a new color storage node to read file " << attValue);
-          }
-
+        this->AddDefaultStorageNode(attValue);
         }
       }
     }
@@ -383,6 +370,31 @@ const char *vtkMRMLColorNode::GetColorName(int ind)
     vtkDebugMacro("vtkMRMLColorNode::GetColorName: index " << ind << " is out of range 0 - " << this->Names.size());
     return "invalid";
     }
+}
+
+//---------------------------------------------------------------------------
+int vtkMRMLColorNode::GetColorIndexByName(const char *name)
+{
+  if (name == NULL)
+    {
+    vtkErrorMacro("vtkMRMLColorNode::GetColorIndexByName: need a non-null name as argument")
+    return -1;
+    }
+
+  if (!this->GetNamesInitialised())
+    {
+    this->SetNamesFromColors();
+    }
+
+  std::string strName = name;
+  for (int i = 0; i < this->GetNumberOfColors(); ++i)
+    {
+    if (strName == this->GetColorName(i))
+      {
+      return i;
+      }
+    }
+  return -1;
 }
 
 //---------------------------------------------------------------------------

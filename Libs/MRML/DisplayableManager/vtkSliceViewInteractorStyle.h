@@ -21,8 +21,9 @@
 #include "vtkMatrix4x4.h"
 
 // MRML includes
-#include "vtkMRMLDisplayableManagerWin32Header.h"
+#include "vtkMRMLDisplayableManagerExport.h"
 
+class vtkMRMLSegmentationDisplayNode;
 class vtkMRMLSliceLogic;
 
 /// \brief Provides customizable interaction routines.
@@ -39,7 +40,7 @@ class VTK_MRML_DISPLAYABLEMANAGER_EXPORT vtkSliceViewInteractorStyle : public vt
 public:
   static vtkSliceViewInteractorStyle *New();
   vtkTypeMacro(vtkSliceViewInteractorStyle,vtkInteractorStyleUser);
-  void PrintSelf(ostream& os, vtkIndent indent);
+  void PrintSelf(ostream& os, vtkIndent indent) VTK_OVERRIDE;
 
   ///
   /// Events are either handled here by changing the slice node
@@ -48,27 +49,27 @@ public:
   /// passes them to observers if there are any.
   ///
   /// Generic event bindings
-  virtual void OnMouseMove();
-  virtual void OnLeftButtonDown();
-  virtual void OnLeftButtonUp();
-  virtual void OnMiddleButtonDown();
-  virtual void OnMiddleButtonUp();
-  virtual void OnRightButtonDown();
-  virtual void OnRightButtonUp();
+  virtual void OnMouseMove() VTK_OVERRIDE;
+  virtual void OnLeftButtonDown() VTK_OVERRIDE;
+  virtual void OnLeftButtonUp() VTK_OVERRIDE;
+  virtual void OnMiddleButtonDown() VTK_OVERRIDE;
+  virtual void OnMiddleButtonUp() VTK_OVERRIDE;
+  virtual void OnRightButtonDown() VTK_OVERRIDE;
+  virtual void OnRightButtonUp() VTK_OVERRIDE;
   /// MouseWheel callbacks added for slicer
-  virtual void OnMouseWheelForward();
-  virtual void OnMouseWheelBackward();
+  virtual void OnMouseWheelForward() VTK_OVERRIDE;
+  virtual void OnMouseWheelBackward() VTK_OVERRIDE;
   ///
   /// Keyboard functions
-  virtual void OnChar();
-  virtual void OnKeyPress();
-  virtual void OnKeyRelease();
+  virtual void OnChar() VTK_OVERRIDE;
+  virtual void OnKeyPress() VTK_OVERRIDE;
+  virtual void OnKeyRelease() VTK_OVERRIDE;
   ///
   /// These are more esoteric events, but are useful in some cases.
-  virtual void OnExpose();
-  virtual void OnConfigure();
-  virtual void OnEnter();
-  virtual void OnLeave();
+  virtual void OnExpose() VTK_OVERRIDE;
+  virtual void OnConfigure() VTK_OVERRIDE;
+  virtual void OnEnter() VTK_OVERRIDE;
+  virtual void OnLeave() VTK_OVERRIDE;
 
   /// Internal state management for multi-event sequences (like click-drag-release)
 
@@ -76,60 +77,31 @@ public:
   enum
     {
     None = 0,
-    Translate,
-    Zoom,
-    Rotate, /* Rotate not currently used */
-    Blend, /* fg to bg, labelmap to bg */
-    AdjustWindowLevel
+    Translate = 1,
+    Zoom = 2,
+    Rotate = 4, /* Rotate not currently used */
+    Blend = 8, /* fg to bg, labelmap to bg */
+    AdjustWindowLevelBackground = 16,
+    AdjustWindowLevelForeground = 32,
+    BrowseSlice = 64,
+    ShowSlice = 128,
+    AdjustLightbox = 256,
+    SelectVolume = 512,
+    SetCursorPosition = 1024, /* adjust cursor position in crosshair node as mouse is moved */
+    AllActionsMask = Translate | Zoom | Rotate | Blend | AdjustWindowLevelBackground | AdjustWindowLevelForeground
+      | BrowseSlice | ShowSlice | AdjustLightbox | SelectVolume | SetCursorPosition
     };
   vtkGetMacro(ActionState, int);
   vtkSetMacro(ActionState, int);
 
-  /// state of things when the current action started
-  /// - ras is mouse pointer in patient space
-  /// - fov is the slice node field of view
-  /// - window is mouse pointer with respect to the whole viewer
-  /// - xyz is mouse pointer with respect to the light box view (z is which light box viewer)
-  /// - foreground opacity of the slice composite node
-  /// - label opacity of the slice label opacity
-  vtkGetVector3Macro(ActionStartRAS, double);
-  vtkSetVector3Macro(ActionStartRAS, double);
-  vtkGetVector3Macro(ActionStartFOV, double);
-  vtkSetVector3Macro(ActionStartFOV, double);
-  vtkGetVector2Macro(ActionStartWindow, int);
-  vtkSetVector2Macro(ActionStartWindow, int);
-  vtkGetVector2Macro(LastActionWindow, int);
-  vtkSetVector2Macro(LastActionWindow, int);
-
-  vtkGetMacro(ActionStartForegroundOpacity, double);
-  vtkSetMacro(ActionStartForegroundOpacity, double);
-  vtkGetMacro(ActionStartLabelOpacity, double);
-  vtkSetMacro(ActionStartLabelOpacity, double);
-
-  /// what was the state of the Window/Level when the action started
-  vtkGetMacro(ActionStartVolumeWindow, double);
-  vtkSetMacro(ActionStartVolumeWindow, double);
-  vtkGetMacro(ActionStartVolumeLevel, double);
-  vtkSetMacro(ActionStartVolumeLevel, double);
-
-  /// what was the state of the Scalar Range when the action started
-  vtkGetMacro(ActionStartVolumeRangeLow, double);
-  vtkSetMacro(ActionStartVolumeRangeLow, double);
-  vtkGetMacro(ActionStartVolumeRangeHigh, double);
-  vtkSetMacro(ActionStartVolumeRangeHigh, double);
-
-  /// what was the state of the slice node when the action started
-  vtkGetObjectMacro(ActionStartSliceToRAS, vtkMatrix4x4);
-  vtkGetObjectMacro(ActionStartXYToRAS, vtkMatrix4x4);
-  /// an internal scratch matrix for calculations without
-  /// the overhead of re-allocating the object
-  vtkGetObjectMacro(ScratchMatrix, vtkMatrix4x4);
-
-  /// State for label/foreground opacity toggles
-  vtkSetMacro(LastLabelOpacity, double);
-  vtkGetMacro(LastLabelOpacity, double);
-  vtkSetMacro(LastForegroundOpacity, double);
-  vtkGetMacro(LastForegroundOpacity, double);
+  /// Enable/disable the specified action (Translate, Zoom, Blend, etc.).
+  /// Multiple actions can be specifed by providing the sum of action ids.
+  /// Set the value to AllActionsMask to enable/disable all actions.
+  /// All actions are enabled by default.
+  void SetActionEnabled(int actionsMask, bool enable = true);
+  /// Returns true if the specified action is allowed.
+  /// If multiple actions are specified, the return value is true if all actions are enabled.
+  bool GetActionEnabled(int actionsMask);
 
   /// Helper routines
 
@@ -141,6 +113,9 @@ public:
   void IncrementSlice();
   void DecrementSlice();
   void MoveSlice(double delta);
+  /// Adjust zoom factor. If zoomScaleFactor>1 then view is zoomed in,
+  /// if 0<zoomScaleFactor<1 then view is zoomed out.
+  void ScaleZoom(double zoomScaleFactor);
 
   /// Collect some boilerplate management steps so they can be used
   /// in more than one place
@@ -157,12 +132,6 @@ public:
   void StartAdjustWindowLevel();
   void EndAdjustWindowLevel();
 
-  /// Get the RAS coordinates of the interactor's EventPosition
-  /// with respect to the current poked renderer (taking into
-  /// account the lightbox)
-  void GetEventRAS(double ras[4]);
-  void GetEventRASWithRespectToEventStart(double ras[4]);
-
   /// Convert event coordinates (with respect to viewport) into
   /// xyz coordinates, where z is the slice number of the lightbox
   /// and xy is the offset within the lightbox view.  The xyz coordinates
@@ -175,6 +144,8 @@ public:
   void SetSliceLogic(vtkMRMLSliceLogic* SliceLogic);
   vtkGetObjectMacro(SliceLogic, vtkMRMLSliceLogic);
 
+  vtkMRMLSegmentationDisplayNode* GetVisibleSegmentationDisplayNode();
+
   ///
   /// Change the displayed volume in the selected layer by moving
   /// in a loop trough the volumes available in the scene.
@@ -182,6 +153,9 @@ public:
   ///  - direction: positive or negative (wraps through volumes in scene)
   void CycleVolumeLayer(int layer, int direction);
 
+  /// Get/Set labelmap or segmentation opacity
+  void SetLabelOpacity(double opacity);
+  double GetLabelOpacity();
 
 protected:
 
@@ -190,26 +164,30 @@ protected:
 
   int GetMouseInteractionMode();
 
+  /// Returns true if mouse is inside the selected layer volume.
+  /// Use background flag to choose between foreground/background layer.
+  bool IsMouseInsideVolume(bool background);
+
+  /// Returns true if the volume's window/level values are editable
+  /// on the GUI
+  bool VolumeWindowLevelEditable(const char* volumeNodeID);
+
   int ActionState;
+  int ActionsEnabled;
 
-  double ActionStartRAS[3];
-  double ActionStartFOV[3];
-  int ActionStartWindow[2];
-  int LastActionWindow[2];
+  /// Indicates whether the shift key was used during the previous action.
+  /// This is used to require shift-up before returning to default mode.
+  bool ShiftKeyUsedForPreviousAction;
 
-  double ActionStartForegroundOpacity;
-  double ActionStartLabelOpacity;
-  double ActionStartVolumeWindow;
-  double ActionStartVolumeLevel;
-  double ActionStartVolumeRangeLow;
-  double ActionStartVolumeRangeHigh;
+  int StartActionEventPosition[2];
+  double StartActionFOV[3];
+  double VolumeScalarRange[2];
+  vtkMRMLSegmentationDisplayNode* StartActionSegmentationDisplayNode;
 
-  vtkMatrix4x4 *ActionStartSliceToRAS;
-  vtkMatrix4x4 *ActionStartXYToRAS;
-  vtkMatrix4x4 *ScratchMatrix;
-
-  double LastLabelOpacity;
+  int LastEventPosition[2];
   double LastForegroundOpacity;
+  double LastLabelOpacity;
+  double LastVolumeWindowLevel[2];
 
   vtkMRMLSliceLogic *SliceLogic;
 

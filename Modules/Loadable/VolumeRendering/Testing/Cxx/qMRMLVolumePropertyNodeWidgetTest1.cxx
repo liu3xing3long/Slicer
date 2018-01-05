@@ -32,6 +32,9 @@
 
 // VTK includes
 #include <vtkSmartPointer.h>
+#ifdef Slicer_VTK_USE_QVTKOPENGLWIDGET
+#include <QVTKOpenGLWidget.h>
+#endif
 
 // this test only works on VTKv6 and later
 
@@ -40,11 +43,19 @@
 VTK_MODULE_INIT(vtkRenderingContextOpenGL2);
 #else
 VTK_MODULE_INIT(vtkRenderingContextOpenGL);
+#endif
 
 // STD includes
 
 int qMRMLVolumePropertyNodeWidgetTest1(int argc, char * argv [] )
 {
+#ifdef Slicer_VTK_USE_QVTKOPENGLWIDGET
+  // Set default surface format for QVTKOpenGLWidget
+  QSurfaceFormat format = QVTKOpenGLWidget::defaultFormat();
+  format.setSamples(0);
+  QSurfaceFormat::setDefaultFormat(format);
+#endif
+
   QApplication app(argc, argv);
 
   vtkSmartPointer<vtkMRMLVolumePropertyNode> volumePropertyNode =
@@ -61,5 +72,3 @@ int qMRMLVolumePropertyNodeWidgetTest1(int argc, char * argv [] )
     }
   return app.exec();
 }
-
-#endif

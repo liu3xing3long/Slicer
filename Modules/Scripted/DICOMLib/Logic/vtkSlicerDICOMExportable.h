@@ -39,7 +39,7 @@ class VTK_SLICER_DICOMLIB_MODULE_LOGIC_EXPORT vtkSlicerDICOMExportable : public 
 public:
   static vtkSlicerDICOMExportable *New();
   vtkTypeMacro(vtkSlicerDICOMExportable, vtkObject);
-  void PrintSelf(ostream& os, vtkIndent indent);
+  void PrintSelf(ostream& os, vtkIndent indent) VTK_OVERRIDE;
 
 public:
   vtkGetStringMacro(Name);
@@ -48,8 +48,8 @@ public:
   vtkGetStringMacro(Tooltip);
   vtkSetStringMacro(Tooltip);
 
-  vtkGetStringMacro(NodeID);
-  vtkSetStringMacro(NodeID);
+  vtkGetMacro(SubjectHierarchyItemID, vtkIdType);
+  vtkSetMacro(SubjectHierarchyItemID, vtkIdType);
 
   vtkGetStringMacro(PluginClass);
   vtkSetStringMacro(PluginClass);
@@ -78,8 +78,8 @@ protected:
   /// Extra information the user sees on mouse over of the export option
   char* Tooltip;
 
-  /// ID of MRML node to be exported
-  char* NodeID;
+  /// ID of the subject hierarchy item to be exported
+  vtkIdType SubjectHierarchyItemID;
 
   /// Class of the plugin that created this exportable
   char* PluginClass;

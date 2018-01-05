@@ -65,7 +65,7 @@ public:
 
   static vtkSlicerVolumesLogic *New();
   vtkTypeMacro(vtkSlicerVolumesLogic,vtkSlicerModuleLogic);
-  void PrintSelf(ostream& os, vtkIndent indent);
+  void PrintSelf(ostream& os, vtkIndent indent) VTK_OVERRIDE;
 
   typedef vtkSlicerVolumesLogic Self;
 
@@ -179,14 +179,23 @@ public:
                                                        vtkMRMLLabelMapVolumeNode *labelNode,
                                                        vtkMRMLVolumeNode *templateNode);
 
-  /// Fill in a label map volume to match the given input volume node, under
+  /// Set a label map volume to match the given input volume node, under
   /// the assumption that the given label map node is already added to the scene.
   /// A display node will be added to it if the label node doesn't already have
   /// one, and the image data associated with the label node will be allocated
   /// according to the template volumeNode.
   vtkMRMLLabelMapVolumeNode *CreateLabelVolumeFromVolume(vtkMRMLScene *scene,
-                                                       vtkMRMLLabelMapVolumeNode *labelNode,
+                                                       vtkMRMLLabelMapVolumeNode *outputVolume,
                                                        vtkMRMLVolumeNode *inputVolume);
+
+  /// Set a scalar volume to match the given input volume node, under
+  /// the assumption that the given label map node is already added to the scene.
+  /// A display node will be added to it if the label node doesn't already have
+  /// one, and the image data associated with the label node will be allocated
+  /// according to the template volumeNode.
+  vtkMRMLScalarVolumeNode *CreateScalarVolumeFromVolume(vtkMRMLScene *scene,
+    vtkMRMLScalarVolumeNode *outputVolume,
+    vtkMRMLVolumeNode *inputVolume);
 
   /// Clear the image data of a volume node to contain all zeros
   static void ClearVolumeImageData(vtkMRMLVolumeNode *volumeNode);
@@ -226,10 +235,18 @@ public:
                                                               const char *name);
 
   /// Create a deep copy of a \a volumeNode and add it to the \a scene
+  /// Only works for vtkMRMLScalarVolumeNode.
+  /// The method is kept as is for background compatibility only, internally it calls CloneVolumeGeneric.
+  /// \sa CloneVolumeGeneric
   static vtkMRMLScalarVolumeNode *CloneVolume(vtkMRMLScene *scene,
                                               vtkMRMLVolumeNode *volumeNode,
                                               const char *name,
                                               bool cloneImageData=true);
+  /// Create a deep copy of a \a volumeNode and add it to the \a scene
+  static vtkMRMLVolumeNode *CloneVolumeGeneric(vtkMRMLScene *scene,
+    vtkMRMLVolumeNode *volumeNode,
+    const char *name,
+    bool cloneImageData = true);
 
   /// Computes matrix we need to register
   /// V1Node to V2Node given the "register.dat" matrix from tkregister2 (FreeSurfer)
@@ -277,7 +294,7 @@ protected:
 
   virtual void ProcessMRMLNodesEvents(vtkObject * caller,
                                   unsigned long event,
-                                  void * callData);
+                                  void * callData) VTK_OVERRIDE;
 
 
   void InitializeStorageNode(vtkMRMLStorageNode * storageNode,

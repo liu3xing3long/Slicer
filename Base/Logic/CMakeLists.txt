@@ -119,10 +119,10 @@ set(SlicerBaseLogic_SRCS
   vtkDataIOManagerLogic.cxx
   # slicer's vtk extensions (filters)
   vtkSlicerGlyphSource2D.cxx
-  vtkSlicerTransformLogic.cxx
   vtkTransformVisualizerGlyph3D.cxx
   vtkImageRectangularSource.cxx
   vtkSystemInformation.cxx
+  vtkImageFillROI.cxx
   )
 
 if(Slicer_USE_PYTHONQT)

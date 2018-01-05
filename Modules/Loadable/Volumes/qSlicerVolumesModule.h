@@ -34,6 +34,9 @@ class Q_SLICER_QTMODULES_VOLUMES_EXPORT qSlicerVolumesModule :
   public qSlicerLoadableModule
 {
   Q_OBJECT
+#ifdef Slicer_HAVE_QT5
+  Q_PLUGIN_METADATA(IID "org.slicer.modules.loadable.qSlicerLoadableModule/1.0");
+#endif
   Q_INTERFACES(qSlicerLoadableModule);
 
 public:
@@ -59,6 +62,9 @@ protected:
 
   /// Create and return the logic associated to this module
   virtual vtkMRMLAbstractLogic* createLogic();
+
+  /// Specify editable node types
+  virtual QStringList associatedNodeTypes()const;
 
 protected:
   QScopedPointer<qSlicerVolumesModulePrivate> d_ptr;

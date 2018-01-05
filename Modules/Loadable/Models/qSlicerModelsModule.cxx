@@ -18,9 +18,6 @@
 
 ==============================================================================*/
 
-// Qt includes
-#include <QtPlugin>
-
 // Models includes
 #include "qSlicerModelsModule.h"
 #include "qSlicerModelsModuleWidget.h"
@@ -46,7 +43,10 @@
 #include "qSlicerSubjectHierarchyModelsPlugin.h"
 
 //-----------------------------------------------------------------------------
+#if (QT_VERSION < QT_VERSION_CHECK(5, 0, 0))
+#include <QtPlugin>
 Q_EXPORT_PLUGIN2(qSlicerModelsModule, qSlicerModelsModule);
+#endif
 
 //-----------------------------------------------------------------------------
 /// \ingroup Slicer_QtModules_Models
@@ -83,7 +83,7 @@ qSlicerModelsModule::~qSlicerModelsModule()
 QString qSlicerModelsModule::helpText()const
 {
   QString help =
-    "The Models Module loads and adjusts display parameters of models.<br>"
+    "The Models Module loads and adjusts display parameters of models such as Color, Transparency, and Clipping.<br>"
     "For more information see <a href=\"%1/Documentation/%2.%3/Modules/Models\">%1/Documentation/%2.%3/Modules/Models</a><br>"
     "Save models via the File menu, Save button.<br>"
     "The Add 3D model or a model directory button will allow you to load any "
@@ -105,7 +105,7 @@ QString qSlicerModelsModule::helpText()const
 //-----------------------------------------------------------------------------
 QString qSlicerModelsModule::acknowledgementText()const
 {
-  return "This work was was partially funded by NIH grant 3P41RR013218-12S1";
+  return "This work was partially funded by NIH grants 3P41RR013218-12S1 and R01CA184354.";
 }
 
 //-----------------------------------------------------------------------------
@@ -115,6 +115,7 @@ QStringList qSlicerModelsModule::contributors()const
   moduleContributors << QString("Julien Finet (Kitware)");
   moduleContributors << QString("Alex Yarmakovich (Isomics)");
   moduleContributors << QString("Nicole Aucoin (SPL, BWH)");
+  moduleContributors << QString("Alexis Girault (Kitware)");
   return moduleContributors;
 }
 
@@ -180,4 +181,13 @@ qSlicerAbstractModuleRepresentation * qSlicerModelsModule::createWidgetRepresent
 vtkMRMLAbstractLogic* qSlicerModelsModule::createLogic()
 {
   return vtkSlicerModelsLogic::New();
+}
+
+//-----------------------------------------------------------------------------
+QStringList qSlicerModelsModule::associatedNodeTypes() const
+{
+  return QStringList()
+    << "vtkMRMLModelNode"
+    << "vtkMRMLModelDisplayNode"
+    << "vtkMRMLModelHierarchyNode";
 }

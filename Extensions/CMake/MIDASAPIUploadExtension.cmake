@@ -31,9 +31,6 @@
 function(midas_api_upload_extension)
   set(expected_nonempty_args
     ARCHITECTURE
-    EXTENSION_CATEGORY
-    EXTENSION_ENABLED
-    EXTENSION_HOMEPAGE
     EXTENSION_NAME
     EXTENSION_REPOSITORY_TYPE
     EXTENSION_REPOSITORY_URL
@@ -48,8 +45,11 @@ function(midas_api_upload_extension)
     SUBMISSION_TYPE
     )
   set(optional_args
+    EXTENSION_CATEGORY
     EXTENSION_CONTRIBUTORS
     EXTENSION_DESCRIPTION
+    EXTENSION_ENABLED
+    EXTENSION_HOMEPAGE
     EXTENSION_ICONURL
     EXTENSION_SCREENSHOTURLS
     )
@@ -66,13 +66,6 @@ function(midas_api_upload_extension)
   foreach(var ${expected_nonempty_args})
     if("${MY_${var}}" STREQUAL "")
       message(FATAL_ERROR "error: ${var} CMake variable is empty !")
-    endif()
-  endforeach()
-
-  foreach(var ${optional_args})
-    if(NOT DEFINED MY_${var} AND NOT "${${var}_AUTHOR_WARN}" STREQUAL "DONE")
-      message(AUTHOR_WARNING "warning: CMake variable ${var} is empty !")
-      set(${var}_AUTHOR_WARN "DONE")
     endif()
   endforeach()
 
@@ -135,7 +128,7 @@ function(midas_api_upload_extension)
   set(url "${MY_SERVER_URL}/api/json?method=${api_method}${params}")
 
   file(UPLOAD ${MY_PACKAGE_FILEPATH} ${url} INACTIVITY_TIMEOUT 120 STATUS status LOG log SHOW_PROGRESS)
-  string(REGEX REPLACE ".*{\"stat\":\"([^\"]*)\".*" "\\1" status ${log})
+  string(REGEX REPLACE ".*{\"stat\":[ ]*\"([^\"]*)\".*" "\\1" status ${log})
 
   set(api_call_log ${CMAKE_CURRENT_BINARY_DIR}/${api_method}_response.txt)
   file(WRITE ${api_call_log} ${log})
@@ -151,7 +144,7 @@ endfunction()
 
 
 #
-# Testing - cmake -DTEST_<TESTNAME>:BOOL=ON -P MIDASAPIUploadExtensionTest.cmake
+# Testing - cmake -DTEST_<TESTNAME>:BOOL=ON -P MIDASAPIUploadExtension.cmake
 #
 
 #

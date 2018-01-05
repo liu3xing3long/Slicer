@@ -163,9 +163,9 @@ void vtkMRMLSliceLinkLogic::OnMRMLNodeModified(vtkMRMLNode* node)
 {
   // Update from SliceNode
   vtkMRMLSliceNode* sliceNode = vtkMRMLSliceNode::SafeDownCast(node);
-  if (sliceNode && !this->GetMRMLScene()->IsBatchProcessing())
+  if ( sliceNode && sliceNode->GetID()
+    && this->GetMRMLScene() && !this->GetMRMLScene()->IsBatchProcessing() )
     {
-
     SliceNodeStatusMap::iterator it = this->SliceNodeInteractionStatus.find(sliceNode->GetID());
     // if this is not the node that we are interacting with, short circuit
 
@@ -219,7 +219,7 @@ void vtkMRMLSliceLinkLogic::OnMRMLNodeModified(vtkMRMLNode* node)
   // Update from SliceCompositeNode
   vtkMRMLSliceCompositeNode* compositeNode
     = vtkMRMLSliceCompositeNode::SafeDownCast(node);
-  if (compositeNode && !this->GetMRMLScene()->IsBatchProcessing())
+  if (compositeNode && this->GetMRMLScene() && !this->GetMRMLScene()->IsBatchProcessing())
     {
 
     // if this is not the node that we are interacting with, short circuit
@@ -308,6 +308,33 @@ void vtkMRMLSliceLinkLogic::PrintSelf(ostream& os, vtkIndent indent)
 }
 
 //----------------------------------------------------------------------------
+bool vtkMRMLSliceLinkLogic::IsOrientationMatching(vtkMRMLSliceNode *sliceNode1, vtkMRMLSliceNode *sliceNode2,
+  double comparisonTolerance /* = 0.001 */)
+{
+  if (sliceNode1 == NULL || sliceNode2 == NULL)
+    {
+    vtkErrorMacro("vtkMRMLSliceLinkLogic::IsOrientationMatching failed: invalid input");
+    return false;
+    }
+  vtkMatrix4x4* sliceToRAS1 = sliceNode1->GetSliceToRAS();
+  vtkMatrix4x4* sliceToRAS2 = sliceNode2->GetSliceToRAS();
+  for (int axisIndex = 0; axisIndex < 3; axisIndex++)
+  {
+    double axisVector1[3] = { sliceToRAS1->Element[0][axisIndex], sliceToRAS1->Element[1][axisIndex], sliceToRAS1->Element[2][axisIndex] };
+    double axisVector2[3] = { sliceToRAS2->Element[0][axisIndex], sliceToRAS2->Element[1][axisIndex], sliceToRAS2->Element[2][axisIndex] };
+    vtkMath::Normalize(axisVector1);
+    vtkMath::Normalize(axisVector2);
+    if ((fabs(axisVector1[0] - axisVector2[0]) > comparisonTolerance)
+      || (fabs(axisVector1[1] - axisVector2[1]) > comparisonTolerance)
+      || (fabs(axisVector1[2] - axisVector2[2]) > comparisonTolerance))
+      {
+      return false;
+      }
+  }
+  return true;
+}
+
+//----------------------------------------------------------------------------
 void vtkMRMLSliceLinkLogic::BroadcastSliceNodeEvent(vtkMRMLSliceNode *sliceNode)
 {
   // only broadcast a slice node event if we are not already actively
@@ -315,10 +342,15 @@ void vtkMRMLSliceLinkLogic::BroadcastSliceNodeEvent(vtkMRMLSliceNode *sliceNode)
   // std::cout << "BroadcastingEvents: " << this->GetBroadcastingEvents()
   //           << ", Interacting: " << sliceNode->GetInteracting()
   //           << std::endl;
+  if (!sliceNode)
+    {
+    return;
+    }
   if (!this->GetBroadcastingEvents())
     {
     this->BroadcastingEventsOn();
 
+    int requiredViewGroup = sliceNode->GetViewGroup();
     vtkMRMLSliceNode* sNode;
     vtkCollectionSimpleIterator it;
     vtkSmartPointer<vtkCollection> nodes;
@@ -326,153 +358,151 @@ void vtkMRMLSliceLinkLogic::BroadcastSliceNodeEvent(vtkMRMLSliceNode *sliceNode)
     for (nodes->InitTraversal(it);
         (sNode=vtkMRMLSliceNode::SafeDownCast(nodes->GetNextItemAsObject(it)));)
       {
-      if (sNode != sliceNode)
+      if (sNode == sliceNode || !sNode)
         {
-        // Link slice parameters whenever the reformation is consistent
-        if (!strcmp(sNode->GetOrientationString(),
-                    sliceNode->GetOrientationString()))
-        // if (sliceNode->Matrix4x4AreEqual(sliceNode->GetSliceToRAS(),
-        //                                  sNode->GetSliceToRAS()))
-          {
-          // std::cout << "Orientation match, flags = " << sliceNode->GetInteractionFlags() << std::endl;
-          // std::cout << "Broadcasting SliceToRAS, SliceOrigin, and FieldOfView to "
-          //            << sNode->GetName() << std::endl;
-          //
-
-          // Copy the slice to RAS information
-          if (sliceNode->GetInteractionFlags() & sliceNode->GetInteractionFlagsModifier()
-            & vtkMRMLSliceNode::SliceToRASFlag)
-            {
-            // Need to copy the SliceToRAS. SliceNode::SetSliceToRAS()
-            // does a shallow copy. So we have to explictly call DeepCopy()
-            sNode->GetSliceToRAS()->DeepCopy( sliceNode->GetSliceToRAS() );
-            }
-
-          // Copy the slice origin information
-          if (sliceNode->GetInteractionFlags() & sliceNode->GetInteractionFlagsModifier()
-            & vtkMRMLSliceNode::XYZOriginFlag)
-            {
-            // Need to copy the SliceOrigin.
-            double *xyzOrigin = sliceNode->GetXYZOrigin();
-            sNode->SetXYZOrigin( xyzOrigin[0], xyzOrigin[1], xyzOrigin[2] );
-            }
-
-          // Copy the field of view information. Use the new
-          // prescribed x fov, aspect corrected y fov, and keep z fov
-          // constant
-          if (sliceNode->GetInteractionFlags() & sliceNode->GetInteractionFlagsModifier()
-            & vtkMRMLSliceNode::FieldOfViewFlag)
-            {
-            sNode->SetFieldOfView( sliceNode->GetFieldOfView()[0],
-                                   sliceNode->GetFieldOfView()[0]
-                                   * sNode->GetFieldOfView()[1]
-                                   / sNode->GetFieldOfView()[0],
-                                   sNode->GetFieldOfView()[2] );
-            }
-
-          // need to manage prescribed spacing here as well?
-
-          // Forces the internal matrices to be updated which results
-          // in this being modified so a Render can occur
-          sNode->UpdateMatrices();
-          }
-
-        //
-        // Some parameters and commands do not require the
-        // orientations to match. These are handled here.
-        //
-
-        // Setting the orientation of the slice plane does not
-        // require that the orientations initially match.
-        if (sliceNode->GetInteractionFlags() & sliceNode->GetInteractionFlagsModifier()
-          & vtkMRMLSliceNode::OrientationFlag)
-          {
-          // We could copy the orientation strings, but we really
-          // want the slice to ras to match, so copy that
-
-          // Need to copy the SliceToRAS. SliceNode::SetSliceToRAS()
-          // does a shallow copy. So we have to explictly call DeepCopy()
-          sNode->GetSliceToRAS()->DeepCopy( sliceNode->GetSliceToRAS() );
-
-          // Forces the internal matrices to be updated which results
-          // in this being modified so a Render can occur
-          sNode->UpdateMatrices();
-          }
-
-        // Reseting the field of view does not require the
-        // orientations to match
-        if ((sliceNode->GetInteractionFlags() & sliceNode->GetInteractionFlagsModifier()
-            & vtkMRMLSliceNode::ResetFieldOfViewFlag)
-            && this->GetMRMLApplicationLogic()->GetSliceLogics())
-          {
-          // need the logic for this slice (sNode)
-          vtkMRMLSliceLogic* logic;
-          vtkCollectionSimpleIterator it;
-          vtkCollection* logics = this->GetMRMLApplicationLogic()->GetSliceLogics();
-          for (logics->InitTraversal(it);
-               (logic=vtkMRMLSliceLogic::SafeDownCast(logics->GetNextItemAsObject(it)));)
-            {
-            if (logic->GetSliceNode() == sNode)
-              {
-              logic->FitSliceToAll();
-              sNode->UpdateMatrices();
-              break;
-              }
-            }
-          }
-
-        // Broadcasting the rotation from a ReformatWidget
-        if (sliceNode->GetInteractionFlags() & sliceNode->GetInteractionFlagsModifier()
-          & vtkMRMLSliceNode::MultiplanarReformatFlag)
-          {
-          this->BroadcastLastRotation(sliceNode,sNode);
-          }
-
-        // Setting the label outline mode
-        if (sliceNode->GetInteractionFlags() & sliceNode->GetInteractionFlagsModifier()
-          & vtkMRMLSliceNode::LabelOutlineFlag)
-          {
-          sNode->SetUseLabelOutline( sliceNode->GetUseLabelOutline() );
-          }
-
-        // Broadcasting the visibility of slice in 3D
-        if (sliceNode->GetInteractionFlags() & sliceNode->GetInteractionFlagsModifier()
-          & vtkMRMLSliceNode::SliceVisibleFlag)
-          {
-          std::string layoutName(sliceNode->GetLayoutName() ? sliceNode->GetLayoutName() : "");
-          std::string lname(sNode->GetLayoutName() ? sNode->GetLayoutName() : "");
-          if (layoutName.find("Compare") == 0)
-            {
-            // Compare view, only broadcast to compare views
-            if (lname.find("Compare") == 0)
-              {
-              // Compare view, broadcast
-              sNode->SetSliceVisible(sliceNode->GetSliceVisible());
-              }
-            }
-          else
-            {
-            // Not a compare view, only broadcast to non compare views
-            if (lname.find("Compare") != 0)
-              {
-              // not a Compare view, broadcast
-              sNode->SetSliceVisible(sliceNode->GetSliceVisible());
-              }
-            }
-          }
-
-          // Setting the slice spacing
-          if (sliceNode->GetInteractionFlags() & sliceNode->GetInteractionFlagsModifier()
-            & vtkMRMLSliceNode::SliceSpacingFlag)
-            {
-            sNode->SetSliceSpacingMode( sliceNode->GetSliceSpacingMode() );
-            sNode->SetPrescribedSliceSpacing( sliceNode->GetPrescribedSliceSpacing() );
-            }
-        //
-        // End of the block for broadcasting parameters and commands
-        // that do not require the orientation to match
-        //
+        continue;
         }
+      if (sNode->GetViewGroup() != requiredViewGroup)
+        {
+        continue;
+        }
+
+      // Link slice parameters whenever the reformation is consistent
+      if (vtkMRMLSliceLinkLogic::IsOrientationMatching(sliceNode, sNode))
+        {
+        // std::cout << "Orientation match, flags = " << sliceNode->GetInteractionFlags() << std::endl;
+        // std::cout << "Broadcasting SliceToRAS, SliceOrigin, and FieldOfView to "
+        //            << sNode->GetName() << std::endl;
+        //
+
+        // Copy the slice to RAS information
+        if (sliceNode->GetInteractionFlags() & sliceNode->GetInteractionFlagsModifier()
+          & vtkMRMLSliceNode::SliceToRASFlag)
+          {
+          sNode->GetSliceToRAS()->DeepCopy( sliceNode->GetSliceToRAS() );
+          }
+
+        // Copy the slice origin information
+        if (sliceNode->GetInteractionFlags() & sliceNode->GetInteractionFlagsModifier()
+          & vtkMRMLSliceNode::XYZOriginFlag)
+          {
+          // Need to copy the SliceOrigin.
+          double *xyzOrigin = sliceNode->GetXYZOrigin();
+          sNode->SetXYZOrigin( xyzOrigin[0], xyzOrigin[1], xyzOrigin[2] );
+          }
+
+        // Copy the field of view information. Use the new
+        // prescribed x fov, aspect corrected y fov, and keep z fov
+        // constant
+        if (sliceNode->GetInteractionFlags() & sliceNode->GetInteractionFlagsModifier()
+          & vtkMRMLSliceNode::FieldOfViewFlag)
+          {
+          sNode->SetFieldOfView( sliceNode->GetFieldOfView()[0],
+                                  sliceNode->GetFieldOfView()[0]
+                                  * sNode->GetFieldOfView()[1]
+                                  / sNode->GetFieldOfView()[0],
+                                  sNode->GetFieldOfView()[2] );
+          }
+
+        // need to manage prescribed spacing here as well?
+
+        // Forces the internal matrices to be updated which results
+        // in this being modified so a Render can occur
+        sNode->UpdateMatrices();
+        }
+
+      //
+      // Some parameters and commands do not require the
+      // orientations to match. These are handled here.
+      //
+
+      // Setting the orientation of the slice plane does not
+      // require that the orientations initially match.
+      if (sliceNode->GetInteractionFlags() & sliceNode->GetInteractionFlagsModifier()
+        & vtkMRMLSliceNode::OrientationFlag)
+        {
+        // We could copy the orientation strings, but we really
+        // want the slice to ras to match, so copy that
+        sNode->GetSliceToRAS()->DeepCopy( sliceNode->GetSliceToRAS() );
+
+        // Forces the internal matrices to be updated which results
+        // in this being modified so a Render can occur
+        sNode->UpdateMatrices();
+        }
+
+      // Reseting the field of view does not require the
+      // orientations to match
+      if ((sliceNode->GetInteractionFlags() & sliceNode->GetInteractionFlagsModifier()
+          & vtkMRMLSliceNode::ResetFieldOfViewFlag)
+          && this->GetMRMLApplicationLogic()->GetSliceLogics())
+        {
+        // need the logic for this slice (sNode)
+        vtkMRMLSliceLogic* logic;
+        vtkCollectionSimpleIterator it;
+        vtkCollection* logics = this->GetMRMLApplicationLogic()->GetSliceLogics();
+        for (logics->InitTraversal(it);
+              (logic=vtkMRMLSliceLogic::SafeDownCast(logics->GetNextItemAsObject(it)));)
+          {
+          if (logic->GetSliceNode() == sNode)
+            {
+            logic->FitSliceToAll();
+            sNode->UpdateMatrices();
+            break;
+            }
+          }
+        }
+
+      // Broadcasting the rotation from a ReformatWidget
+      if (sliceNode->GetInteractionFlags() & sliceNode->GetInteractionFlagsModifier()
+        & vtkMRMLSliceNode::MultiplanarReformatFlag)
+        {
+        this->BroadcastLastRotation(sliceNode,sNode);
+        }
+
+      // Setting the label outline mode
+      if (sliceNode->GetInteractionFlags() & sliceNode->GetInteractionFlagsModifier()
+        & vtkMRMLSliceNode::LabelOutlineFlag)
+        {
+        sNode->SetUseLabelOutline( sliceNode->GetUseLabelOutline() );
+        }
+
+      // Broadcasting the visibility of slice in 3D
+      if (sliceNode->GetInteractionFlags() & sliceNode->GetInteractionFlagsModifier()
+        & vtkMRMLSliceNode::SliceVisibleFlag)
+        {
+        std::string layoutName(sliceNode->GetLayoutName() ? sliceNode->GetLayoutName() : "");
+        std::string lname(sNode->GetLayoutName() ? sNode->GetLayoutName() : "");
+        if (layoutName.find("Compare") == 0)
+          {
+          // Compare view, only broadcast to compare views
+          if (lname.find("Compare") == 0)
+            {
+            // Compare view, broadcast
+            sNode->SetSliceVisible(sliceNode->GetSliceVisible());
+            }
+          }
+        else
+          {
+          // Not a compare view, only broadcast to non compare views
+          if (lname.find("Compare") != 0)
+            {
+            // not a Compare view, broadcast
+            sNode->SetSliceVisible(sliceNode->GetSliceVisible());
+            }
+          }
+        }
+
+        // Setting the slice spacing
+        if (sliceNode->GetInteractionFlags() & sliceNode->GetInteractionFlagsModifier()
+          & vtkMRMLSliceNode::SliceSpacingFlag)
+          {
+          sNode->SetSliceSpacingMode( sliceNode->GetSliceSpacingMode() );
+          sNode->SetPrescribedSliceSpacing( sliceNode->GetPrescribedSliceSpacing() );
+          }
+      //
+      // End of the block for broadcasting parameters and commands
+      // that do not require the orientation to match
+      //
       }
 
     // Update SliceNodeInteractionStatus after MultiplanarReformat interaction
@@ -489,10 +519,20 @@ void vtkMRMLSliceLinkLogic::BroadcastSliceCompositeNodeEvent(vtkMRMLSliceComposi
   // std::cout << "BroadcastingEvents: " << this->GetBroadcastingEvents()
   //           << ", Interacting: " << sliceCompositeNode->GetInteracting()
   //           << std::endl;
+  if (!sliceCompositeNode)
+    {
+    return;
+    }
   if (!this->GetBroadcastingEvents() && sliceCompositeNode->GetInteracting())
     {
     this->BroadcastingEventsOn();
 
+    int requiredViewGroup = -1;
+    vtkMRMLSliceNode* sliceNode = vtkMRMLSliceLogic::GetSliceNode(sliceCompositeNode);
+    if (sliceNode)
+      {
+      requiredViewGroup = sliceNode->GetViewGroup();
+      }
     vtkMRMLSliceCompositeNode* cNode;
     vtkCollectionSimpleIterator it;
     vtkSmartPointer<vtkCollection> nodes;
@@ -501,45 +541,54 @@ void vtkMRMLSliceLinkLogic::BroadcastSliceCompositeNodeEvent(vtkMRMLSliceComposi
     for (nodes->InitTraversal(it);
         (cNode=vtkMRMLSliceCompositeNode::SafeDownCast(nodes->GetNextItemAsObject(it)));)
       {
-      if (cNode != sliceCompositeNode)
+      if (cNode == sliceCompositeNode || !cNode)
         {
-        // Foreground selection
-        if (sliceCompositeNode->GetInteractionFlags() & sliceCompositeNode->GetInteractionFlagsModifier()
-            & vtkMRMLSliceCompositeNode::ForegroundVolumeFlag)
-          {
-          //std::cerr << "Broadcasting Foreground Volume " << sliceCompositeNode->GetForegroundVolumeID() << std::endl;
-          cNode->SetForegroundVolumeID(sliceCompositeNode->GetForegroundVolumeID());
-          }
-
-        // Background selection
-        if (sliceCompositeNode->GetInteractionFlags() & sliceCompositeNode->GetInteractionFlagsModifier()
-            & vtkMRMLSliceCompositeNode::BackgroundVolumeFlag)
-          {
-          cNode->SetBackgroundVolumeID(sliceCompositeNode->GetBackgroundVolumeID());
-          }
-
-        // Labelmap selection
-        if (sliceCompositeNode->GetInteractionFlags() & sliceCompositeNode->GetInteractionFlagsModifier()
-            & vtkMRMLSliceCompositeNode::LabelVolumeFlag)
-          {
-          cNode->SetLabelVolumeID(sliceCompositeNode->GetLabelVolumeID());
-          }
-
-        // Foreground opacity
-        if (sliceCompositeNode->GetInteractionFlags() & sliceCompositeNode->GetInteractionFlagsModifier()
-            & vtkMRMLSliceCompositeNode::ForegroundOpacityFlag)
-          {
-          cNode->SetForegroundOpacity(sliceCompositeNode->GetForegroundOpacity());
-          }
-
-        // Labelmap opacity
-        if (sliceCompositeNode->GetInteractionFlags() & sliceCompositeNode->GetInteractionFlagsModifier()
-            & vtkMRMLSliceCompositeNode::LabelOpacityFlag)
-          {
-          cNode->SetLabelOpacity(sliceCompositeNode->GetLabelOpacity());
-          }
-
+        continue;
         }
+      if (requiredViewGroup >= 0)
+        {
+        vtkMRMLSliceNode* sNode = vtkMRMLSliceLogic::GetSliceNode(cNode);
+        if (sNode && sNode->GetViewGroup() != requiredViewGroup)
+          {
+          continue;
+          }
+        }
+      // Foreground selection
+      if (sliceCompositeNode->GetInteractionFlags() & sliceCompositeNode->GetInteractionFlagsModifier()
+          & vtkMRMLSliceCompositeNode::ForegroundVolumeFlag)
+        {
+        //std::cerr << "Broadcasting Foreground Volume " << sliceCompositeNode->GetForegroundVolumeID() << std::endl;
+        cNode->SetForegroundVolumeID(sliceCompositeNode->GetForegroundVolumeID());
+        }
+
+      // Background selection
+      if (sliceCompositeNode->GetInteractionFlags() & sliceCompositeNode->GetInteractionFlagsModifier()
+          & vtkMRMLSliceCompositeNode::BackgroundVolumeFlag)
+        {
+        cNode->SetBackgroundVolumeID(sliceCompositeNode->GetBackgroundVolumeID());
+        }
+
+      // Labelmap selection
+      if (sliceCompositeNode->GetInteractionFlags() & sliceCompositeNode->GetInteractionFlagsModifier()
+          & vtkMRMLSliceCompositeNode::LabelVolumeFlag)
+        {
+        cNode->SetLabelVolumeID(sliceCompositeNode->GetLabelVolumeID());
+        }
+
+      // Foreground opacity
+      if (sliceCompositeNode->GetInteractionFlags() & sliceCompositeNode->GetInteractionFlagsModifier()
+          & vtkMRMLSliceCompositeNode::ForegroundOpacityFlag)
+        {
+        cNode->SetForegroundOpacity(sliceCompositeNode->GetForegroundOpacity());
+        }
+
+      // Labelmap opacity
+      if (sliceCompositeNode->GetInteractionFlags() & sliceCompositeNode->GetInteractionFlagsModifier()
+          & vtkMRMLSliceCompositeNode::LabelOpacityFlag)
+        {
+        cNode->SetLabelOpacity(sliceCompositeNode->GetLabelOpacity());
+        }
+
       }
 
     this->BroadcastingEventsOff();

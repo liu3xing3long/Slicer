@@ -40,6 +40,7 @@ vtkMRMLNodeNewMacro(vtkMRMLAnnotationSnapshotStorageNode);
 //----------------------------------------------------------------------------
 vtkMRMLAnnotationSnapshotStorageNode::vtkMRMLAnnotationSnapshotStorageNode()
 {
+  this->DefaultWriteFileExtension = "png";
 }
 
 //----------------------------------------------------------------------------
@@ -66,7 +67,7 @@ int vtkMRMLAnnotationSnapshotStorageNode::ReadDataInternal(vtkMRMLNode *refNode)
     vtkMRMLAnnotationSnapshotNode::SafeDownCast(refNode);
 
   std::string fullName = this->GetFullNameFromFileName();
-  if (fullName == std::string(""))
+  if (fullName.empty())
     {
     vtkErrorMacro("ReadData: File name not specified");
     return 0;
@@ -160,7 +161,7 @@ int vtkMRMLAnnotationSnapshotStorageNode::WriteDataInternal(vtkMRMLNode *refNode
     }
 
   std::string fullName = this->GetFullNameFromFileName();
-  if (fullName == std::string(""))
+  if (fullName.empty())
   {
     vtkErrorMacro("vtkMRMLAnnotationSnapshotNode: File name not specified");
     return 0;
@@ -252,10 +253,4 @@ void vtkMRMLAnnotationSnapshotStorageNode::InitializeSupportedWriteFileTypes()
   this->SupportedWriteFileTypes->InsertNextValue("JPEG (.jpeg)");
   this->SupportedWriteFileTypes->InsertNextValue("TIFF (.tiff)");
   this->SupportedWriteFileTypes->InsertNextValue("BMP (.bmp)");
-}
-
-//----------------------------------------------------------------------------
-const char* vtkMRMLAnnotationSnapshotStorageNode::GetDefaultWriteFileExtension()
-{
-  return "png";
 }

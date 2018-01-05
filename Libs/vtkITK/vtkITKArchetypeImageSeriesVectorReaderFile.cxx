@@ -16,9 +16,10 @@
 #include "vtkITKArchetypeImageSeriesVectorReaderFile.h"
 
 // VTK includes
+#include <vtkAOSDataArrayTemplate.h>
 #include <vtkCommand.h>
 #include <vtkDataArray.h>
-#include <vtkDataArrayTemplate.h>
+#include <vtkErrorCode.h>
 #include <vtkImageData.h>
 #include <vtkObjectFactory.h>
 #include <vtkPointData.h>
@@ -32,9 +33,9 @@ vtkStandardNewMacro(vtkITKArchetypeImageSeriesVectorReaderFile);
 namespace {
 
 template <class T>
-vtkDataArrayTemplate<T>* DownCast(vtkAbstractArray* a)
+vtkAOSDataArrayTemplate<T>* DownCast(vtkAbstractArray* a)
 {
-  return vtkDataArrayTemplate<T>::FastDownCast(a);
+  return vtkAOSDataArrayTemplate<T>::FastDownCast(a);
 }
 
 };
@@ -89,7 +90,7 @@ void vtkITKExecuteDataFromFileVector(
   void *ptr = static_cast<void *> (PixelContainer2->GetBufferPointer());
   DownCast<T>(data->GetPointData()->GetScalars())
     ->SetVoidArray(ptr, PixelContainer2->Size(), 0,
-                   vtkDataArrayTemplate<T>::VTK_DATA_ARRAY_DELETE);
+                   vtkAOSDataArrayTemplate<T>::VTK_DATA_ARRAY_DELETE);
   PixelContainer2->ContainerManageMemoryOff();
 }
 
@@ -101,6 +102,7 @@ void vtkITKArchetypeImageSeriesVectorReaderFile::ExecuteDataWithInformation(vtkD
     if (!this->Superclass::Archetype)
       {
         vtkErrorMacro("An Archetype must be specified.");
+        this->SetErrorCode(vtkErrorCode::NoFileNameError);
         return;
       }
     vtkImageData *data = this->AllocateOutputData(output, outInfo);
@@ -125,12 +127,16 @@ void vtkITKArchetypeImageSeriesVectorReaderFile::ExecuteDataWithInformation(vtkD
       vtkTemplateMacroCase(VTK_UNSIGNED_CHAR, unsigned char, vtkITKExecuteDataFromFileVector<VTK_TT>(this, data));
     default:
         vtkErrorMacro(<< "UpdateFromFile: Unknown data type " << this->OutputScalarType);
+        this->SetErrorCode(vtkErrorCode::UnrecognizedFileTypeError);
       }
+
+    this->SetMetaDataScalarRangeToPointDataInfo(data);
     }
   else
     {
     // ERROR - should have used the series reader
     vtkErrorMacro("There is more than one file, use the VectorReaderSeries instead");
+    this->SetErrorCode(vtkErrorCode::FileFormatError);
     }
 }
 

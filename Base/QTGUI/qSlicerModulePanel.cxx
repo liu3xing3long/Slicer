@@ -41,13 +41,6 @@ public:
   void setupUi(qSlicerWidget* widget);
 
   bool HelpAndAcknowledgmentVisible;
-  /*
-  QTextBrowser*          HelpLabel;
-  //QWebView*              HelpLabel;
-  QBoxLayout*            Layout;
-  QScrollArea*           ScrollArea;
-  ctkCollapsibleButton* HelpCollapsibleButton;
-  */
 };
 
 //---------------------------------------------------------------------------
@@ -180,7 +173,7 @@ void qSlicerModulePanel::addModule(qSlicerAbstractCoreModule* module)
   if (app)
     {
     QString wikiVersion = "Nightly";
-    if (app->isRelease())
+    if (app->releaseType() == "Stable")
       {
       wikiVersion = QString("%1.%2").arg(app->majorVersion()).arg(app->minorVersion());
       }

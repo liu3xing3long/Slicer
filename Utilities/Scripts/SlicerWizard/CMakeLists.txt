@@ -1,5 +1,5 @@
-if(NOT "${Slicer_VERSION_TWEAK}" STREQUAL "") # This is set only for release
-  set(Slicer_VERSION_TWEAK_OR_DEV "${Slicer_VERSION_TWEAK}")
+if("${Slicer_RELEASE_TYPE}" STREQUAL "Stable")
+  set(Slicer_VERSION_TWEAK_OR_DEV "0")
 else()
   set(Slicer_VERSION_TWEAK_OR_DEV "\"dev0\"")
 endif()
@@ -12,7 +12,8 @@ endif()
 configure_file(
   "__version__.py.in"
   "${CMAKE_CURRENT_SOURCE_DIR}/__version__.py"
-  @ONLY)
+  @ONLY
+  NEWLINE_STYLE UNIX)
 
 set(SlicerWizard_PYTHON_SCRIPTS
   __init__.py

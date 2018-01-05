@@ -62,6 +62,11 @@ public:
 
   /// Flag to trigger or not the StatusModifiedEvent
   mutable bool InvokeStatusModifiedEvent;
+
+  /// Output messages of last execution (printed to stdout)
+  std::string OutputText;
+  /// Error messages of last execution (printed to stderr)
+  std::string ErrorText;
 };
 
 ModuleDescriptionMap vtkMRMLCommandLineModuleNode::vtkInternal::RegisteredModules;
@@ -149,7 +154,7 @@ void vtkMRMLCommandLineModuleNode::WriteXML(ostream& of, int nIndent)
       // variable and it was getting over written when used twice before the
       // buffer was flushed.
       of << " " << this->URLEncodeString ( (*pit).GetName().c_str() );
-      of  << "=\"" << this->URLEncodeString ( (*pit).GetDefault().c_str() ) << "\"";
+      of  << "=\"" << this->URLEncodeString ( (*pit).GetValue().c_str() ) << "\"";
       }
     }
 
@@ -247,7 +252,7 @@ void vtkMRMLCommandLineModuleNode::ReadXMLAttributes(const char** atts)
 
     if (this->Internal->ModuleDescriptionObject.HasParameter(attName))
       {
-      this->Internal->ModuleDescriptionObject.SetParameterDefaultValue(sattName.c_str(),sattValue.c_str());
+      this->Internal->ModuleDescriptionObject.SetParameterValue(sattName.c_str(),sattValue.c_str());
       }
     }
   this->EndModify(wasModifying);
@@ -282,7 +287,7 @@ void vtkMRMLCommandLineModuleNode::PrintSelf(ostream& os, vtkIndent indent)
     std::vector<ModuleParameter>::const_iterator pendit = (*pgit).GetParameters().end();
     for (std::vector<ModuleParameter>::const_iterator pit = pbeginit; pit != pendit; ++pit)
       {
-      os << indent << " " << (*pit).GetName() << " = " << (*pit).GetDefault() << "\n";
+      os << indent << " " << (*pit).GetName() << " = " << (*pit).GetValue() << "\n";
       }
     }
 }
@@ -366,7 +371,7 @@ bool vtkMRMLCommandLineModuleNode
 {
   bool isInput = false;
   std::vector<ModuleParameter> parameters =
-    this->Internal->ModuleDescriptionObject.FindParametersWithDefaultValue(
+    this->Internal->ModuleDescriptionObject.FindParametersWithValue(
       value);
   // It is an input if it is not an output.
   std::vector<ModuleParameter>::const_iterator it;
@@ -399,7 +404,7 @@ bool vtkMRMLCommandLineModuleNode
   // specified
   if (value != oldValue)
     {
-    if (!this->Internal->ModuleDescriptionObject.SetParameterDefaultValue(name, value))
+    if (!this->Internal->ModuleDescriptionObject.SetParameterValue(name, value))
       {
 #ifndef NDEBUG
       if (!this->Internal->ModuleDescriptionObject.HasParameter(name))
@@ -455,7 +460,7 @@ bool vtkMRMLCommandLineModuleNode
   // specified
   if (value != this->GetParameterAsString(name))
     {
-    if (!this->Internal->ModuleDescriptionObject.SetParameterDefaultValue(name, value))
+    if (!this->Internal->ModuleDescriptionObject.SetParameterValue(name, value))
       {
 #ifndef NDEBUG
       if (!this->Internal->ModuleDescriptionObject.HasParameter(name))
@@ -516,7 +521,7 @@ bool vtkMRMLCommandLineModuleNode
 //----------------------------------------------------------------------------
 std::string vtkMRMLCommandLineModuleNode::GetParameterAsString(const char *name) const
 {
-  return this->Internal->ModuleDescriptionObject.GetParameterDefaultValue(name);
+  return this->Internal->ModuleDescriptionObject.GetParameterValue(name);
 }
 
 //----------------------------------------------------------------------------
@@ -610,19 +615,19 @@ unsigned int vtkMRMLCommandLineModuleNode::GetAutoRunDelay() const
 }
 
 //----------------------------------------------------------------------------
-unsigned long vtkMRMLCommandLineModuleNode::GetLastRunTime() const
+vtkMTimeType vtkMRMLCommandLineModuleNode::GetLastRunTime() const
 {
   return this->Internal->LastRunTime.GetMTime();
 }
 
 //----------------------------------------------------------------------------
-unsigned long vtkMRMLCommandLineModuleNode::GetParameterMTime() const
+vtkMTimeType vtkMRMLCommandLineModuleNode::GetParameterMTime() const
 {
   return this->Internal->ParameterMTime.GetMTime();
 }
 
 //----------------------------------------------------------------------------
-unsigned long vtkMRMLCommandLineModuleNode::GetInputMTime() const
+vtkMTimeType vtkMRMLCommandLineModuleNode::GetInputMTime() const
 {
   return this->Internal->InputMTime.GetMTime();
 }
@@ -932,11 +937,17 @@ std::string vtkMRMLCommandLineModuleNode::GetParameterIndex ( unsigned int group
 //----------------------------------------------------------------------------
 std::string vtkMRMLCommandLineModuleNode::GetParameterDefault ( unsigned int group, unsigned int param ) const
 {
+  return this->GetParameterValue(group, param);
+}
+
+//----------------------------------------------------------------------------
+std::string vtkMRMLCommandLineModuleNode::GetParameterValue ( unsigned int group, unsigned int param ) const
+{
   if (!this->IsValidParamId(group, param))
     {
     return std::string();
     }
-  return this->GetModuleDescription().GetParameterGroups()[group].GetParameters()[param].GetDefault();
+  return this->GetModuleDescription().GetParameterGroups()[group].GetParameters()[param].GetValue();
 }
 
 //----------------------------------------------------------------------------
@@ -1018,5 +1029,45 @@ void vtkMRMLCommandLineModuleNode::Modified()
   if (invokeStatusModifiedEvent)
     {
     this->InvokeEvent(vtkMRMLCommandLineModuleNode::StatusModifiedEvent);
+    }
+}
+
+//----------------------------------------------------------------------------
+const std::string vtkMRMLCommandLineModuleNode::GetErrorText() const
+{
+  return this->Internal->ErrorText;
+}
+
+//----------------------------------------------------------------------------
+const std::string vtkMRMLCommandLineModuleNode::GetOutputText() const
+{
+  return this->Internal->OutputText;
+}
+
+//----------------------------------------------------------------------------
+void vtkMRMLCommandLineModuleNode::SetErrorText(const std::string& text, bool modify)
+{
+  if (this->Internal->ErrorText == text)
+    {
+    return;
+    }
+  this->Internal->ErrorText = text;
+  if (modify)
+    {
+    this->Modified();
+    }
+}
+
+//----------------------------------------------------------------------------
+void vtkMRMLCommandLineModuleNode::SetOutputText(const std::string& text, bool modify)
+{
+  if (this->Internal->OutputText == text)
+    {
+    return;
+    }
+  this->Internal->OutputText = text;
+  if (modify)
+    {
+    this->Modified();
     }
 }

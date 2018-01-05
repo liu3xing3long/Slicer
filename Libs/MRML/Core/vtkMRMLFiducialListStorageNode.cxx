@@ -27,6 +27,7 @@ vtkMRMLFiducialListStorageNode::vtkMRMLFiducialListStorageNode()
 {
   // version 2 has the new glyph symbol numbering, which starts at 1
   this->Version = 2;
+  this->DefaultWriteFileExtension = "fcsv";
 }
 
 //----------------------------------------------------------------------------
@@ -51,7 +52,7 @@ int vtkMRMLFiducialListStorageNode::ReadDataInternal(vtkMRMLNode *refNode)
 {
   std::string fullName = this->GetFullNameFromFileName();
 
-  if (fullName == std::string(""))
+  if (fullName.empty())
     {
     vtkErrorMacro("vtkMRMLFiducialListStorageNode: File name not specified");
     return 0;
@@ -433,7 +434,7 @@ int vtkMRMLFiducialListStorageNode::ReadDataInternal(vtkMRMLNode *refNode)
 int vtkMRMLFiducialListStorageNode::WriteDataInternal(vtkMRMLNode *refNode)
 {
   std::string fullName = this->GetFullNameFromFileName();
-  if (fullName == std::string(""))
+  if (fullName.empty())
     {
     vtkErrorMacro("vtkMRMLFiducialListStorageNode: File name not specified");
     return 0;
@@ -515,10 +516,4 @@ void vtkMRMLFiducialListStorageNode::InitializeSupportedReadFileTypes()
 void vtkMRMLFiducialListStorageNode::InitializeSupportedWriteFileTypes()
 {
   this->SupportedWriteFileTypes->InsertNextValue("Fiducial List CSV (.fcsv)");
-}
-
-//----------------------------------------------------------------------------
-const char* vtkMRMLFiducialListStorageNode::GetDefaultWriteFileExtension()
-{
-  return "fcsv";
 }

@@ -55,6 +55,7 @@ ITKImageFileFormat FileFormatTable[] =
   {"MGHImageIO", "Uncompressed FreeSurfer pixel data in binary", "MGH", ".mgh"},
   {"MGHImageIO", "Gzip Compressed FreeSurfer pixel data in binary", "MGH", ".mgz"},
   {"MGHImageIO", "Gzip Compressed FreeSurfer pixel data in binary", "MGH", ".mgh.gz"},
+  {"MINCImageIO", "MINC2 binary pixel data using HDF5 with optional internal zlib compression", "MINC2", ".mnc"},
   {"MRCImageIO", "Cryo-electron tomography and molecular imaging", "MRC", ".mrc"},
   {"MRCImageIO", "Cryo-electron tomography and molecular imaging", "MRC", ".rec"},
   {"NiftiImageIO", "Header information in binary", "NifTI", ".nia"},
@@ -193,6 +194,10 @@ void vtkDataFileFormatHelper::PopulateITKSupportedWriteFileTypes()
 std::string vtkDataFileFormatHelper::GetFileExtensionFromFormatString(
   const char* format)
 {
+  // Format string: "short descriptive string (.EXT)"
+  // also supports: ".EXT" however this is deprecated
+  //                and use will print warning.
+
   std::string fileformat(format);
   std::string::size_type pos1 = fileformat.find("(");
   std::string::size_type pos2 = fileformat.find(")");
@@ -212,12 +217,29 @@ std::string vtkDataFileFormatHelper::GetFileExtensionFromFormatString(
       fileext = fileext.substr(0, pos1);
       }
     std::string lowercaseExtension=vtksys::SystemTools::LowerCase(fileext);
+    // make sure there is a leading . character
+    if (!lowercaseExtension.empty() && lowercaseExtension[0] != '.')
+      {
+      lowercaseExtension = std::string(".") + lowercaseExtension;
+      }
     return lowercaseExtension;
     }
-  else
+
+  // handle extension-only formats
+  pos1 = fileformat.find_first_of(".");
+  if (pos1 != std::string::npos)
     {
-    return "";
+    std::string lowerCaseExtension = vtksys::SystemTools::LowerCase(fileformat.substr(pos1));
+    if (!lowerCaseExtension.empty())
+      {
+      vtkGenericWarningMacro("vtkDataFileFormatHelper::GetFileExtensionFromFormatString: please update deprecated "
+        "extension-only format specifier to 'File format name (.ext)' format! "
+        "Current format string: " << fileformat.c_str());
+      return lowerCaseExtension;
+      }
     }
+  // default case
+  return "";
 }
 
 //----------------------------------------------------------------------------

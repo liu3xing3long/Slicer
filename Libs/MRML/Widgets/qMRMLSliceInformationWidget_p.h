@@ -75,7 +75,7 @@ public slots:
 
 
 public:
-  vtkMRMLSliceNode*                   MRMLSliceNode;
+  vtkWeakPointer<vtkMRMLSliceNode>    MRMLSliceNode;
   QButtonGroup*                       SliceSpacingModeGroup;
 
 };

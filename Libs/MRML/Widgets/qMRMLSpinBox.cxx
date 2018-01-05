@@ -85,7 +85,7 @@ void qMRMLSpinBoxPrivate::setAndObserveSelectionNode()
   if (this->MRMLScene)
     {
     selectionNode = vtkMRMLSelectionNode::SafeDownCast(
-      this->MRMLScene->GetNthNodeByClass(0, "vtkMRMLSelectionNode"));
+      this->MRMLScene->GetNodeByID("vtkMRMLSelectionNodeSingleton"));
     }
 
   q->qvtkReconnect(this->SelectionNode, selectionNode,
@@ -219,7 +219,7 @@ void qMRMLSpinBox::updateWidgetFromUnitNode()
         {
         this->setMinimum(unitNode->GetMinimumValue());
         }
-      if (d->Flags.testFlag(qMRMLSpinBox::MinimumValue))
+      if (d->Flags.testFlag(qMRMLSpinBox::MaximumValue))
         {
         this->setMaximum(unitNode->GetMaximumValue());
         }

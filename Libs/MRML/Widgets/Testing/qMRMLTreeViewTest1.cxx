@@ -22,7 +22,15 @@
 #include <qMRMLTreeView.h>
 #include <qMRMLSceneTransformModel.h>
 
+// Slicer includes
+#include "vtkSlicerConfigure.h"
+
+// VTK includes
+#include <vtkMRMLApplicationLogic.h>
 #include <vtkMRMLScene.h>
+#ifdef Slicer_VTK_USE_QVTKOPENGLWIDGET
+#include <QVTKOpenGLWidget.h>
+#endif
 
 #include <vtkTimerLog.h>
 
@@ -30,6 +38,13 @@
 
 int qMRMLTreeViewTest1( int argc, char * argv [] )
 {
+#ifdef Slicer_VTK_USE_QVTKOPENGLWIDGET
+  // Set default surface format for QVTKOpenGLWidget
+  QSurfaceFormat format = QVTKOpenGLWidget::defaultFormat();
+  format.setSamples(0);
+  QSurfaceFormat::setDefaultFormat(format);
+#endif
+
   QApplication app(argc, argv);
   if( argc < 2 )
     {
@@ -41,18 +56,23 @@ int qMRMLTreeViewTest1( int argc, char * argv [] )
   std::cout << std::endl<< "***************************************" << std::endl;
   vtkTimerLog* timer = vtkTimerLog::New();
   vtkMRMLScene* scene = vtkMRMLScene::New();
+  vtkMRMLApplicationLogic* applicationLogic = vtkMRMLApplicationLogic::New();
+  applicationLogic->SetMRMLScene(scene);
   scene->SetURL(argv[1]);
   timer->StartTimer();
   scene->Import();
   timer->StopTimer();
   std::cout << std::endl << "Loaded: " << timer->GetElapsedTime() << std::endl;
   timer->StartTimer();
+  applicationLogic->Delete();
   scene->Delete();
   timer->StopTimer();
   std::cout << std::endl << "Deleted: " << timer->GetElapsedTime() << std::endl;
 
   std::cout << std::endl<< "***************************************" << std::endl;
   scene = vtkMRMLScene::New();
+  applicationLogic = vtkMRMLApplicationLogic::New();
+  applicationLogic->SetMRMLScene(scene);
   qMRMLSceneModel   sceneModel;
   sceneModel.setMRMLScene(scene);
   scene->SetURL(argv[1]);
@@ -61,12 +81,15 @@ int qMRMLTreeViewTest1( int argc, char * argv [] )
   timer->StopTimer();
   std::cout << "qMRMLSceneModel Loaded: " << timer->GetElapsedTime() << std::endl;
   timer->StartTimer();
+  applicationLogic->Delete();
   scene->Delete();
   timer->StopTimer();
   std::cout << "qMRMLSceneModel Deleted: " << timer->GetElapsedTime() << std::endl;
 
   std::cout << std::endl<< "***************************************" << std::endl;
   scene = vtkMRMLScene::New();
+  applicationLogic = vtkMRMLApplicationLogic::New();
+  applicationLogic->SetMRMLScene(scene);
   qMRMLSceneTransformModel   transformModel;
   transformModel.setMRMLScene(scene);
   scene->SetURL(argv[1]);
@@ -75,12 +98,15 @@ int qMRMLTreeViewTest1( int argc, char * argv [] )
   timer->StopTimer();
   std::cout << "qMRMLSceneTransformModel Loaded: " << timer->GetElapsedTime() << std::endl;
   timer->StartTimer();
+  applicationLogic->Delete();
   scene->Delete();
   timer->StopTimer();
   std::cout << "qMRMLSceneTransformModel Deleted: " << timer->GetElapsedTime() << std::endl;
 
   std::cout << std::endl<< "***************************************" << std::endl;
   scene = vtkMRMLScene::New();
+  applicationLogic = vtkMRMLApplicationLogic::New();
+  applicationLogic->SetMRMLScene(scene);
   qMRMLSceneTransformModel   transformModel2;
   transformModel2.setMRMLScene(scene);
   qMRMLSortFilterProxyModel  sortModel;
@@ -91,6 +117,7 @@ int qMRMLTreeViewTest1( int argc, char * argv [] )
   timer->StopTimer();
   std::cout << "qMRMLSceneTransformModel(+qMRMLSortFilterProxyModel) Loaded: " << timer->GetElapsedTime() << std::endl;
   timer->StartTimer();
+  applicationLogic->Delete();
   scene->Delete();
   timer->StopTimer();
   std::cout << "qMRMLSceneTransformModel(+qMRMLSortFilterProxyModel) Deleted: " << timer->GetElapsedTime() << std::endl;
@@ -98,6 +125,8 @@ int qMRMLTreeViewTest1( int argc, char * argv [] )
 
   std::cout << std::endl<< "***************************************" << std::endl;
   scene = vtkMRMLScene::New();
+  applicationLogic = vtkMRMLApplicationLogic::New();
+  applicationLogic->SetMRMLScene(scene);
   qMRMLTreeView   mrmlItem;
   mrmlItem.setMRMLScene(scene);
   scene->SetURL(argv[1]);
@@ -106,12 +135,15 @@ int qMRMLTreeViewTest1( int argc, char * argv [] )
   timer->StopTimer();
   std::cout << "qMRMLTreeView Loaded: " << timer->GetElapsedTime() << std::endl;
   timer->StartTimer();
+  applicationLogic->Delete();
   scene->Delete();
   timer->StopTimer();
   std::cout << "qMRMLTreeView Deleted: " << timer->GetElapsedTime() << std::endl;
 
   std::cout << std::endl<< "***************************************" << std::endl;
   scene = vtkMRMLScene::New();
+  applicationLogic = vtkMRMLApplicationLogic::New();
+  applicationLogic->SetMRMLScene(scene);
   qMRMLTreeView   treeWidget;
   treeWidget.show();
   treeWidget.setMRMLScene(scene);
@@ -121,6 +153,7 @@ int qMRMLTreeViewTest1( int argc, char * argv [] )
   timer->StopTimer();
   std::cout << "qMRMLTreeView visible Loaded: " << timer->GetElapsedTime() << std::endl;
   timer->StartTimer();
+  applicationLogic->Delete();
   scene->Delete();
   timer->StopTimer();
   std::cout << "qMRMLTreeView visible Deleted: " << timer->GetElapsedTime() << std::endl;

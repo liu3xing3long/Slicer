@@ -22,7 +22,7 @@
 #include <QPixmap>
 
 // CTK includes
-#include <ctkVTKScalarsToColorsUtils.h>
+#include <ctkVTKWidgetsUtils.h>
 
 // qMRML includes
 #include "qMRMLSceneColorTableModel.h"
@@ -42,7 +42,7 @@ public:
     ColorGradient();
     void updatePixmap(vtkScalarsToColors* scalarsToColors);
 
-    unsigned long MTime;
+    vtkMTimeType  MTime;
     QPixmap       Pixmap;
   };
 

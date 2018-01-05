@@ -27,6 +27,9 @@
 // SlicerQt includes
 #include "qSlicerAbstractModule.h"
 
+// SlicerExecutionModel includes
+#include <ModuleDescription.h>
+
 #include "qSlicerBaseQTCLIExport.h"
 
 class ModuleLogo;
@@ -83,12 +86,20 @@ public:
   /// Extracted from the "contributor" field
   virtual QStringList contributors() const;
 
+  /// Specify editable node types
+  virtual QStringList associatedNodeTypes()const;
+
   virtual QImage logo() const;
   void setLogo(const ModuleLogo& logo);
 
   /// Convert a ModuleLogo into a QIcon
   /// \todo: Find a better place for this util function
   static QImage moduleLogoToImage(const ModuleLogo& logo);
+
+  /// Return the module description object used to store
+  /// the module properties.
+  ModuleDescription& moduleDescription();
+
 protected:
   ///
   virtual void setup();

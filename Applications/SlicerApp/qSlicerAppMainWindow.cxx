@@ -35,6 +35,7 @@
 #include <QSettings>
 #include <QShowEvent>
 #include <QSignalMapper>
+#include <QTextEdit>
 #include <QTimer>
 #include <QToolButton>
 
@@ -101,12 +102,14 @@ qSlicerAppMainWindowPrivate::qSlicerAppMainWindowPrivate(qSlicerAppMainWindow& o
   : q_ptr(&object)
 {
 #ifdef Slicer_USE_PYTHONQT
-  this->PythonConsole = 0;
+  this->PythonConsoleDockWidget = 0;
+  this->PythonConsoleToggleViewAction = 0;
 #endif
   this->ErrorLogWidget = 0;
   this->ErrorLogToolButton = 0;
   this->ModuleSelectorToolBar = 0;
   this->LayoutManager = 0;
+  this->WindowInitialShowCompleted = false;
 }
 
 //-----------------------------------------------------------------------------
@@ -256,11 +259,8 @@ void qSlicerAppMainWindowPrivate::setupUi(QMainWindow * mainWindow)
   toolBarActions << this->CaptureToolBar->toggleViewAction();
   toolBarActions << this->ViewersToolBar->toggleViewAction();
   toolBarActions << this->DialogToolBar->toggleViewAction();
+  this->WindowToolBarsMenu->addActions(toolBarActions);
 
-  this->WindowToolBarsMenu->insertActions(
-    this->WindowToolbarsResetToDefaultAction, toolBarActions);
-  this->WindowToolBarsMenu->insertSeparator(
-    this->WindowToolbarsResetToDefaultAction);
   //----------------------------------------------------------------------------
   // Hide toolbars by default
   //----------------------------------------------------------------------------
@@ -324,6 +324,8 @@ void qSlicerAppMainWindowPrivate::setupUi(QMainWindow * mainWindow)
                    SLOT(setMRMLScene(vtkMRMLScene*)));
   QObject::connect(this->LayoutManager, SIGNAL(layoutChanged(int)),
                    q, SLOT(onLayoutChanged(int)));
+  QObject::connect(this->LayoutManager, SIGNAL(nodeAboutToBeEdited(vtkMRMLNode*)),
+                   qSlicerApplication::application(), SLOT(openNodeModule(vtkMRMLNode*)));
 
   // TODO: When module will be managed by the layoutManager, this should be
   //       revisited.
@@ -388,10 +390,32 @@ void qSlicerAppMainWindowPrivate::setupUi(QMainWindow * mainWindow)
   layoutButton->setText(q->tr("Layout"));
   layoutButton->setMenu(this->LayoutMenu);
   layoutButton->setPopupMode(QToolButton::InstantPopup);
+
   layoutButton->setDefaultAction(this->ViewLayoutConventionalAction);
+
   QObject::connect(this->LayoutMenu, SIGNAL(triggered(QAction*)),
                    layoutButton, SLOT(setDefaultAction(QAction*)));
   QObject::connect(this->LayoutMenu, SIGNAL(triggered(QAction*)),
+                   q, SLOT(onLayoutActionTriggered(QAction*)));
+
+  QObject::connect(this->menuConventionalQuantitative, SIGNAL(triggered(QAction*)),
+                   layoutButton, SLOT(setDefaultAction(QAction*)));
+  QObject::connect(this->menuConventionalQuantitative, SIGNAL(triggered(QAction*)),
+                   q, SLOT(onLayoutActionTriggered(QAction*)));
+
+  QObject::connect(this->menuFourUpQuantitative, SIGNAL(triggered(QAction*)),
+                   layoutButton, SLOT(setDefaultAction(QAction*)));
+  QObject::connect(this->menuFourUpQuantitative, SIGNAL(triggered(QAction*)),
+                   q, SLOT(onLayoutActionTriggered(QAction*)));
+
+  QObject::connect(this->menuOneUpQuantitative, SIGNAL(triggered(QAction*)),
+                   layoutButton, SLOT(setDefaultAction(QAction*)));
+  QObject::connect(this->menuOneUpQuantitative, SIGNAL(triggered(QAction*)),
+                   q, SLOT(onLayoutActionTriggered(QAction*)));
+
+  QObject::connect(this->menuThreeOverThreeQuantitative, SIGNAL(triggered(QAction*)),
+                   layoutButton, SLOT(setDefaultAction(QAction*)));
+  QObject::connect(this->menuThreeOverThreeQuantitative, SIGNAL(triggered(QAction*)),
                    q, SLOT(onLayoutActionTriggered(QAction*)));
 
   this->ViewToolBar->addWidget(layoutButton);
@@ -463,15 +487,44 @@ void qSlicerAppMainWindowPrivate::setupUi(QMainWindow * mainWindow)
 #ifdef Slicer_USE_PYTHONQT
   if (q->pythonConsole())
     {
+    if (QSettings().value("Python/DockableWindow").toBool())
+      {
+      this->PythonConsoleDockWidget = new QDockWidget(q->tr("Python Interactor"));
+      this->PythonConsoleDockWidget->setObjectName("PythonConsoleDockWidget");
+      this->PythonConsoleDockWidget->setAllowedAreas(Qt::AllDockWidgetAreas);
+      this->PythonConsoleDockWidget->setWidget(q->pythonConsole());
+      this->PythonConsoleToggleViewAction = this->PythonConsoleDockWidget->toggleViewAction();
+      // Set default state
+      q->addDockWidget(Qt::BottomDockWidgetArea, this->PythonConsoleDockWidget);
+      this->PythonConsoleDockWidget->hide();
+      }
+    else
+      {
+      ctkPythonConsole* pythonConsole = q->pythonConsole();
+      pythonConsole->setWindowTitle("Slicer Python Interactor");
+      pythonConsole->resize(600, 280);
+      pythonConsole->hide();
+      this->PythonConsoleToggleViewAction = new QAction("", this->ViewMenu);
+      this->PythonConsoleToggleViewAction->setCheckable(true);
+      }
     QObject::connect(q->pythonConsole(), SIGNAL(aboutToExecute(const QString&)),
       q, SLOT(onPythonConsoleUserInput(const QString&)));
+    // Set up show/hide action
+    this->PythonConsoleToggleViewAction->setText(q->tr("&Python Interactor"));
+    this->PythonConsoleToggleViewAction->setToolTip(q->tr(
+      "Show Python Interactor window for controlling the application's data, user interface, and internals"));
+    this->PythonConsoleToggleViewAction->setShortcut(QKeySequence("Ctrl+3"));
+    QObject::connect(this->PythonConsoleToggleViewAction, SIGNAL(toggled(bool)),
+      q, SLOT(onPythonConsoleToggled(bool)));
+    this->ViewMenu->insertAction(this->WindowToolBarsMenu->menuAction(), this->PythonConsoleToggleViewAction);
+    this->PythonConsoleToggleViewAction->setIcon(QIcon(":/python-icon.png"));
+    this->DialogToolBar->addAction(this->PythonConsoleToggleViewAction);
     }
   else
     {
     qWarning("qSlicerAppMainWindowPrivate::setupUi: Failed to create Python console");
     }
 #endif
-
 }
 
 //-----------------------------------------------------------------------------
@@ -720,28 +773,12 @@ qSlicerModuleSelectorToolBar* qSlicerAppMainWindow::moduleSelector()const
 //---------------------------------------------------------------------------
 ctkPythonConsole* qSlicerAppMainWindow::pythonConsole()const
 {
-  Q_D(const qSlicerAppMainWindow);
-  if (!d->PythonConsole)
-    {
-    // Lookup reference of 'PythonConsole' widget
-    // and cache the value
-    foreach(QWidget * widget, qApp->topLevelWidgets())
-      {
-      if(widget->objectName().compare(QLatin1String("pythonConsole")) == 0)
-        {
-        const_cast<qSlicerAppMainWindowPrivate*>(d)
-          ->PythonConsole = qobject_cast<ctkPythonConsole*>(widget);
-        break;
-        }
-      }
-    }
-  return d->PythonConsole;
+  return qSlicerCoreApplication::application()->pythonConsole();
 }
 
 //---------------------------------------------------------------------------
 void qSlicerAppMainWindow::onPythonConsoleUserInput(const QString& cmd)
 {
-  Q_D(qSlicerAppMainWindow);
   if (!cmd.isEmpty())
     {
     qDebug("Python console user input: %s", qPrintable(cmd));
@@ -896,6 +933,12 @@ void qSlicerAppMainWindow::on_EditRedoAction_triggered()
 }
 
 //---------------------------------------------------------------------------
+void qSlicerAppMainWindow::on_ModuleHomeAction_triggered()
+{
+  this->setHomeModuleCurrent();
+}
+
+//---------------------------------------------------------------------------
 void qSlicerAppMainWindow::setLayout(int layout)
 {
   qSlicerApplication::application()->layoutManager()->setLayout(layout);
@@ -923,14 +966,48 @@ void qSlicerAppMainWindow::on_WindowErrorLogAction_triggered()
 }
 
 //-----------------------------------------------------------------------------
-void qSlicerAppMainWindow::on_WindowPythonInteractorAction_triggered()
+void qSlicerAppMainWindow::onPythonConsoleToggled(bool toggled)
 {
+  Q_D(qSlicerAppMainWindow);
 #ifdef Slicer_USE_PYTHONQT
-  ctkPythonConsole* console = this->pythonConsole();
-  Q_ASSERT(console);
-  console->show();
-  console->activateWindow();
-  console->raise();
+  ctkPythonConsole* pythonConsole = this->pythonConsole();
+  if (!pythonConsole)
+    {
+    qCritical() << Q_FUNC_INFO << " failed: python console is not available";
+    return;
+    }
+  if (d->PythonConsoleDockWidget)
+    {
+    // Dockable Python console
+    if (toggled)
+      {
+      if (d->PythonConsoleDockWidget)
+        {
+        d->PythonConsoleDockWidget->activateWindow();
+        QTextEdit* textEditWidget = pythonConsole->findChild<QTextEdit*>();
+        if (textEditWidget)
+          {
+          textEditWidget->setFocus();
+          }
+        }
+      }
+    }
+  else
+    {
+    // Independent Python console
+    if (toggled)
+      {
+      pythonConsole->show();
+      pythonConsole->activateWindow();
+      pythonConsole->raise();
+      }
+    else
+      {
+      pythonConsole->hide();
+      }
+    }
+#else
+  Q_UNUSED(toggled);
 #endif
 }
 
@@ -972,22 +1049,39 @@ void qSlicerAppMainWindow::on_HelpKeyboardShortcutsAction_triggered()
 //---------------------------------------------------------------------------
 void qSlicerAppMainWindow::on_HelpBrowseTutorialsAction_triggered()
 {
-  QDesktopServices::openUrl(QUrl(QString(
-    "http://www.slicer.org/slicerWiki/index.php/Documentation/%1.%2/Training")
-      .arg(Slicer_VERSION_MAJOR).arg(Slicer_VERSION_MINOR)));
+  QString url;
+  if (qSlicerApplication::application()->releaseType() == "Stable")
+    {
+    url = QString("http://www.slicer.org/slicerWiki/index.php/Documentation/%1.%2/Training")
+                    .arg(Slicer_VERSION_MAJOR).arg(Slicer_VERSION_MINOR);
+    }
+  else
+    {
+    url = QString("http://www.slicer.org/slicerWiki/index.php/Documentation/Nightly/Training");
+    }
+  QDesktopServices::openUrl(QUrl(url));
 }
+
 //---------------------------------------------------------------------------
 void qSlicerAppMainWindow::on_HelpInterfaceDocumentationAction_triggered()
 {
-  QDesktopServices::openUrl(QUrl(QString(
-    "http://wiki.slicer.org/slicerWiki/index.php/Documentation/%1.%2")
-      .arg(Slicer_VERSION_MAJOR).arg(Slicer_VERSION_MINOR)));
+  QString url;
+  if (qSlicerApplication::application()->releaseType() == "Stable")
+    {
+    url = QString("http://www.slicer.org/slicerWiki/index.php/Documentation/%1.%2")
+                    .arg(Slicer_VERSION_MAJOR).arg(Slicer_VERSION_MINOR);
+    }
+  else
+    {
+    url = QString("http://www.slicer.org/slicerWiki/index.php/Documentation/Nightly");
+    }
+  QDesktopServices::openUrl(QUrl(url));
 }
 
 //---------------------------------------------------------------------------
 void qSlicerAppMainWindow::on_HelpSlicerPublicationsAction_triggered()
 {
-  QDesktopServices::openUrl(QUrl("http://www.slicer.org/publications"));
+  QDesktopServices::openUrl(QUrl("http://www.spl.harvard.edu/publications/pages/display/?collection=11"));
 }
 
 //---------------------------------------------------------------------------
@@ -1064,11 +1158,32 @@ void qSlicerAppMainWindow::closeEvent(QCloseEvent *event)
 //-----------------------------------------------------------------------------
 void qSlicerAppMainWindow::showEvent(QShowEvent *event)
 {
+  Q_D(qSlicerAppMainWindow);
   this->Superclass::showEvent(event);
-  if (!event->spontaneous())
+  if (!d->WindowInitialShowCompleted)
     {
+    d->WindowInitialShowCompleted = true;
     this->disclaimer();
+    this->pythonConsoleInitialDisplay();
+    emit initialWindowShown();
     }
+}
+
+//-----------------------------------------------------------------------------
+void qSlicerAppMainWindow::pythonConsoleInitialDisplay()
+{
+  Q_D(qSlicerAppMainWindow);
+#ifdef Slicer_USE_PYTHONQT
+  qSlicerApplication * app = qSlicerApplication::application();
+  if (qSlicerCoreApplication::testAttribute(qSlicerCoreApplication::AA_DisablePython))
+    {
+    return;
+    }
+  if (app->commandOptions()->showPythonInteractor() && d->PythonConsoleDockWidget)
+    {
+    d->PythonConsoleDockWidget->show();
+    }
+#endif
 }
 
 //-----------------------------------------------------------------------------
@@ -1108,14 +1223,18 @@ void qSlicerAppMainWindow::setupMenuActions()
   d->ViewLayoutConventionalAction->setData(vtkMRMLLayoutNode::SlicerLayoutConventionalView);
   d->ViewLayoutConventionalWidescreenAction->setData(vtkMRMLLayoutNode::SlicerLayoutConventionalWidescreenView);
   d->ViewLayoutConventionalQuantitativeAction->setData(vtkMRMLLayoutNode::SlicerLayoutConventionalQuantitativeView);
+  d->ViewLayoutConventionalPlotAction->setData(vtkMRMLLayoutNode::SlicerLayoutConventionalPlotView);
   d->ViewLayoutFourUpAction->setData(vtkMRMLLayoutNode::SlicerLayoutFourUpView);
   d->ViewLayoutFourUpQuantitativeAction->setData(vtkMRMLLayoutNode::SlicerLayoutFourUpQuantitativeView);
+  d->ViewLayoutFourUpPlotAction->setData(vtkMRMLLayoutNode::SlicerLayoutFourUpPlotView);
+  d->ViewLayoutFourUpPlotTableAction->setData(vtkMRMLLayoutNode::SlicerLayoutFourUpPlotTableView);
   d->ViewLayoutFourUpTableAction->setData(vtkMRMLLayoutNode::SlicerLayoutFourUpTableView);
   d->ViewLayoutDual3DAction->setData(vtkMRMLLayoutNode::SlicerLayoutDual3DView);
   d->ViewLayoutTriple3DAction->setData(vtkMRMLLayoutNode::SlicerLayoutTriple3DEndoscopyView);
   d->ViewLayoutOneUp3DAction->setData(vtkMRMLLayoutNode::SlicerLayoutOneUp3DView);
   d->ViewLayout3DTableAction->setData(vtkMRMLLayoutNode::SlicerLayout3DTableView);
   d->ViewLayoutOneUpQuantitativeAction->setData(vtkMRMLLayoutNode::SlicerLayoutOneUpQuantitativeView);
+  d->ViewLayoutOneUpPlotAction->setData(vtkMRMLLayoutNode::SlicerLayoutOneUpPlotView);
   d->ViewLayoutOneUpRedSliceAction->setData(vtkMRMLLayoutNode::SlicerLayoutOneUpRedSliceView);
   d->ViewLayoutOneUpYellowSliceAction->setData(vtkMRMLLayoutNode::SlicerLayoutOneUpYellowSliceView);
   d->ViewLayoutOneUpGreenSliceAction->setData(vtkMRMLLayoutNode::SlicerLayoutOneUpGreenSliceView);
@@ -1126,6 +1245,7 @@ void qSlicerAppMainWindow::setupMenuActions()
   d->ViewLayoutCompareGridAction->setData(vtkMRMLLayoutNode::SlicerLayoutCompareGridView);
   d->ViewLayoutThreeOverThreeAction->setData(vtkMRMLLayoutNode::SlicerLayoutThreeOverThreeView);
   d->ViewLayoutThreeOverThreeQuantitativeAction->setData(vtkMRMLLayoutNode::SlicerLayoutThreeOverThreeQuantitativeView);
+  d->ViewLayoutThreeOverThreePlotAction->setData(vtkMRMLLayoutNode::SlicerLayoutThreeOverThreePlotView);
   d->ViewLayoutFourOverFourAction->setData(vtkMRMLLayoutNode::SlicerLayoutFourOverFourView);
   d->ViewLayoutTwoOverTwoAction->setData(vtkMRMLLayoutNode::SlicerLayoutTwoOverTwoView);
   d->ViewLayoutSideBySideAction->setData(vtkMRMLLayoutNode::SlicerLayoutSideBySideView);
@@ -1176,9 +1296,6 @@ void qSlicerAppMainWindow::setupMenuActions()
     app->revisionUserSettings()->value("Extensions/ManagerEnabled").toBool());
 #else
   d->ViewExtensionsManagerAction->setVisible(false);
-#endif
-#ifndef Slicer_USE_PYTHONQT
-  d->WindowPythonInteractorAction->setVisible(false);
 #endif
 
 #if defined Slicer_USE_QtTesting && defined Slicer_BUILD_CLI_SUPPORT
@@ -1398,6 +1515,42 @@ void qSlicerAppMainWindow::onLayoutActionTriggered(QAction* action)
       }
     }
 
+  foreach(QAction* maction, d->menuConventionalQuantitative->actions())
+    {
+    if (action->text() == maction->text())
+      {
+      found = true;
+      break;
+      }
+    }
+
+  foreach(QAction* maction, d->menuFourUpQuantitative->actions())
+    {
+    if (action->text() == maction->text())
+      {
+      found = true;
+      break;
+      }
+    }
+
+  foreach(QAction* maction, d->menuOneUpQuantitative->actions())
+    {
+    if (action->text() == maction->text())
+      {
+      found = true;
+      break;
+      }
+    }
+
+  foreach(QAction* maction, d->menuThreeOverThreeQuantitative->actions())
+    {
+    if (action->text() == maction->text())
+      {
+      found = true;
+      break;
+      }
+    }
+
   if (found)
     {
     this->setLayout(action->data().toInt());
@@ -1454,6 +1607,38 @@ void qSlicerAppMainWindow::onLayoutChanged(int layout)
       action->trigger();
       }
     }
+
+  foreach(QAction* action, d->menuConventionalQuantitative->actions())
+    {
+    if (action->data().toInt() == layout)
+      {
+      action->trigger();
+      }
+    }
+
+  foreach(QAction* action, d->menuFourUpQuantitative->actions())
+    {
+    if (action->data().toInt() == layout)
+      {
+      action->trigger();
+      }
+    }
+
+  foreach(QAction* action, d->menuOneUpQuantitative->actions())
+    {
+    if (action->data().toInt() == layout)
+      {
+      action->trigger();
+      }
+    }
+
+  foreach(QAction* action, d->menuThreeOverThreeQuantitative->actions())
+    {
+    if (action->data().toInt() == layout)
+      {
+      action->trigger();
+      }
+    }
 }
 
 //---------------------------------------------------------------------------
@@ -1496,5 +1681,16 @@ bool qSlicerAppMainWindow::eventFilter(QObject* object, QEvent* event)
       d->setErrorLogIconHighlighted(false);
       }
     }
+#ifdef Slicer_USE_PYTHONQT
+  if (object == this->pythonConsole())
+    {
+    if (event->type() == QEvent::Hide)
+      {
+      bool wasBlocked = d->PythonConsoleToggleViewAction->blockSignals(true);
+      d->PythonConsoleToggleViewAction->setChecked(false);
+      d->PythonConsoleToggleViewAction->blockSignals(wasBlocked);
+      }
+    }
+#endif
   return this->Superclass::eventFilter(object, event);
 }

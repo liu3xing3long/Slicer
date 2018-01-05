@@ -19,6 +19,7 @@ set(expected_defined_vars
   BUILD_TESTING
   CTEST_BUILD_CONFIGURATION
   CTEST_CMAKE_GENERATOR
+  CTEST_DROP_SITE
   EXTENSION_BUILD_OPTIONS_STRING
   EXTENSION_BUILD_SUBDIRECTORY
   EXTENSION_ENABLED
@@ -95,23 +96,33 @@ setIfNotDefined(CTEST_PARALLEL_LEVEL 8)
 setIfNotDefined(CTEST_MODEL "Experimental")
 
 set(label ${EXTENSION_NAME})
-set_property(GLOBAL PROPERTY SubProject ${label})
+#set_property(GLOBAL PROPERTY SubProject ${label})
 set_property(GLOBAL PROPERTY Label ${label})
 
 # If no CTestConfig.cmake file is found in ${ctestconfig_dest_dir},
 # one will be generated.
-set(ctestconfig_dest_dir ${EXTENSION_SUPERBUILD_BINARY_DIR}/${EXTENSION_BUILD_SUBDIRECTORY})
-if(NOT EXISTS ${ctestconfig_dest_dir}/CTestConfig.cmake)
-  message(STATUS "CTestConfig.cmake has been written to: ${ctestconfig_dest_dir}")
-  file(WRITE ${ctestconfig_dest_dir}/CTestConfig.cmake
+foreach(ctestconfig_dest_dir
+  ${EXTENSION_SUPERBUILD_BINARY_DIR}
+  ${EXTENSION_SUPERBUILD_BINARY_DIR}/${EXTENSION_BUILD_SUBDIRECTORY}
+  )
+  if(NOT EXISTS ${ctestconfig_dest_dir}/CTestConfig.cmake)
+    message(STATUS "CTestConfig.cmake has been written to: ${ctestconfig_dest_dir}")
+    file(WRITE ${ctestconfig_dest_dir}/CTestConfig.cmake
 "set(CTEST_PROJECT_NAME \"${EXTENSION_NAME}\")
 set(CTEST_NIGHTLY_START_TIME \"3:00:00 UTC\")
 
 set(CTEST_DROP_METHOD \"http\")
-set(CTEST_DROP_SITE \"slicer.cdash.org\")
+set(CTEST_DROP_SITE \"${CTEST_DROP_SITE}\")
 set(CTEST_DROP_LOCATION \"/submit.php?project=Slicer4\")
 set(CTEST_DROP_SITE_CDASH TRUE)")
-endif()
+  endif()
+  message(STATUS "CTestCustom.cmake has been written to: ${ctestconfig_dest_dir}")
+  configure_file(
+    ${Slicer_CMAKE_DIR}/CTestCustom.cmake.in
+    ${ctestconfig_dest_dir}/CTestCustom.cmake
+    COPYONLY
+    )
+endforeach()
 
 set(track_qualifier_cleaned "${Slicer_EXTENSIONS_TRACK_QUALIFIER}-")
 # Track associated with 'master' should default to either 'Continuous', 'Nightly' or 'Experimental'
@@ -130,6 +141,10 @@ CMAKE_GENERATOR:STRING=${CTEST_CMAKE_GENERATOR}
 CMAKE_MAKE_PROGRAM:FILEPATH=${CMAKE_MAKE_PROGRAM}
 CMAKE_C_COMPILER:FILEPATH=${CMAKE_C_COMPILER}
 CMAKE_CXX_COMPILER:FILEPATH=${CMAKE_CXX_COMPILER}
+CMAKE_CXX_STANDARD:STRING=${CMAKE_CXX_STANDARD}
+CMAKE_CXX_STANDARD_REQUIRED:BOOL=${CMAKE_CXX_STANDARD_REQUIRED}
+CMAKE_CXX_EXTENSIONS:BOOL=${CMAKE_CXX_EXTENSIONS}
+CTEST_MODEL:STRING=${CTEST_MODEL}
 GIT_EXECUTABLE:FILEPATH=${GIT_EXECUTABLE}
 Subversion_SVN_EXECUTABLE:FILEPATH=${Subversion_SVN_EXECUTABLE}
 Slicer_DIR:PATH=${Slicer_DIR}
@@ -148,7 +163,10 @@ CMAKE_OSX_SYSROOT:PATH=${CMAKE_OSX_SYSROOT}")
 endif()
 
 foreach(dep ${EXTENSION_DEPENDS})
-  set(cmakecache_content "${cmakecache_content}\n${dep}_DIR:PATH=${CMAKE_CURRENT_BINARY_DIR}/../${dep}-build")
+  set(cmakecache_content "${cmakecache_content}
+${dep}_BINARY_DIR:PATH=${${dep}_BINARY_DIR}
+${dep}_BUILD_SUBDIRECTORY:STRING=${${dep}_BUILD_SUBDIRECTORY}
+${dep}_DIR:PATH=${${dep}_BINARY_DIR}/${${dep}_BUILD_SUBDIRECTORY}")
 endforeach()
 
 #-----------------------------------------------------------------------------
@@ -157,8 +175,9 @@ set(cmakecache_current "")
 if(EXISTS ${EXTENSION_SUPERBUILD_BINARY_DIR}/CMakeCache.txt)
   file(READ ${EXTENSION_SUPERBUILD_BINARY_DIR}/CMakeCache.txt cmakecache_current)
 endif()
-if(NOT ${cmakecache_content} STREQUAL "${cmakecache_current}")
-  file(WRITE ${EXTENSION_SUPERBUILD_BINARY_DIR}/CMakeCache.txt ${cmakecache_content})
+if(NOT "${cmakecache_content}" STREQUAL "${cmakecache_current}")
+  message(STATUS "Writting ${EXTENSION_SUPERBUILD_BINARY_DIR}/CMakeCache.txt")
+  file(WRITE ${EXTENSION_SUPERBUILD_BINARY_DIR}/CMakeCache.txt "${cmakecache_content}")
 endif()
 
 # Explicitly set CTEST_BINARY_DIRECTORY so that ctest_submit find
@@ -221,16 +240,22 @@ if(build_errors GREATER "0")
 else()
   message("Packaging and uploading extension ${EXTENSION_NAME} to midas ...")
   set(package_list)
+  set(package_target "package")
+  if(RUN_CTEST_UPLOAD)
+    set(package_target "packageupload")
+  endif()
   if(RUN_CTEST_PACKAGES)
     ctest_build(
-      TARGET packageupload
+      TARGET ${package_target}
       BUILD ${EXTENSION_SUPERBUILD_BINARY_DIR}/${EXTENSION_BUILD_SUBDIRECTORY}
       APPEND
       )
-    ctest_submit(PARTS Build)
+    if(RUN_CTEST_SUBMIT)
+      ctest_submit(PARTS Build)
+    endif()
   endif()
 
-  if(RUN_CTEST_UPLOAD AND COMMAND ctest_upload)
+  if(RUN_CTEST_UPLOAD)
     message("Uploading package URL for extension ${EXTENSION_NAME} ...")
 
     file(STRINGS ${EXTENSION_SUPERBUILD_BINARY_DIR}/${EXTENSION_BUILD_SUBDIRECTORY}/PACKAGES.txt package_list)

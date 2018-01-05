@@ -28,30 +28,30 @@ class VTK_MRML_EXPORT vtkMRMLClipModelsNode : public vtkMRMLNode
 public:
   static vtkMRMLClipModelsNode *New();
   vtkTypeMacro(vtkMRMLClipModelsNode,vtkMRMLNode);
-  void PrintSelf(ostream& os, vtkIndent indent);
+  void PrintSelf(ostream& os, vtkIndent indent) VTK_OVERRIDE;
 
   //--------------------------------------------------------------------------
   /// MRMLNode methods
   //--------------------------------------------------------------------------
 
-  virtual vtkMRMLNode* CreateNodeInstance();
+  virtual vtkMRMLNode* CreateNodeInstance() VTK_OVERRIDE;
 
   ///
   /// Read node attributes from XML file
-  virtual void ReadXMLAttributes( const char** atts);
+  virtual void ReadXMLAttributes( const char** atts) VTK_OVERRIDE;
 
   ///
   /// Write this node's information to a MRML file in XML format.
-  virtual void WriteXML(ostream& of, int indent);
+  virtual void WriteXML(ostream& of, int indent) VTK_OVERRIDE;
 
 
   ///
   /// Copy the node's attributes to this object
-  virtual void Copy(vtkMRMLNode *node);
+  virtual void Copy(vtkMRMLNode *node) VTK_OVERRIDE;
 
   ///
   /// Get node XML tag name (like Volume, Model)
-  virtual const char* GetNodeTagName() {return "ClipModels";};
+  virtual const char* GetNodeTagName() VTK_OVERRIDE {return "ClipModels";}
 
   ///
   /// Indicates the type of clipping
@@ -90,6 +90,23 @@ public:
       ClipNegativeSpace = 2,
     };
 
+  ///
+  ///Indicates what clipping method should be used
+  ///Straight cut, whole cell extraction, or whole cell extraction with boundary cells
+  typedef enum
+  {
+    Straight = 0,
+    WholeCells,
+    WholeCellsWithBoundary,
+  } ClippingMethodType;
+
+  vtkGetMacro(ClippingMethod, ClippingMethodType);
+  vtkSetMacro(ClippingMethod, ClippingMethodType);
+
+  //Convert between enum and string
+  static int GetClippingMethodFromString(const char* name);
+  static const char* GetClippingMethodAsString(ClippingMethodType id);
+
 protected:
   vtkMRMLClipModelsNode();
   ~vtkMRMLClipModelsNode();
@@ -101,6 +118,8 @@ protected:
   int RedSliceClipState;
   int YellowSliceClipState;
   int GreenSliceClipState;
+
+  ClippingMethodType ClippingMethod;
 
 
 };

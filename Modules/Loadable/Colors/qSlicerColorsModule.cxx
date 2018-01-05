@@ -19,7 +19,6 @@
 ==============================================================================*/
 
 // Qt includes
-#include <QtPlugin>
 #include <QSettings>
 
 // CTK includes
@@ -43,7 +42,10 @@
 #include "vtkSlicerColorLogic.h"
 
 //-----------------------------------------------------------------------------
+#if (QT_VERSION < QT_VERSION_CHECK(5, 0, 0))
+#include <QtPlugin>
 Q_EXPORT_PLUGIN2(qSlicerColorsModule, qSlicerColorsModule);
+#endif
 
 //-----------------------------------------------------------------------------
 class qSlicerColorsModulePrivate
@@ -191,4 +193,10 @@ QStringList qSlicerColorsModule::contributors()const
 bool qSlicerColorsModule::isHidden()const
 {
   return false;
+}
+
+//-----------------------------------------------------------------------------
+QStringList qSlicerColorsModule::associatedNodeTypes() const
+{
+  return QStringList() << "vtkMRMLColorNode";
 }

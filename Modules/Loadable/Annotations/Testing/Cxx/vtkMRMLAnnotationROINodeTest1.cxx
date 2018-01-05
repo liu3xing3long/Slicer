@@ -1,14 +1,27 @@
-#include "vtkMRMLAnnotationROINode.h"
+
+// MRML includes
+#include <vtkMRMLAnnotationROINode.h>
+#include <vtkMRMLCoreTestingMacros.h>
+#include <vtkMRMLCoreTestingUtilities.h>
 #include <vtkMRMLScene.h>
+#include <vtkMRMLTransformNode.h>
 
-
-#include "vtkMRMLCoreTestingMacros.h"
+// VTK includes
+#include <vtkPlane.h>
+#include <vtkPlanes.h>
+#include <vtkTransform.h>
 
 /* this test has been adopted from vtkMRMLAnnotationAngleTest1 by
  * Andrey Fedorov to demonstrate some of the problems observed with the ROI
  * annotation node
  */
 
+using namespace vtkMRMLCoreTestingUtilities;
+
+//----------------------------------------------------------------------------
+int TestGetTransformedPlanes(vtkMRMLScene* scene, vtkMRMLAnnotationROINode* node);
+
+//----------------------------------------------------------------------------
 int vtkMRMLAnnotationROINodeTest1(int , char * [] )
 {
 
@@ -16,14 +29,12 @@ int vtkMRMLAnnotationROINodeTest1(int , char * [] )
   // Basic Setup
   // ======================
 
-  vtkSmartPointer< vtkMRMLAnnotationROINode > node2 = vtkSmartPointer< vtkMRMLAnnotationROINode >::New();
+  vtkSmartPointer<vtkMRMLAnnotationROINode > node2 = vtkSmartPointer< vtkMRMLAnnotationROINode >::New();
   vtkSmartPointer<vtkMRMLScene> mrmlScene = vtkSmartPointer<vtkMRMLScene>::New();
-  // node2->Initialize(mrmlScene);
 
   {
 
     vtkNew<vtkMRMLAnnotationROINode> node1;
-    // node1->Initialize(mrmlScene);
 
     EXERCISE_ALL_BASIC_MRML_METHODS(node1.GetPointer());
 
@@ -33,142 +44,211 @@ int vtkMRMLAnnotationROINodeTest1(int , char * [] )
     mrmlScene->RegisterNodeClass(node1.GetPointer());
     mrmlScene->AddNode(node2);
   }
-/*
- * No ROI storage node exists yet
-  vtkMRMLAnnotationROIStorageNode *storNode = dynamic_cast <vtkMRMLAnnotationROIStorageNode *> (node2->CreateDefaultStorageNode());
 
-  if( !storNode )
-    {
-      std::cerr << "Error in CreateDefaultStorageNode()" << std::endl;
-      return EXIT_FAILURE;
-    }
-  storNode->Delete();
-
-  std::cout << "Passed StorageNode" << std::endl;
-*/
   // ======================
   // Modify Properties
   // ======================
   node2->Reset(NULL);
-  node2->StartModify();
-  //node2->Initialize(mrmlScene);
 
+  vtkNew<vtkMRMLNodeCallback> spy;
+  node2->AddObserver(vtkCommand::AnyEvent, spy.GetPointer());
+
+  int wasModified = node2->StartModify();
 
   node2->SetName("AnnotationROINodeTest") ;
 
   std::string nodeTagName = node2->GetNodeTagName();
   std::cout << "Node Tag Name = " << nodeTagName << std::endl;
 
-  /*
-  {
-    double ctp[3] = { 1, 1, 1};
-    node2->SetPosition1(ctp);
-  }
-  {
-    double ctp[3] = { 2, 2, 2};
-    node2->SetPosition2(ctp);
-  }
-  {
-    double ctp[3] = { 1, 2, 3};
-    node2->SetPositionCenter(ctp);
-  }
-
-
-  int vis = 1;
-  node2->SetRay1Visibility(vis);
-
-
-  double *ctrlPointID = node2->GetPositionCenter();
-
-  if (ctrlPointID[0]!= 1 || (ctrlPointID[1] != 2) || (ctrlPointID[2] != 3) ||  node2->GetRay1Visibility() != vis)
-    {
-      std::cerr << "Error in Array Attributes: "  << ctrlPointID[0] << "!=1, " << ctrlPointID[1]<< "!=2" << ctrlPointID[2]<< "!=3, "
-        << node2->GetRay1Visibility() <<"!="<< vis << std::endl;
-      return EXIT_FAILURE;
-    }
-  */
-
-  vtkIndent ind;
-  int retval;
-  retval = node2->SetXYZ(3,-5,0);
-  if (!retval)
-    {
-    std::cerr << "ERROR: got " << retval << " when trying to call SetXYZ" << std::endl;
-    return EXIT_FAILURE;
-    }
-  retval = node2->SetRadiusXYZ(100,200,-10);
-  if  (!retval)
-    {
-    std::cerr << "ERROR: got " << retval << " when trying to call SetRadiusXYZ" << std::endl;
-    return EXIT_FAILURE;
-    }
+  CHECK_BOOL(node2->SetXYZ(3, -5, 0), true);
+  CHECK_BOOL(node2->SetRadiusXYZ(100, 200, -10), true);
 
   std::cout << "PrintAnnotationInfo:" << std::endl;
-  node2->PrintAnnotationInfo(cout,ind);
+  vtkIndent ind;
+  node2->PrintAnnotationInfo(std::cout, ind);
 
   double center[3];
   node2->GetXYZ(center);
   double radius[3];
   node2->GetRadiusXYZ(radius);
 
-  cout << "Center: " << center[0] << ", " << center[1] << ", " << center[2] << std::endl;
-  cout << "Radius: " << radius[0] << ", " << radius[1] << ", " << radius[2] << std::endl;
+  CHECK_DOUBLE(center[0], 3);
+  CHECK_DOUBLE(center[1], -5);
+  CHECK_DOUBLE(center[2], 0);
 
-  if(center[0]!=3 || center[1]!=-5 || center[2]!=0 ||
-     radius[0]!=100 || radius[1]!=200 || radius[2]!=-10)
-    {
-    std::cerr << "Error: Center and/or radius not as expected, should be 3,-5,0 and 100,200,-10" << std::endl;
-    return EXIT_FAILURE;
-    }
-  cout << "Passed Adding and Deleting Data" << endl;
+  CHECK_DOUBLE(radius[0], 100);
+  CHECK_DOUBLE(radius[1], 200);
+  CHECK_DOUBLE(radius[2], -10);
 
-  node2->Modified();
+  node2->EndModify(wasModified);
 
-  // ======================
-  // Test WriteXML and ReadXML
-  // ======================
+  CHECK_INT(spy->GetNumberOfEvents(vtkCommand::ModifiedEvent), 1);
 
-  /*
-  mrmlScene->SetURL("AnnotationROINodeTest.mrml");
-  mrmlScene->Commit();
-
-  // Now Read in File to see if ReadXML works - it first disconnects from node2 !
-  mrmlScene->Connect();
-  vtkIndent ij;
-
-  if (mrmlScene->GetNumberOfNodesByClass("vtkMRMLAnnotationROINode") != 1)
-    {
-        std::cerr << "Error in ReadXML() or WriteXML() - Did not create a class called vtkMRMLAnnotationROINode" << std::endl;
-    return EXIT_FAILURE;
-    }
-
-  vtkMRMLAnnotationROINode *node3 = dynamic_cast < vtkMRMLAnnotationROINode *> (mrmlScene->GetNthNodeByClass(0,"vtkMRMLAnnotationROINode"));
-  if (!node3)
-      {
-    std::cerr << "Error in ReadXML() or WriteXML(): could not find vtkMRMLAnnotationROINode" << std::endl;
-    return EXIT_FAILURE;
-      }
-
-  std::stringstream initialAnnotation, afterAnnotation;
-
-
-  // node2->PrintSelf(cout,ind);
-
-  node2->PrintAnnotationInfo(initialAnnotation,ind);
-
-  node3->PrintAnnotationInfo(afterAnnotation,ind);
-  if (initialAnnotation.str().compare(afterAnnotation.str()))
-  {
-    std::cerr << "Error in ReadXML() or WriteXML()" << std::endl;
-    std::cerr << "Before:" << std::endl << initialAnnotation.str() <<std::endl;
-    std::cerr << "After:" << std::endl << afterAnnotation.str() <<std::endl;
-    return EXIT_FAILURE;
-  }
-  cout << "Passed XML" << endl;
-  */
+  CHECK_EXIT_SUCCESS(TestGetTransformedPlanes(mrmlScene, node2));
 
   return EXIT_SUCCESS;
-
 }
 
+//----------------------------------------------------------------------------
+int TestGetTransformedPlanes(vtkMRMLScene* scene, vtkMRMLAnnotationROINode* node)
+{
+  vtkNew<vtkPlanes> planes;
+  node->GetTransformedPlanes(planes.GetPointer());
+  CHECK_INT(planes->GetNumberOfPlanes(), 6);
 
+  double* planeOrigin = 0;
+  double* planeNormal = 0;
+
+  // Without transform
+
+  // plane 0
+  planeOrigin = planes->GetPlane(0)->GetOrigin();
+  CHECK_DOUBLE(planeOrigin[0], -97);
+  CHECK_DOUBLE(planeOrigin[1], -205);
+  CHECK_DOUBLE(planeOrigin[2], 10);
+
+  planeNormal = planes->GetPlane(0)->GetNormal();
+  CHECK_DOUBLE(planeNormal[0], 1);
+  CHECK_DOUBLE(planeNormal[1], 0);
+  CHECK_DOUBLE(planeNormal[2], 0);
+
+  // plane 1
+  planeOrigin = planes->GetPlane(1)->GetOrigin();
+  CHECK_DOUBLE(planeOrigin[0], -97);
+  CHECK_DOUBLE(planeOrigin[1], -205);
+  CHECK_DOUBLE(planeOrigin[2], 10);
+
+  planeNormal = planes->GetPlane(1)->GetNormal();
+  CHECK_DOUBLE(planeNormal[0], 0);
+  CHECK_DOUBLE(planeNormal[1], 1);
+  CHECK_DOUBLE(planeNormal[2], 0);
+
+  // plane 2
+  planeOrigin = planes->GetPlane(2)->GetOrigin();
+  CHECK_DOUBLE(planeOrigin[0], -97);
+  CHECK_DOUBLE(planeOrigin[1], -205);
+  CHECK_DOUBLE(planeOrigin[2], 10);
+
+  planeNormal = planes->GetPlane(2)->GetNormal();
+  CHECK_DOUBLE(planeNormal[0], 0);
+  CHECK_DOUBLE(planeNormal[1], 0);
+  CHECK_DOUBLE(planeNormal[2], -1);
+
+  // plane 3
+  planeOrigin = planes->GetPlane(3)->GetOrigin();
+  CHECK_DOUBLE(planeOrigin[0], 103);
+  CHECK_DOUBLE(planeOrigin[1], 195);
+  CHECK_DOUBLE(planeOrigin[2], -10);
+
+  planeNormal = planes->GetPlane(3)->GetNormal();
+  CHECK_DOUBLE(planeNormal[0], -1);
+  CHECK_DOUBLE(planeNormal[1], 0);
+  CHECK_DOUBLE(planeNormal[2], 0);
+
+  // plane 4
+  planeOrigin = planes->GetPlane(4)->GetOrigin();
+  CHECK_DOUBLE(planeOrigin[0], 103);
+  CHECK_DOUBLE(planeOrigin[1], 195);
+  CHECK_DOUBLE(planeOrigin[2], -10);
+
+  planeNormal = planes->GetPlane(4)->GetNormal();
+  CHECK_DOUBLE(planeNormal[0], 0);
+  CHECK_DOUBLE(planeNormal[1], -1);
+  CHECK_DOUBLE(planeNormal[2], 0);
+
+  // plane 5
+  planeOrigin = planes->GetPlane(5)->GetOrigin();
+  CHECK_DOUBLE(planeOrigin[0], 103);
+  CHECK_DOUBLE(planeOrigin[1], 195);
+  CHECK_DOUBLE(planeOrigin[2], -10);
+
+  planeNormal = planes->GetPlane(5)->GetNormal();
+  CHECK_DOUBLE(planeNormal[0], 0);
+  CHECK_DOUBLE(planeNormal[1], 0);
+  CHECK_DOUBLE(planeNormal[2], 1);
+
+  // With transform (translation + rotation)
+  vtkNew<vtkMRMLTransformNode> transform;
+  vtkNew<vtkTransform> tr;
+  tr->Translate(5, 10, 20);
+  tr->RotateX(30);
+  tr->RotateY(15);
+  tr->RotateZ(5);
+  vtkNew<vtkMatrix4x4> matrix;
+  tr->GetMatrix(matrix.GetPointer());
+  transform->SetMatrixTransformToParent(matrix.GetPointer());
+
+  scene->AddNode(transform.GetPointer());
+  node->SetAndObserveTransformNodeID(transform->GetID());
+
+  node->GetTransformedPlanes(planes.GetPointer());
+  CHECK_INT(planes->GetNumberOfPlanes(), 6);
+
+  // plane 0
+  planeOrigin = planes->GetPlane(0)->GetOrigin();
+  CHECK_DOUBLE_TOLERANCE(planeOrigin[0], -68.492, 1e-3);
+  CHECK_DOUBLE_TOLERANCE(planeOrigin[1], -189.204, 1e-3);
+  CHECK_DOUBLE_TOLERANCE(planeOrigin[2], -60.3174, 1e-3);
+
+  planeNormal = planes->GetPlane(0)->GetNormal();
+  CHECK_DOUBLE_TOLERANCE(planeNormal[0], 0.96225, 1e-3);
+  CHECK_DOUBLE_TOLERANCE(planeNormal[1], 0.204396, 1e-3);
+  CHECK_DOUBLE_TOLERANCE(planeNormal[2], -0.179713, 1e-3);
+
+  // plane 1
+  planeOrigin = planes->GetPlane(1)->GetOrigin();
+  CHECK_DOUBLE_TOLERANCE(planeOrigin[0], -68.492, 1e-3);
+  CHECK_DOUBLE_TOLERANCE(planeOrigin[1], -189.204, 1e-3);
+  CHECK_DOUBLE_TOLERANCE(planeOrigin[2], -60.3174, 1e-3);
+
+  planeNormal = planes->GetPlane(1)->GetNormal();
+  CHECK_DOUBLE_TOLERANCE(planeNormal[0], -0.084186, 1e-3);
+  CHECK_DOUBLE_TOLERANCE(planeNormal[1], 0.851451, 1e-3);
+  CHECK_DOUBLE_TOLERANCE(planeNormal[2], 0.517633, 1e-3);
+
+  // plane 2
+  planeOrigin = planes->GetPlane(2)->GetOrigin();
+  CHECK_DOUBLE_TOLERANCE(planeOrigin[0], -68.492, 1e-3);
+  CHECK_DOUBLE_TOLERANCE(planeOrigin[1], -189.204, 1e-3);
+  CHECK_DOUBLE_TOLERANCE(planeOrigin[2], -60.3174, 1e-3);
+
+  planeNormal = planes->GetPlane(2)->GetNormal();
+  CHECK_DOUBLE_TOLERANCE(planeNormal[0], -0.258819, 1e-3);
+  CHECK_DOUBLE_TOLERANCE(planeNormal[1], 0.482963, 1e-3);
+  CHECK_DOUBLE_TOLERANCE(planeNormal[2], -0.836516, 1e-3);
+
+  // plane 3
+  planeOrigin = planes->GetPlane(3)->GetOrigin();
+  CHECK_DOUBLE_TOLERANCE(planeOrigin[0], 85.1073, 1e-3);
+  CHECK_DOUBLE_TOLERANCE(planeOrigin[1], 201.915, 1e-3);
+  CHECK_DOUBLE_TOLERANCE(planeOrigin[2], 94.0628, 1e-3);
+
+  planeNormal = planes->GetPlane(3)->GetNormal();
+  CHECK_DOUBLE_TOLERANCE(planeNormal[0], -0.96225, 1e-3);
+  CHECK_DOUBLE_TOLERANCE(planeNormal[1], -0.204396, 1e-3);
+  CHECK_DOUBLE_TOLERANCE(planeNormal[2], 0.179713, 1e-3);
+
+  // plane 4
+  planeOrigin = planes->GetPlane(4)->GetOrigin();
+  CHECK_DOUBLE_TOLERANCE(planeOrigin[0], 85.1073, 1e-3);
+  CHECK_DOUBLE_TOLERANCE(planeOrigin[1], 201.915, 1e-3);
+  CHECK_DOUBLE_TOLERANCE(planeOrigin[2], 94.0628, 1e-3);
+
+  planeNormal = planes->GetPlane(4)->GetNormal();
+  CHECK_DOUBLE_TOLERANCE(planeNormal[0], 0.084186, 1e-3);
+  CHECK_DOUBLE_TOLERANCE(planeNormal[1], -0.851451, 1e-3);
+  CHECK_DOUBLE_TOLERANCE(planeNormal[2], -0.517633, 1e-3);
+
+  // plane 5
+  planeOrigin = planes->GetPlane(5)->GetOrigin();
+  CHECK_DOUBLE_TOLERANCE(planeOrigin[0], 85.1073, 1e-3);
+  CHECK_DOUBLE_TOLERANCE(planeOrigin[1], 201.915, 1e-3);
+  CHECK_DOUBLE_TOLERANCE(planeOrigin[2], 94.0628, 1e-3);
+
+  planeNormal = planes->GetPlane(5)->GetNormal();
+  CHECK_DOUBLE_TOLERANCE(planeNormal[0], 0.258819, 1e-3);
+  CHECK_DOUBLE_TOLERANCE(planeNormal[1], -0.482963, 1e-3);
+  CHECK_DOUBLE_TOLERANCE(planeNormal[2], 0.836516, 1e-3);
+
+  return EXIT_SUCCESS;
+}

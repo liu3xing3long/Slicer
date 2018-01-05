@@ -18,16 +18,16 @@
 
 ==============================================================================*/
 
-// Qt includes
-#include <QtPlugin>
-
 // SlicerQt includes
 #include "qSlicerCamerasModule.h"
 #include "qSlicerCamerasModuleWidget.h"
 #include "vtkSlicerCamerasModuleLogic.h"
 
 //-----------------------------------------------------------------------------
+#if (QT_VERSION < QT_VERSION_CHECK(5, 0, 0))
+#include <QtPlugin>
 Q_EXPORT_PLUGIN2(qSlicerCamerasModule, qSlicerCamerasModule);
+#endif
 
 //-----------------------------------------------------------------------------
 class qSlicerCamerasModulePrivate
@@ -112,4 +112,12 @@ QStringList qSlicerCamerasModule::contributors()const
   contributors << QString("Julien Finet (Kitware)");
   contributors << QString("Sebastien Barr&eacute; (Kitware)");
   return contributors;
+}
+
+//-----------------------------------------------------------------------------
+QStringList qSlicerCamerasModule::associatedNodeTypes() const
+{
+  return QStringList()
+    << "vtkMRMLCameraNode"
+    << "vtkMRMLViewNode";
 }

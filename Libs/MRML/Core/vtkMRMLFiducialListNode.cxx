@@ -86,7 +86,6 @@ void vtkMRMLFiducialListNode::WriteXML(ostream& of, int nIndent)
 
   // rest is saved in the storage node file, but it needs to be here as well
   // due to the way the scene snapshots are handled (storage nodes are not re-read)
-  vtkIndent indent(nIndent);
 
   of << " symbolScale=\"" << this->SymbolScale << "\"";
   of << " symbolType=\"" << this->GlyphType << "\"";
@@ -359,7 +358,7 @@ void vtkMRMLFiducialListNode::Copy(vtkMRMLNode *anode)
       {
       vtkMRMLFiducial *fid = vtkMRMLFiducial::SafeDownCast(node->FiducialList->vtkCollection::GetItemAsObject(f));
       vtkMRMLFiducial *fidThis = vtkMRMLFiducial::SafeDownCast(this->FiducialList->vtkCollection::GetItemAsObject(f));
-      unsigned long mtime = fidThis->GetMTime();
+      vtkMTimeType mtime = fidThis->GetMTime();
       fidThis->Copy(fid);
       // Copy doesn't copy the ID, so check to see if the fiducial node in the
       // list to copy has a different id

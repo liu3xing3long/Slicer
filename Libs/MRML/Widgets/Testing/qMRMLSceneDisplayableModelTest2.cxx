@@ -21,18 +21,32 @@
 // QT includes
 #include <QApplication>
 
+// Slicer includes
+#include "vtkSlicerConfigure.h"
+
 // qMRML includes
 #include "qMRMLSceneDisplayableModel.h"
 #include "qMRMLSortFilterProxyModel.h"
 
-
 // MRML includes
+#include <vtkMRMLApplicationLogic.h>
 #include <vtkMRMLScene.h>
 
-// STD includes
+// VTK includes
+#include <vtkNew.h>
+#ifdef Slicer_VTK_USE_QVTKOPENGLWIDGET
+#include <QVTKOpenGLWidget.h>
+#endif
 
 int qMRMLSceneDisplayableModelTest2(int argc, char * argv [] )
 {
+#ifdef Slicer_VTK_USE_QVTKOPENGLWIDGET
+  // Set default surface format for QVTKOpenGLWidget
+  QSurfaceFormat format = QVTKOpenGLWidget::defaultFormat();
+  format.setSamples(0);
+  QSurfaceFormat::setDefaultFormat(format);
+#endif
+
   QApplication app(argc, argv);
   if( argc < 2 )
     {
@@ -48,6 +62,8 @@ int qMRMLSceneDisplayableModelTest2(int argc, char * argv [] )
     qMRMLSortFilterProxyModel sort;
     sort.setSourceModel(&model);
     vtkMRMLScene* scene = vtkMRMLScene::New();
+    vtkNew<vtkMRMLApplicationLogic> applicationLogic;
+    applicationLogic->SetMRMLScene(scene);
     model.setMRMLScene(scene);
     scene->SetURL(argv[1]);
     scene->Connect();

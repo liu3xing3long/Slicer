@@ -28,10 +28,14 @@
 
 #include "qSlicerVolumesSubjectHierarchyPluginsExport.h"
 
+// Slicer includes
+#include "vtkMRMLApplicationLogic.h"
+
+// CTK includes
+#include <ctkVTKObject.h>
+
 class qSlicerSubjectHierarchyVolumesPluginPrivate;
-class vtkMRMLNode;
 class vtkMRMLScalarVolumeNode;
-class vtkMRMLSubjectHierarchyNode;
 
 // Due to some reason the Python wrapping of this class fails, therefore
 // put everything between BTX/ETX to exclude from wrapping.
@@ -44,6 +48,7 @@ class Q_SLICER_VOLUMES_SUBJECT_HIERARCHY_PLUGINS_EXPORT qSlicerSubjectHierarchyV
 {
 public:
   Q_OBJECT
+  QVTK_OBJECT
 
 public:
   typedef qSlicerSubjectHierarchyAbstractPlugin Superclass;
@@ -51,73 +56,83 @@ public:
   virtual ~qSlicerSubjectHierarchyVolumesPlugin();
 
 public:
-  /// Determines if a non subject hierarchy node can be placed in the hierarchy, and gets a confidence
-  ///   value for a certain MRML node (usually the type and possibly attributes are checked)
-  /// \param nodeToAdd Node to be added to the hierarchy
-  /// \param parent Prospective parent of the node to add.
-  ///   Default value is NULL. In that case the parent will be ignored, the confidence numbers are got based on the to-be child node alone.
-  /// \return Floating point confidence number between 0 and 1, where 0 means that the plugin cannot handle the
-  ///   node, and 1 means that the plugin is the only one that can handle the node (by type or identifier attribute)
-  virtual double canAddNodeToSubjectHierarchy(vtkMRMLNode* nodeToAdd, vtkMRMLSubjectHierarchyNode* parent=NULL)const;
-
-  /// Determines if the actual plugin can handle a subject hierarchy node. The plugin with
-  /// the highest confidence number will "own" the node in the subject hierarchy (set icon, tooltip,
-  /// set context menu etc.)
-  /// \param node Note to handle in the subject hierarchy tree
+  /// Determines if a data node can be placed in the hierarchy using the actual plugin,
+  /// and gets a confidence value for a certain MRML node (usually the type and possibly attributes are checked).
+  /// \param node Node to be added to the hierarchy
+  /// \param parentItemID Prospective parent of the node to add.
+  ///   Default value is invalid. In that case the parent will be ignored, the confidence numbers are got based on the to-be child node alone.
   /// \return Floating point confidence number between 0 and 1, where 0 means that the plugin cannot handle the
   ///   node, and 1 means that the plugin is the only one that can handle the node (by node type or identifier attribute)
-  virtual double canOwnSubjectHierarchyNode(vtkMRMLSubjectHierarchyNode* node)const;
+  virtual double canAddNodeToSubjectHierarchy(
+    vtkMRMLNode* node,
+    vtkIdType parentItemID=vtkMRMLSubjectHierarchyNode::INVALID_ITEM_ID )const;
 
-  /// Get role that the plugin assigns to the subject hierarchy node.
+  /// Determines if the actual plugin can handle a subject hierarchy item. The plugin with
+  /// the highest confidence number will "own" the item in the subject hierarchy (set icon, tooltip,
+  /// set context menu etc.)
+  /// \param item Item to handle in the subject hierarchy tree
+  /// \return Floating point confidence number between 0 and 1, where 0 means that the plugin cannot handle the
+  ///   item, and 1 means that the plugin is the only one that can handle the item (by node type or identifier attribute)
+  virtual double canOwnSubjectHierarchyItem(vtkIdType itemID)const;
+
+  /// Get role that the plugin assigns to the subject hierarchy item.
   ///   Each plugin should provide only one role.
   Q_INVOKABLE virtual const QString roleForPlugin()const;
 
-  /// Get icon of an owned subject hierarchy node
-  /// \return Icon to set, NULL if nothing to set
-  virtual QIcon icon(vtkMRMLSubjectHierarchyNode* node);
+  /// Get icon of an owned subject hierarchy item
+  /// \return Icon to set, empty icon if nothing to set
+  virtual QIcon icon(vtkIdType itemID);
 
   /// Get visibility icon for a visibility state
   virtual QIcon visibilityIcon(int visible);
 
-  /// Open module belonging to node and set inputs in opened module
-  virtual void editProperties(vtkMRMLSubjectHierarchyNode* node);
+  /// Generate tooltip for a owned subject hierarchy item
+  virtual QString tooltip(vtkIdType itemID)const;
 
-  /// Generate tooltip for a owned subject hierarchy node
-  virtual QString tooltip(vtkMRMLSubjectHierarchyNode* node)const;
+  /// Set display visibility of a owned subject hierarchy item
+  virtual void setDisplayVisibility(vtkIdType itemID, int visible);
 
-  /// Set display visibility of a owned subject hierarchy node
-  virtual void setDisplayVisibility(vtkMRMLSubjectHierarchyNode* node, int visible);
-
-  /// Get display visibility of a owned subject hierarchy node
+  /// Get display visibility of a owned subject hierarchy item
   /// \return Display visibility (0: hidden, 1: shown, 2: partially shown)
-  virtual int getDisplayVisibility(vtkMRMLSubjectHierarchyNode* node)const;
+  virtual int getDisplayVisibility(vtkIdType itemID)const;
 
-  /// Get node context menu item actions to add to tree view
-  Q_INVOKABLE virtual QList<QAction*> nodeContextMenuActions()const;
+  /// Get item context menu item actions to add to tree view
+  virtual QList<QAction*> itemContextMenuActions()const;
 
-  /// Show context menu actions valid for  given subject hierarchy node.
-  /// \param node Subject Hierarchy node to show the context menu items for. If NULL, then shows menu items for the scene
-  virtual void showContextMenuActionsForNode(vtkMRMLSubjectHierarchyNode* node);
+  /// Show context menu actions valid for a given subject hierarchy item.
+  /// \param itemID Subject Hierarchy item to show the context menu items for
+  virtual void showContextMenuActionsForItem(vtkIdType itemID);
 
-protected:
-  /// Show volume in slice viewers. The argument node becomes the background, and the previous
-  /// background becomes the foreground with 50% transparency.
-  void showVolume(vtkMRMLScalarVolumeNode* node, int visible=1);
+public:
+  /// Show volume in all slice views. The argument node replaces any volume shown on the specified layer
+  /// \param node Volume node to show
+  /// \param layer Layer to show volume on. Only one layer can be specified. By default it's the background layer
+  void showVolumeInAllViews(vtkMRMLScalarVolumeNode* node, int layer=vtkMRMLApplicationLogic::BackgroundLayer);
 
-  /// Update selection node based on current volumes visibility (if the selection is different in the slice viewers, then the first one is set)
-  /// TODO: This is a workaround (http://www.na-mic.org/Bug/view.php?id=3551)
-  void updateSelectionNodeBasedOnCurrentVolumesVisibility()const;
-  /// Determine background volume selection (if the selection is different in the slice viewers, then the first one is set)
-  /// TODO: This is a workaround (http://www.na-mic.org/Bug/view.php?id=3551)
-  std::string getSelectedBackgroundVolumeNodeID()const;
-  /// Determine foreground volume selection (if the selection is different in the slice viewers, then the first one is set)
-  /// TODO: This is a workaround (http://www.na-mic.org/Bug/view.php?id=3551)
-  std::string getSelectedForegroundVolumeNodeID()const;
+  /// Hide given volume from all layers of all slice views
+  void hideVolumeFromAllViews(vtkMRMLScalarVolumeNode* node);
+
+  /// Collect subject hierarchy item IDs of all volumes that are shown in any slice view
+  /// \param shownVolumeItemIDs Output argument for subject hierarchy item IDs of shown volumes
+  /// \param layer Layer(s) from which the shown volumes are collected. By default it's all layers
+  void collectShownVolumes( QSet<vtkIdType>& shownVolumeItemIDs,
+    int layer=vtkMRMLApplicationLogic::BackgroundLayer | vtkMRMLApplicationLogic::ForegroundLayer | vtkMRMLApplicationLogic::LabelLayer )const;
 
 protected slots:
   /// Show volumes in study. The first two scalar volumes are shown if there are more.
   /// Hides other volumes if there are less in the current study.
   void showVolumesInBranch();
+
+  /// Re-connect slice composite node events so that visibility icons are updated when volumes
+  /// are shown/hidden from outside subject hierarchy
+  void onLayoutChanged();
+  /// Variant of \sa onLayoutChanged so that it can be connected to the event which has the layout as parameter
+  void onLayoutChanged(int layout);
+
+  /// Trigger updating all volume visibility icons when composite node changes
+  /// Note: Update all and not just the volumes in the composite node, because it is impossible
+  ///       to know after a Modified event if a volume was hidden in the process
+  void onSliceCompositeNodeModified();
 
 protected:
   QScopedPointer<qSlicerSubjectHierarchyVolumesPluginPrivate> d_ptr;

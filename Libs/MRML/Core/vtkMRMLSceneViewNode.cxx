@@ -66,28 +66,29 @@ void vtkMRMLSceneViewNode::WriteXML(ostream& of, int nIndent)
 {
   Superclass::WriteXML(of, nIndent);
 
-  vtkIndent indent(nIndent);
-
-  of << indent << " screenshotType=\"" << this->GetScreenShotType() << "\"";
+  of << " screenshotType=\"" << this->GetScreenShotType() << "\"";
 
   vtkStdString description = this->GetSceneViewDescription();
   vtksys::SystemTools::ReplaceString(description,"\n","[br]");
 
-  of << indent << " sceneViewDescription=\"" << description << "\"";
+  of << " sceneViewDescription=\"" << description << "\"";
 }
 
 //----------------------------------------------------------------------------
 void vtkMRMLSceneViewNode::WriteNodeBodyXML(ostream& of, int nIndent)
 {
+  if (!this->SnapshotScene)
+    {
+    return;
+    }
+
   // first make sure that the scene view scene is to be saved relative to the same place as the main scene
   this->SnapshotScene->SetRootDirectory(this->GetScene()->GetRootDirectory());
   this->SetAbsentStorageFileNames();
 
-  vtkMRMLNode * node = NULL;
-  int n;
-  for (n=0; n < this->SnapshotScene->GetNodes()->GetNumberOfItems(); n++)
+  for (int n=0; n < this->SnapshotScene->GetNodes()->GetNumberOfItems(); n++)
     {
-    node = (vtkMRMLNode*)this->SnapshotScene->GetNodes()->GetItemAsObject(n);
+    vtkMRMLNode* node = (vtkMRMLNode*)this->SnapshotScene->GetNodes()->GetItemAsObject(n);
     if (node && !node->IsA("vtkMRMLSceneViewNode") && node->GetSaveWithScene())
       {
       vtkIndent vindent(nIndent+1);
@@ -173,17 +174,12 @@ void vtkMRMLSceneViewNode::ReadXMLAttributes(const char** atts)
     if (storageNode == NULL)
       {
       // only read the directory if there isn't a storage node already
-      storageNode = this->CreateDefaultStorageNode();
+      this->AddDefaultStorageNode(vtksys::SystemTools::ConvertToOutputPath(screenCaptureFilename.c_str()).c_str());
+      storageNode = this->GetStorageNode();
       if (storageNode)
         {
-        storageNode->SetFileName(vtksys::SystemTools::ConvertToOutputPath(screenCaptureFilename.c_str()).c_str());
-        if (this->GetScene())
-          {
-          this->GetScene()->AddNode(storageNode);
-          }
         vtkWarningMacro("ReadXMLAttributes: found the ScreenCapture directory, creating a storage node to read the image file at\n\t" << storageNode->GetFileName() << "\n\tImage data be overwritten if there is a storage node pointing to another file");
         storageNode->ReadData(this);
-        storageNode->Delete();
         }
       }
     else
@@ -376,22 +372,17 @@ void vtkMRMLSceneViewNode::StoreScene()
       if (this->IncludeNodeInSceneView(storableNode) &&
           storableNode->GetSaveWithScene() )
         {
-        vtkSmartPointer<vtkMRMLStorageNode> storageNode = storableNode->GetStorageNode();
-        if (!storageNode)
+        if (!storableNode->GetStorageNode())
           {
           // No storage node in the main scene, try add one.
-          // If CreateDefaultStorageNode returns NULL it means the node can be stored
-          // in the scene (without using a storage node).
-          storageNode.TakeReference(storableNode->CreateDefaultStorageNode());
+          storableNode->AddDefaultStorageNode();
+          vtkMRMLStorageNode* storageNode = storableNode->GetStorageNode();
           if (storageNode)
             {
             std::string fileBaseName = std::string(storableNode->GetName());
             std::string extension = storageNode->GetDefaultWriteFileExtension();
             std::string storageFileName = fileBaseName + std::string(".") + extension;
             storageNode->SetFileName(storageFileName.c_str());
-            // add to the main scene
-            this->Scene->AddNode(storageNode);
-            storableNode->SetAndObserveStorageNodeID(storageNode->GetID());
             }
           }
         }
@@ -601,7 +592,7 @@ void vtkMRMLSceneViewNode::RestoreScene(bool removeNodes)
         if (snode)
           {
           snode->SetScene(this->Scene);
-          // to prevent copying of default info if not stored in sanpshot
+          // to prevent copying of default info if not stored in snapshot
           snode->CopyWithSingleModifiedEvent(node);
           // to prevent reading data on UpdateScene()
           snode->SetAddToSceneNoModify(0);
@@ -848,5 +839,9 @@ bool vtkMRMLSceneViewNode::IncludeNodeInSceneView(vtkMRMLNode *node)
 
 void vtkMRMLSceneViewNode::SetSceneViewRootDir( const char* name)
 {
+  if (!this->SnapshotScene)
+    {
+    return;
+    }
   this->SnapshotScene->SetRootDirectory(name);
 }

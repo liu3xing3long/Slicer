@@ -122,10 +122,10 @@ public:
   qMRMLSortFilterProxyModel(QObject *parent=0);
   virtual ~qMRMLSortFilterProxyModel();
 
-  /// Retrive the associated vtkMRMLNode
+  /// Retrieve the associated MRML scene
   vtkMRMLScene* mrmlScene()const;
 
-  /// Retrieve the mrml scene index
+  /// Retrieve the MRML scene index
   Q_INVOKABLE QModelIndex mrmlSceneIndex()const;
 
   /// Retrieve the associated vtkMRMLNode
@@ -145,7 +145,7 @@ public:
   /// \sa setShowHiddenForTypes, showHiddenForTypes
   bool showHidden()const;
 
-  /// Give more control over the types of mrml node you want to force
+  /// Give more control over the types of MRML node you want to force
   /// the display even if their HideFromEditors property is true.
   /// Don't do anything if the list is empty.
   /// \sa setShowHiddenForTypes, showHiddenForTypes
@@ -161,6 +161,11 @@ public:
   /// Remove node type attribute filtering the displayed nodes
   /// \sa addAttribute
   Q_INVOKABLE void removeAttribute(const QString& nodeType, const QString& attributeName);
+
+  /// Return the current attribute filter for the given node type.
+  /// \sa addAttribute, removeAttribute
+  Q_INVOKABLE QVariant attributeFilter(
+    const QString& nodeType, const QString& attributeName) const;
 
   /// Display or not the nodes that are excluded by
   /// the ExcludedChildNodeTypes list.

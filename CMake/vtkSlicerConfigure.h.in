@@ -41,6 +41,9 @@
 #cmakedefine Slicer_USE_QtTesting
 #cmakedefine Slicer_USE_OPENTRACKER
 
+#cmakedefine Slicer_HAVE_QT5
+#cmakedefine Slicer_HAVE_WEBKIT_SUPPORT
+
 #define VTKSLICER_CONFIGURATION_TYPES "@CMAKE_CONFIGURATION_TYPES@"
 #cmakedefine Slicer_BUILD_WIN32_CONSOLE
 
@@ -64,6 +67,7 @@
 #cmakedefine Slicer_BUILD_DICOM_SUPPORT
 #cmakedefine Slicer_BUILD_DIFFUSION_SUPPORT
 #cmakedefine Slicer_BUILD_I18N_SUPPORT
+#cmakedefine Slicer_BUILD_PARAMETERSERIALIZER_SUPPORT
 
 #cmakedefine Slicer_BUILD_CLI_SUPPORT
 #cmakedefine Slicer_BUILD_CLI
@@ -72,10 +76,13 @@
 #define Slicer_CLIMODULES_LIB_DIR "@Slicer_CLIMODULES_LIB_DIR@"
 #define Slicer_CLIMODULES_SHARE_DIR "@Slicer_CLIMODULES_SHARE_DIR@"
 
+#define Slicer_CLI_PREFER_EXECUTABLE_DEFAULT true
+
 #cmakedefine Slicer_USE_PYTHONQT
 #ifdef Slicer_USE_PYTHONQT
 #  define Slicer_PYTHON_VERSION_DOT "@Slicer_PYTHON_VERSION_DOT@"
 #  define Slicer_PYTHON_VERSION "@Slicer_PYTHON_VERSION@"
+#  define PYTHON_SITE_PACKAGES_SUBDIR "@PYTHON_SITE_PACKAGES_SUBDIR@"
 #endif //Slicer_USE_PYTHONQT
 
 #cmakedefine Slicer_BUILD_QTLOADABLEMODULES
@@ -97,6 +104,11 @@
 #  define Slicer_QTSCRIPTEDMODULES_SHARE_DIR "@Slicer_QTSCRIPTEDMODULES_SHARE_DIR@"
 #endif //Slicer_USE_PYTHONQT
 
+// ThirdParty: Corresponds to superbuild projects built
+// in Slicer extension.
+#define Slicer_THIRDPARTY_BIN_DIR "@Slicer_THIRDPARTY_BIN_DIR@"
+#define Slicer_THIRDPARTY_LIB_DIR "@Slicer_THIRDPARTY_LIB_DIR@"
+
 #cmakedefine Slicer_USE_PYTHONQT_WITH_TCL
 #ifdef Slicer_USE_PYTHONQT_WITH_TCL
 #  define Slicer_TCL_TK_VERSION_DOT "@TCL_TK_VERSION_DOT@"
@@ -107,6 +119,7 @@
 
 #cmakedefine Slicer_VTK_RENDERING_USE_OpenGL_BACKEND
 #cmakedefine Slicer_VTK_RENDERING_USE_OpenGL2_BACKEND
+#cmakedefine Slicer_VTK_USE_QVTKOPENGLWIDGET
 
 // Library sub-directory - The following macros define directories only valid for a given build tree.
 #define VTK_DIR "@VTK_DIR@"

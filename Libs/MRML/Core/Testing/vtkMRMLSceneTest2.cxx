@@ -14,13 +14,16 @@
 #include "vtkMRMLCoreTestingMacros.h"
 #include "vtkMRMLNode.h"
 #include "vtkMRMLScene.h"
+#include "vtkMRMLSliceNode.h"
 
 // VTK includes
 #include <vtkCallbackCommand.h>
+#include <vtkCollection.h>
 #include <vtkXMLDataParser.h>
 
 // STD includes
 #include <algorithm>
+#include <iterator>
 #include <set>
 #include <sstream>
 
@@ -49,7 +52,7 @@ public:
 
   int NumberOfSingletonNodes;
 
-  // List of node that should be updated when NodeAddedEvent is catched
+  // List of node that should be updated when NodeAddedEvent is caught
   std::vector<std::string> NodeAddedClassNames;
 
   virtual void ResetNumberOfEvents()
@@ -63,7 +66,7 @@ public:
     {
     vtkMRMLCoreTestingUtilities::vtkMRMLNodeCallback::Execute(caller, eid, calldata);
 
-    // Let's return if an error already occured
+    // Let's return if an error already occurred
     if (this->CheckStatus() == EXIT_FAILURE)
       {
       return;
@@ -193,6 +196,9 @@ int vtkMRMLSceneTest2(int argc, char * argv [] )
   vtkSmartPointer<vtkMRMLScene>  scene = vtkSmartPointer<vtkMRMLScene>::New(); // vtkSmartPointer instead of vtkNew to allow SetPointer
   EXERCISE_BASIC_OBJECT_METHODS(scene.GetPointer());
   CHECK_INT(scene->GetNumberOfNodes(), 0);
+
+  // Add default slice orientation presets
+  vtkMRMLSliceNode::AddDefaultSliceOrientationPresets(scene);
 
   // Configure mrml event observer
   vtkNew<vtkMRMLSceneCallback> callback;
@@ -350,12 +356,13 @@ int vtkMRMLSceneTest2(int argc, char * argv [] )
   std::cout << collection->GetNumberOfItems() << std::endl;
 
   std::cout << "List of Node Names in this Scene" << std::endl;
-  scene->InitTraversal();
-  vtkMRMLNode * nodePtr = scene->GetNextNode();
-  while( nodePtr != 0 )
+  vtkCollectionSimpleIterator it;
+  vtkMRMLNode* node = NULL;
+  vtkCollection *nodes = scene->GetNodes();
+  for (nodes->InitTraversal(it);
+    (node = vtkMRMLNode::SafeDownCast(nodes->GetNextItemAsObject(it)));)
     {
-    std::cout << " " << nodePtr->GetName() << std::endl;
-    nodePtr = scene->GetNextNode();
+    std::cout << " " << node->GetName() << std::endl;
     }
 #endif
 

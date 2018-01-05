@@ -43,7 +43,7 @@ public:
   ~qSlicerLabelMapVolumeDisplayWidgetPrivate();
   void init();
 
-  vtkMRMLScalarVolumeNode* VolumeNode;
+  vtkWeakPointer<vtkMRMLScalarVolumeNode> VolumeNode;
 };
 
 //-----------------------------------------------------------------------------
@@ -151,7 +151,6 @@ void qSlicerLabelMapVolumeDisplayWidget::setColorNode(vtkMRMLNode* colorNode)
 // --------------------------------------------------------------------------
 void qSlicerLabelMapVolumeDisplayWidget::setSliceIntersectionThickness(int thickness)
 {
-  Q_D(qSlicerLabelMapVolumeDisplayWidget);
   vtkMRMLLabelMapVolumeDisplayNode* displayNode =
     this->volumeDisplayNode();
   if (!displayNode)

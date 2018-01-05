@@ -18,6 +18,9 @@
 
 ==============================================================================*/
 
+// VTK includes
+#include <vtkStringArray.h>
+
 // MRML includes
 #include "vtkMRMLAbstractViewNode.h"
 #include "vtkMRMLModelNode.h"
@@ -27,11 +30,14 @@
 #include <sstream>
 
 const char* vtkMRMLAbstractViewNode::OrientationMarkerHumanModelReferenceRole = "OrientationMarkerHumanModel";
+const int vtkMRMLAbstractViewNode::AxisLabelsCount = 6;
+static const char* DEFAULT_AXIS_LABELS[vtkMRMLAbstractViewNode::AxisLabelsCount] = {"L", "R", "P", "A", "I", "S"};
 
 //----------------------------------------------------------------------------
 vtkMRMLAbstractViewNode::vtkMRMLAbstractViewNode()
 {
   this->LayoutLabel = NULL;
+  this->ViewGroup = 0;
   this->Active = 0;
   this->Visibility = 1;
 
@@ -48,15 +54,18 @@ vtkMRMLAbstractViewNode::vtkMRMLAbstractViewNode()
 
   this->RulerEnabled = false;
   this->RulerType = RulerTypeNone;
+
+  this->AxisLabels = vtkSmartPointer<vtkStringArray>::New();
+  for (int i=0; i<vtkMRMLAbstractViewNode::AxisLabelsCount; i++)
+    {
+    this->AxisLabels->InsertNextValue(DEFAULT_AXIS_LABELS[i]);
+    }
  }
 
 //----------------------------------------------------------------------------
 vtkMRMLAbstractViewNode::~vtkMRMLAbstractViewNode()
 {
-  if ( this->LayoutLabel )
-    {
-    delete [] this->LayoutLabel;
-    }
+  this->SetLayoutLabel(NULL);
 }
 
 //----------------------------------------------------------------------------
@@ -66,37 +75,46 @@ void vtkMRMLAbstractViewNode::WriteXML(ostream& of, int nIndent)
 
   this->Superclass::WriteXML(of, nIndent);
 
-  vtkIndent indent(nIndent);
-
   if (this->GetLayoutLabel())
     {
-    of << indent << " layoutLabel=\"" << this->GetLayoutLabel() << "\"";
+    of << " layoutLabel=\"" << this->GetLayoutLabel() << "\"";
     }
   if (this->GetLayoutName())
     {
-    of << indent << " layoutName=\"" << this->GetLayoutName() << "\"";
+    of << " layoutName=\"" << this->GetLayoutName() << "\"";
+    }
+  if (this->GetViewGroup() > 0)
+    {
+    of << " viewGroup=\"" << this->GetViewGroup() << "\"";
     }
 
-  of << indent << " active=\"" << (this->Active ? "true" : "false") << "\"";
-  of << indent << " visibility=\"" << (this->Visibility ? "true" : "false") << "\"";
+  of << " active=\"" << (this->Active ? "true" : "false") << "\"";
+  of << " visibility=\"" << (this->Visibility ? "true" : "false") << "\"";
 
   // background color
-  of << indent << " backgroundColor=\"" << this->BackgroundColor[0] << " "
+  of << " backgroundColor=\"" << this->BackgroundColor[0] << " "
      << this->BackgroundColor[1] << " " << this->BackgroundColor[2] << "\"";
 
-  of << indent << " backgroundColor2=\"" << this->BackgroundColor2[0] << " "
+  of << " backgroundColor2=\"" << this->BackgroundColor2[0] << " "
      << this->BackgroundColor2[1] << " " << this->BackgroundColor2[2] << "\"";
 
   if (this->OrientationMarkerEnabled)
     {
-    of << indent << " orientationMarkerType=\"" << this->GetOrientationMarkerTypeAsString(this->OrientationMarkerType) << "\"";
-    of << indent << " orientationMarkerSize=\"" << this->GetOrientationMarkerSizeAsString(this->OrientationMarkerSize) << "\"";
+    of << " orientationMarkerType=\"" << this->GetOrientationMarkerTypeAsString(this->OrientationMarkerType) << "\"";
+    of << " orientationMarkerSize=\"" << this->GetOrientationMarkerSizeAsString(this->OrientationMarkerSize) << "\"";
     }
 
   if (this->RulerEnabled)
     {
-    of << indent << " rulerType=\"" << this->GetRulerTypeAsString(this->RulerType) << "\"";
+    of << " rulerType=\"" << this->GetRulerTypeAsString(this->RulerType) << "\"";
     }
+
+  of << " AxisLabels=\"";
+  for (int i=0; i<vtkMRMLAbstractViewNode::AxisLabelsCount; i++)
+    {
+    of << (i>0?";":"") << this->GetAxisLabel(i);
+    }
+  of << "\"";
 }
 
 //----------------------------------------------------------------------------
@@ -120,6 +138,14 @@ void vtkMRMLAbstractViewNode::ReadXMLAttributes(const char** atts)
     else if (!strcmp(attName, "layoutName"))
       {
       this->SetLayoutName( attValue );
+      }
+    else if (!strcmp(attName, "viewGroup"))
+      {
+      std::stringstream ss;
+      ss << attValue;
+      int val;
+      ss >> val;
+      this->SetViewGroup(val);
       }
     else if (!strcmp(attName, "backgroundColor"))
       {
@@ -197,6 +223,24 @@ void vtkMRMLAbstractViewNode::ReadXMLAttributes(const char** atts)
         this->RulerType = id;
         }
       }
+    else if (!strcmp(attName, "AxisLabels"))
+      {
+      std::stringstream labels(attValue);
+      std::string label;
+      int labelIndex = 0;
+      while (std::getline(labels, label, ';') && labelIndex<vtkMRMLAbstractViewNode::AxisLabelsCount)
+        {
+        this->SetAxisLabel(labelIndex, label.c_str());
+        labelIndex++;
+        }
+      // If not all labels were defined set the missing ones to empty
+      // to make sure all labels are consistently set.
+      for (; labelIndex<vtkMRMLAbstractViewNode::AxisLabelsCount; labelIndex++)
+        {
+        this->SetAxisLabel(labelIndex, "");
+        }
+      }
+
     // XXX Do not read 'visibility' attribute and default to 1 because:
     // (1) commit r21034 (STYLE: Add abstract class for all view nodes)
     // changed the default value for 'visibility' attribute from 1 to 0. This
@@ -258,6 +302,7 @@ void vtkMRMLAbstractViewNode::Copy(vtkMRMLNode *anode)
   vtkMRMLAbstractViewNode *node = (vtkMRMLAbstractViewNode *) anode;
 
   this->SetLayoutLabel(node->GetLayoutLabel());
+  this->SetViewGroup(node->GetViewGroup());
   this->SetBackgroundColor ( node->GetBackgroundColor ( ) );
   this->SetBackgroundColor2 ( node->GetBackgroundColor2 ( ) );
   // Important: do not use SetActive or RemoveActiveFlagInScene will be called
@@ -275,6 +320,11 @@ void vtkMRMLAbstractViewNode::Copy(vtkMRMLNode *anode)
     this->RulerType = node->RulerType;
     }
 
+  for (int i=0; i<vtkMRMLAbstractViewNode::AxisLabelsCount; i++)
+    {
+    this->SetAxisLabel(i,node->GetAxisLabel(i));
+    }
+
   this->EndModify(disabledModify);
 }
 
@@ -286,9 +336,16 @@ void vtkMRMLAbstractViewNode::Reset(vtkMRMLNode* defaultNode)
   // automatically.
   // This require a custom behavior implemented here.
   std::string layoutLabel = this->GetLayoutLabel() ? this->GetLayoutLabel() : "";
+  int viewGroup = this->GetViewGroup();
   this->Superclass::Reset(defaultNode);
   this->DisableModifiedEventOn();
   this->SetLayoutLabel(layoutLabel.c_str());
+  this->SetViewGroup(viewGroup);
+  this->AxisLabels->Reset();
+  for (int i=0; i<vtkMRMLAbstractViewNode::AxisLabelsCount; i++)
+    {
+    this->AxisLabels->InsertNextValue(DEFAULT_AXIS_LABELS[i]);
+    }
   this->DisableModifiedEventOff();
 }
 
@@ -298,6 +355,7 @@ void vtkMRMLAbstractViewNode::PrintSelf(ostream& os, vtkIndent indent)
   Superclass::PrintSelf(os,indent);
 
   os << indent << "LayoutLabel: " << (this->LayoutLabel ? this->LayoutLabel : "(null)") << std::endl;
+  os << indent << "ViewGroup: " << this->ViewGroup << std::endl;
   os << indent << "Active:        " << this->Active << "\n";
   os << indent << "Visibility:        " << this->Visibility << "\n";
   os << indent << "BackgroundColor:       " << this->BackgroundColor[0] << " "
@@ -317,6 +375,14 @@ void vtkMRMLAbstractViewNode::PrintSelf(ostream& os, vtkIndent indent)
     {
     os << indent << "Ruler type: " << this->GetRulerTypeAsString(this->RulerType) << "\n";
     }
+
+  os << indent << " AxisLabels: ";
+  for (int i=0; i<vtkMRMLAbstractViewNode::AxisLabelsCount; i++)
+    {
+    os << (i>0?";":"") << this->GetAxisLabel(i);
+    }
+  os << "\n";
+
 }
 
 //----------------------------------------------------------------------------
@@ -500,4 +566,36 @@ vtkMRMLModelNode* vtkMRMLAbstractViewNode::GetOrientationMarkerHumanModelNode()
     return NULL;
     }
   return vtkMRMLModelNode::SafeDownCast(this->GetNodeReference(OrientationMarkerHumanModelReferenceRole));
+}
+
+//-----------------------------------------------------------
+const char* vtkMRMLAbstractViewNode::GetAxisLabel(int labelIndex)
+{
+  if (labelIndex<0 || labelIndex>=vtkMRMLAbstractViewNode::AxisLabelsCount)
+    {
+    vtkErrorMacro("vtkMRMLAbstractViewNode::GetAxisLabel labelIndex=" << labelIndex << " argument is invalid. Valid range: 0<=labelIndex<" << vtkMRMLAbstractViewNode::AxisLabelsCount);
+    return "";
+    }
+  return this->AxisLabels->GetValue(labelIndex);
+}
+
+//-----------------------------------------------------------
+void vtkMRMLAbstractViewNode::SetAxisLabel(int labelIndex, const char* label)
+{
+  if (labelIndex<0 || labelIndex>=vtkMRMLAbstractViewNode::AxisLabelsCount)
+    {
+    vtkErrorMacro("vtkMRMLAbstractViewNode::SetAxisLabel labelIndex="<<labelIndex<<" argument is invalid. Valid range: 0<=labelIndex<" <<vtkMRMLAbstractViewNode::AxisLabelsCount);
+    return;
+    }
+  if (label==NULL)
+    {
+    label = "";
+    }
+  if (this->AxisLabels->GetValue(labelIndex).compare(label)==0)
+    {
+    // no change
+    return;
+    }
+  this->AxisLabels->SetValue(labelIndex, label);
+  this->Modified();
 }

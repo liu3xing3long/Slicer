@@ -41,6 +41,7 @@
 
 #include <vtkMatrix4x4.h>
 #include <vtkPointData.h>
+#include <vtkSmartPointer.h>
 #include <vtkVersion.h>
 
 #include "teem/nrrd.h"
@@ -69,7 +70,7 @@ public:
   /// Get a space separated list of all keys in the header
   /// the string is allocated and deleted in this object.  This method
   /// does not support spaces in key names.
-  char* GetHeaderKeys();
+  const char* GetHeaderKeys();
 
   ///
   /// Get a list of keys in the header. Preferred method to use as it
@@ -80,21 +81,27 @@ public:
   /// Get a value given a key in the header
   const char* GetHeaderValue(const char *key);
 
-  virtual void PrintSelf(ostream& os, vtkIndent indent);
+  /// Get label for specified axis
+  const char* GetAxisLabel(unsigned int axis);
+
+  /// Get unit for specified axis
+  const char* GetAxisUnit(unsigned int axis);
+
+  virtual void PrintSelf(ostream& os, vtkIndent indent) VTK_OVERRIDE;
 
   ///  is the given file name a NRRD file?
-  virtual int CanReadFile(const char* filename);
+  virtual int CanReadFile(const char* filename) VTK_OVERRIDE;
 
   ///
   /// Valid extentsions
-  virtual const char* GetFileExtensions()
+  virtual const char* GetFileExtensions() VTK_OVERRIDE
     {
       return ".nhdr .nrrd";
     }
 
   ///
   /// A descriptive name for this format
-  virtual const char* GetDescriptiveName()
+  virtual const char* GetDescriptiveName() VTK_OVERRIDE
     {
       return "NRRD - Nearly Raw Raster Data";
     }
@@ -219,8 +226,8 @@ public:
       break;
     }
   }
-virtual vtkImageData * AllocateOutputData(vtkDataObject *out, vtkInformation* outInfo);
-virtual void AllocateOutputData(vtkImageData *out, vtkInformation* outInfo, int *uExtent)
+virtual vtkImageData * AllocateOutputData(vtkDataObject *out, vtkInformation* outInfo) VTK_OVERRIDE;
+virtual void AllocateOutputData(vtkImageData *out, vtkInformation* outInfo, int *uExtent) VTK_OVERRIDE
     { Superclass::AllocateOutputData(out, outInfo, uExtent); }
 void AllocatePointData(vtkImageData *out, vtkInformation* outInfo);
 
@@ -228,12 +235,13 @@ protected:
   vtkNRRDReader();
   ~vtkNRRDReader();
 
-  vtkMatrix4x4* RasToIjkMatrix;
-  vtkMatrix4x4* MeasurementFrameMatrix;
-  vtkMatrix4x4* NRRDWorldToRasMatrix;
+  static bool GetPointType(Nrrd* nrrdTemp, int& pointDataType, int &numOfComponents);
 
-  char* HeaderKeys;
-  char* CurrentFileName;
+  vtkSmartPointer<vtkMatrix4x4> RasToIjkMatrix;
+  vtkSmartPointer<vtkMatrix4x4> MeasurementFrameMatrix;
+  vtkSmartPointer<vtkMatrix4x4> NRRDWorldToRasMatrix;
+
+  std::string CurrentFileName;
 
   Nrrd *nrrd;
 
@@ -245,9 +253,13 @@ protected:
   bool UseNativeOrigin;
 
   std::map <std::string, std::string> HeaderKeyValue;
+  std::string HeaderKeys; // buffer for returning key list
 
-  virtual void ExecuteInformation();
-  virtual void ExecuteDataWithInformation(vtkDataObject *output, vtkInformation* outInfo);
+  std::map<unsigned int, std::string> AxisLabels;
+  std::map<unsigned int, std::string> AxisUnits;
+
+  virtual void ExecuteInformation() VTK_OVERRIDE;
+  virtual void ExecuteDataWithInformation(vtkDataObject *output, vtkInformation* outInfo) VTK_OVERRIDE;
 
   int tenSpaceDirectionReduce(Nrrd *nout, const Nrrd *nin, double SD[9]);
 

@@ -60,35 +60,34 @@ void vtkMRMLAnnotationNode::WriteXML(ostream& of, int nIndent)
   // vtkMRMLDisplayableNode::WriteXML(of,nIndent);
   Superclass::WriteXML(of,nIndent);
 
-  vtkIndent indent(nIndent);
-
-  of << indent << " referenceNodeID=\"" << (this->ReferenceNodeID ? this->GetReferenceNodeID() : "None") << "\"";
-  of << indent << " locked=\"" << this->Locked << "\"";
+  of << " referenceNodeID=\"" << (this->ReferenceNodeID ? this->GetReferenceNodeID() : "None") << "\"";
+  of << " locked=\"" << this->Locked << "\"";
 
   int textLength = this->TextList->GetNumberOfValues();
-  of << indent << " textList=\"";
+  of << " textList=\"";
 
   if (textLength)
     {
-      for (int i = 0 ; i < textLength - 1; i++) {
-    of << this->TextList->GetValue(i) << "|";
+    for (int i = 0 ; i < textLength - 1; i++)
+      {
+      of << this->TextList->GetValue(i) << "|";
       }
-      of <<  this->TextList->GetValue(textLength -1);
+    of <<  this->TextList->GetValue(textLength -1);
     }
   of << "\"";
 
   for (int j = 0 ; j < NUM_TEXT_ATTRIBUTE_TYPES; j ++)
     {
-      of << indent << " " << this->GetAttributeTypesEnumAsString(j) << "=\"";
-      if (textLength && this->GetPolyData() && this->GetPolyData()->GetPointData())
-    {
+    of << " " << this->GetAttributeTypesEnumAsString(j) << "=\"";
+    if (textLength && this->GetPolyData() && this->GetPolyData()->GetPointData())
+      {
       for (int i = 0 ; i < textLength - 1; i++)
         {
-          of << this->GetAnnotationAttribute(i,j) << " " ;
+        of << this->GetAnnotationAttribute(i,j) << " " ;
         }
       of << this->GetAnnotationAttribute(textLength - 1,j);
-    }
-      of << "\"";
+      }
+    of << "\"";
     }
 }
 
@@ -527,7 +526,7 @@ int  vtkMRMLAnnotationNode::DeleteText(int id)
       return -1;
     }
 
-  for (int i = id; id < n-1; i++ )
+  for (int i = id; i < n-1; i++ )
     {
       this->TextList->SetValue(i,this->GetText(i+1));
     }
@@ -576,6 +575,11 @@ const char *vtkMRMLAnnotationNode::GetAttributeTypesEnumAsString(int val)
   return "(unknown)";
 };
 
+//---------------------------------------------------------------------------
+std::string vtkMRMLAnnotationNode::GetDefaultStorageNodeClassName(const char* filename /* =NULL */)
+{
+  return vtkMRMLStorableNode::GetDefaultStorageNodeClassName(filename);
+}
 
 //-------------------------------------------------------------------------
 vtkMRMLStorageNode* vtkMRMLAnnotationNode::CreateDefaultStorageNode()
@@ -664,7 +668,12 @@ void vtkMRMLAnnotationNode::Initialize(vtkMRMLScene* mrmlScene)
   this->CreateAnnotationTextDisplayNode();
   this->DisableModifiedEventOff();
 
-  mrmlScene->AddNode(this);
+  // A node should only be added to the scene if it is not added already
+  // (there is not check in mrmlScene, and it causes problems).
+  if (!mrmlScene->IsNodePresent(this))
+    {
+    mrmlScene->AddNode(this);
+    }
 }
 
 //----------------------------------------------------------------------------
@@ -722,6 +731,11 @@ void vtkMRMLAnnotationNode::RestoreBackup()
 // Save the views
 void vtkMRMLAnnotationNode::SaveView()
 {
+  if (!this->GetScene())
+    {
+    vtkWarningMacro("vtkMRMLAnnotationNode::SaveView failed: scene is invalid");
+    return;
+    }
 
   // pointers to the current sliceNodes in the scene
   vtkMRMLSliceNode* redSliceNode = vtkMRMLSliceNode::SafeDownCast(this->GetScene()->GetNthNodeByClass(0,"vtkMRMLSliceNode"));

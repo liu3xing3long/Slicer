@@ -1,6 +1,7 @@
 import os
 import slicer
 import qt, ctk
+import re
 
 #=============================================================================
 #
@@ -15,6 +16,10 @@ class _ui_CreateComponentDialog(object):
 
     self.componentName = qt.QLineEdit()
     self.formLayout.addRow("Name:", self.componentName)
+
+    self.componentNameValidator = qt.QRegExpValidator(
+        qt.QRegExp(r"^[a-zA-Z_][a-zA-Z0-9_]*$"))
+    self.componentName.setValidator(self.componentNameValidator)
 
     self.componentType = qt.QComboBox()
     self.formLayout.addRow("Type:", self.componentType)
@@ -58,7 +63,7 @@ class CreateComponentDialog(object):
     if self.showDestination:
       dest = self.destination
       if not len(dest) or not os.path.exists(dest):
-        slicer.util.errorDisplay(u"Destination must be an existing directory." % self._typetc,
+        slicer.util.errorDisplay(u"Destination must be an existing directory.",
                                  windowTitle=u"Cannot create %s" % self._typelc, parent=self.dialog)
         return
 

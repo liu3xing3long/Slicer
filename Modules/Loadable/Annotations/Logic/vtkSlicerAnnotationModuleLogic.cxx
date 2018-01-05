@@ -505,7 +505,7 @@ void vtkSlicerAnnotationModuleLogic::ObserveMRMLScene()
   // also observe the interaction node for changes
   vtkMRMLInteractionNode *interactionNode =
     vtkMRMLInteractionNode::SafeDownCast(
-    this->GetMRMLScene()->GetNthNodeByClass(0, "vtkMRMLInteractionNode"));
+    this->GetMRMLScene()->GetNodeByID("vtkMRMLInteractionNodeSingleton"));
   if (interactionNode)
     {
     vtkIntArray *interactionEvents = vtkIntArray::New();
@@ -524,7 +524,7 @@ void vtkSlicerAnnotationModuleLogic::ObserveMRMLScene()
 
   // add known annotation types to the selection node
   vtkMRMLSelectionNode *selectionNode = vtkMRMLSelectionNode::SafeDownCast(
-      this->GetMRMLScene()->GetNthNodeByClass(0, "vtkMRMLSelectionNode"));
+      this->GetMRMLScene()->GetNodeByID("vtkMRMLSelectionNodeSingleton"));
   if (selectionNode)
     {
     // got into batch mode
@@ -557,7 +557,7 @@ void vtkSlicerAnnotationModuleLogic::AddAnnotationNode(const char * nodeDescript
   vtkMRMLSelectionNode *selectionNode = NULL;
   if (this->GetMRMLScene())
     {
-    selectionNode = vtkMRMLSelectionNode::SafeDownCast(this->GetMRMLScene()->GetNthNodeByClass(0, "vtkMRMLSelectionNode"));
+    selectionNode = vtkMRMLSelectionNode::SafeDownCast(this->GetMRMLScene()->GetNodeByID("vtkMRMLSelectionNodeSingleton"));
     }
   if (!selectionNode)
     {
@@ -580,7 +580,7 @@ void vtkSlicerAnnotationModuleLogic::StartPlaceMode(bool persistent)
   vtkMRMLInteractionNode *interactionNode = NULL;
   if ( this->GetMRMLScene())
     {
-    interactionNode = vtkMRMLInteractionNode::SafeDownCast(this->GetMRMLScene()->GetNthNodeByClass(0, "vtkMRMLInteractionNode"));
+    interactionNode = vtkMRMLInteractionNode::SafeDownCast(this->GetMRMLScene()->GetNodeByID("vtkMRMLInteractionNodeSingleton"));
     }
   if (!interactionNode)
     {
@@ -629,7 +629,7 @@ void vtkSlicerAnnotationModuleLogic::StopPlaceMode(bool persistent)
   if (this->GetMRMLScene())
     {
     selectionNode = vtkMRMLSelectionNode::SafeDownCast(
-      this->GetMRMLScene()->GetNthNodeByClass(0, "vtkMRMLSelectionNode"));
+      this->GetMRMLScene()->GetNodeByID("vtkMRMLSelectionNodeSingleton"));
     }
   if (!selectionNode)
     {
@@ -639,7 +639,7 @@ void vtkSlicerAnnotationModuleLogic::StopPlaceMode(bool persistent)
 
   vtkMRMLInteractionNode *interactionNode =
       vtkMRMLInteractionNode::SafeDownCast(
-          this->GetMRMLScene()->GetNthNodeByClass(0, "vtkMRMLInteractionNode"));
+          this->GetMRMLScene()->GetNodeByID("vtkMRMLInteractionNodeSingleton"));
   if (interactionNode == NULL)
     {
     vtkErrorMacro ( "StopPlaceMode: No interaction node in the scene." );
@@ -679,7 +679,7 @@ void vtkSlicerAnnotationModuleLogic::CancelCurrentOrRemoveLastAddedAnnotationNod
   vtkMRMLInteractionNode *interactionNode = NULL;
   if (this->GetMRMLScene())
     {
-    interactionNode = vtkMRMLInteractionNode::SafeDownCast(this->GetMRMLScene()->GetNthNodeByClass(0,"vtkMRMLInteractionNode"));
+    interactionNode = vtkMRMLInteractionNode::SafeDownCast(this->GetMRMLScene()->GetNodeByID("vtkMRMLInteractionNodeSingleton"));
     }
 
   if (!interactionNode)
@@ -1955,7 +1955,7 @@ const char * vtkSlicerAnnotationModuleLogic::GetAnnotationMeasurement(const char
   vtkMRMLAnnotationNode* annotationNode = vtkMRMLAnnotationNode::SafeDownCast(
       node);
   vtkMRMLSelectionNode* selectionNode =  vtkMRMLSelectionNode::SafeDownCast(
-    this->GetMRMLScene()->GetNthNodeByClass(0, "vtkMRMLSelectionNode"));
+    this->GetMRMLScene()->GetNodeByID("vtkMRMLSelectionNodeSingleton"));
 
   if (!annotationNode)
     {
@@ -2601,32 +2601,16 @@ void vtkSlicerAnnotationModuleLogic::JumpSlicesToAnnotationCoordinate(const char
     return;
     }
 
-  vtkMRMLNode *mrmlNode = this->GetMRMLScene()->GetNthNodeByClass(0,"vtkMRMLSliceNode");
-  if (!mrmlNode)
+  this->GetMRMLScene()->SaveStateForUndo();
+  // TODO for now only consider the first control point
+  double *rasCoordinates = controlpointsNode->GetControlPointCoordinates(0);
+  if (rasCoordinates)
     {
-    vtkErrorMacro("JumpSlicesToAnnotationCoordinate: could not get first slice node from scene");
-    return;
-    }
-  vtkMRMLSliceNode *sliceNode = vtkMRMLSliceNode::SafeDownCast(mrmlNode);
-  if (sliceNode)
-    {
-    this->GetMRMLScene()->SaveStateForUndo();
-    // TODO for now only consider the first control point
-    double *rasCoordinates = controlpointsNode->GetControlPointCoordinates(0);
-    if (rasCoordinates)
-      {
-      double r = rasCoordinates[0];
-      double a = rasCoordinates[1];
-      double s = rasCoordinates[2];
+    double r = rasCoordinates[0];
+    double a = rasCoordinates[1];
+    double s = rasCoordinates[2];
 
-      sliceNode->JumpAllSlices(r,a,s);
-      // JumpAllSlices jumps all the other slices, not self, so JumpSlice on
-      // this node as well
-      sliceNode->JumpSlice(r,a,s);
-      }
-
-//    annotationNode->RestoreView();
-
+    vtkMRMLSliceNode::JumpAllSlices(this->GetMRMLScene(), r, a, s);
     }
 }
 

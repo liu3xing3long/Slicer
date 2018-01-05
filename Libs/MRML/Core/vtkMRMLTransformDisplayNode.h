@@ -42,7 +42,7 @@ class VTK_MRML_EXPORT vtkMRMLTransformDisplayNode : public vtkMRMLDisplayNode
  public:
   static vtkMRMLTransformDisplayNode *New (  );
   vtkTypeMacro ( vtkMRMLTransformDisplayNode,vtkMRMLDisplayNode );
-  void PrintSelf ( ostream& os, vtkIndent indent );
+  void PrintSelf ( ostream& os, vtkIndent indent ) VTK_OVERRIDE;
 
   enum VisualizationModes
     {
@@ -64,30 +64,30 @@ class VTK_MRML_EXPORT vtkMRMLTransformDisplayNode : public vtkMRMLDisplayNode
   /// MRMLNode methods
   //--------------------------------------------------------------------------
 
-  virtual vtkMRMLNode* CreateNodeInstance (  );
+  virtual vtkMRMLNode* CreateNodeInstance () VTK_OVERRIDE;
 
   ///
   /// Read node attributes from XML (MRML) file
-  virtual void ReadXMLAttributes ( const char** atts );
+  virtual void ReadXMLAttributes ( const char** atts ) VTK_OVERRIDE;
 
   ///
   /// Write this node's information to a MRML file in XML format.
-  virtual void WriteXML ( ostream& of, int indent );
+  virtual void WriteXML ( ostream& of, int indent ) VTK_OVERRIDE;
 
 
   ///
   /// Copy the node's attributes to this object
-  virtual void Copy ( vtkMRMLNode *node );
+  virtual void Copy ( vtkMRMLNode *node ) VTK_OVERRIDE;
 
   ///
   /// Get node XML tag name (like Volume, UnstructuredGrid)
-  virtual const char* GetNodeTagName ( ) {return "TransformDisplayNode";};
+  virtual const char* GetNodeTagName ( ) VTK_OVERRIDE {return "TransformDisplayNode";}
 
   ///
   /// alternative method to propagate events generated in Display nodes
   virtual void ProcessMRMLEvents ( vtkObject * /*caller*/,
                                    unsigned long /*event*/,
-                                   void * /*callData*/ );
+                                   void * /*callData*/ ) VTK_OVERRIDE;
 
   //--------------------------------------------------------------------------
   /// Display options
@@ -97,6 +97,11 @@ class VTK_MRML_EXPORT vtkMRMLTransformDisplayNode : public vtkMRMLDisplayNode
   /// displayed.
   vtkMRMLNode* GetRegionNode();
   void SetAndObserveRegionNode(vtkMRMLNode* node);
+
+  /// A node that defines glyph starting point positions.
+  /// If not set then glyphs positions are arranged evenly in the full region.
+  vtkMRMLNode* GetGlyphPointsNode();
+  void SetAndObserveGlyphPointsNode(vtkMRMLNode* node);
 
   vtkSetMacro(VisualizationMode, int);
   vtkGetMacro(VisualizationMode, int);
@@ -162,6 +167,31 @@ class VTK_MRML_EXPORT vtkMRMLTransformDisplayNode : public vtkMRMLDisplayNode
   vtkSetMacro(ContourOpacity, double);
   vtkGetMacro(ContourOpacity, double);
 
+  // Interaction Parameters
+  vtkGetMacro(EditorVisibility, bool);
+  vtkSetMacro(EditorVisibility, bool);
+  vtkBooleanMacro(EditorVisibility, bool);
+  vtkGetMacro(EditorSliceIntersectionVisibility, bool);
+  vtkSetMacro(EditorSliceIntersectionVisibility, bool);
+  vtkBooleanMacro(EditorSliceIntersectionVisibility, bool);
+  vtkGetMacro(EditorTranslationEnabled, bool);
+  vtkSetMacro(EditorTranslationEnabled, bool);
+  vtkBooleanMacro(EditorTranslationEnabled, bool);
+  vtkGetMacro(EditorRotationEnabled, bool);
+  vtkSetMacro(EditorRotationEnabled, bool);
+  vtkBooleanMacro(EditorRotationEnabled, bool);
+  vtkGetMacro(EditorScalingEnabled, bool);
+  vtkSetMacro(EditorScalingEnabled, bool);
+  vtkBooleanMacro(EditorScalingEnabled, bool);
+
+  /// Ask the editor to recompute its bounds by invoking the
+  /// TransformUpdateEditorBoundsEvent event.
+  void UpdateEditorBounds();
+  enum
+    {
+    TransformUpdateEditorBoundsEvent = 2750
+    };
+
   /// Set the default color table
   /// Create and a procedural color node with default colors and use it for visualization.
   void SetDefaultColors();
@@ -204,6 +234,13 @@ protected:
   /// Opacity of the 3D contour. Between 0 and 1.
   double ContourOpacity;
   std::vector<double> ContourLevelsMm;
+
+  // Interaction Parameters
+  bool EditorVisibility;
+  bool EditorSliceIntersectionVisibility;
+  bool EditorTranslationEnabled;
+  bool EditorRotationEnabled;
+  bool EditorScalingEnabled;
 
  protected:
   vtkMRMLTransformDisplayNode ( );

@@ -1,7 +1,7 @@
 project(MRMLCore)
 
 #-----------------------------------------------------------------------------
-cmake_minimum_required(VERSION 2.8.4)
+cmake_minimum_required(VERSION 3.5)
 #-----------------------------------------------------------------------------
 
 # --------------------------------------------------------------------------
@@ -67,6 +67,7 @@ set(include_dirs
   ${CMAKE_CURRENT_BINARY_DIR}
   ${vtkAddon_INCLUDE_DIRS}
   ${vtkITK_INCLUDE_DIRS}
+  ${vtkSegmentationCore_INCLUDE_DIRS}
   ${FreeSurfer_INCLUDE_DIRS}
   )
 if(MRML_USE_vtkTeem)
@@ -100,6 +101,7 @@ endif()
 # Sources
 # --------------------------------------------------------------------------
 set(MRMLCore_SRCS
+  vtkCodedEntry.cxx
   vtkEventBroker.cxx
   vtkImageBimodalAnalysis.cxx
   vtkDataFileFormatHelper.cxx
@@ -140,6 +142,9 @@ set(MRMLCore_SRCS
   vtkMRMLModelStorageNode.cxx
   vtkMRMLNode.cxx
   vtkMRMLParser.cxx
+  vtkMRMLPlotChartNode.cxx
+  vtkMRMLPlotDataNode.cxx
+  vtkMRMLPlotViewNode.cxx
   vtkMRMLProceduralColorNode.cxx
   vtkMRMLProceduralColorStorageNode.cxx
   vtkMRMLROIListNode.cxx
@@ -151,6 +156,12 @@ set(MRMLCore_SRCS
   vtkMRMLSceneViewStorageNode.cxx
   vtkMRMLScriptedModuleNode.cxx
   vtkMRMLScriptedModuleNode.h
+  vtkMRMLSegmentationNode.cxx
+  vtkMRMLSegmentationNode.h
+  vtkMRMLSegmentationDisplayNode.cxx
+  vtkMRMLSegmentationDisplayNode.h
+  vtkMRMLSegmentationStorageNode.cxx
+  vtkMRMLSegmentationStorageNode.h
   vtkMRMLSelectionNode.cxx
   vtkMRMLSliceCompositeNode.cxx
   vtkMRMLSliceNode.cxx
@@ -160,17 +171,17 @@ set(MRMLCore_SRCS
   vtkMRMLSubjectHierarchyConstants.h
   vtkMRMLSubjectHierarchyNode.cxx
   vtkMRMLSubjectHierarchyNode.h
+  vtkMRMLSubjectHierarchyLegacyNode.cxx
+  vtkMRMLSubjectHierarchyLegacyNode.h
   vtkMRMLTableNode.cxx
   vtkMRMLTableStorageNode.cxx
+  vtkMRMLTableSQLiteStorageNode.cxx
   vtkMRMLTableViewNode.cxx
   vtkMRMLTransformNode.cxx
   vtkMRMLTransformStorageNode.cxx
   vtkMRMLTransformDisplayNode.cxx
   vtkMRMLTransformableNode.cxx
   vtkMRMLUnitNode.cxx
-  vtkMRMLUnstructuredGridDisplayNode.cxx
-  vtkMRMLUnstructuredGridNode.cxx
-  vtkMRMLUnstructuredGridStorageNode.cxx
   vtkMRMLVectorVolumeDisplayNode.cxx
   vtkMRMLViewNode.cxx
   vtkMRMLVolumeArchetypeStorageNode.cxx
@@ -249,6 +260,7 @@ add_library(${lib_name} ${srcs})
 set(libs
   vtkAddon
   vtkITK
+  vtkSegmentationCore
   ${ITK_LIBRARIES}
   ${VTK_LIBRARIES}
   vtkIOInfovis
@@ -369,5 +381,5 @@ endif()
 # --------------------------------------------------------------------------
 # Set INCLUDE_DIRS variable
 # --------------------------------------------------------------------------
-set(${PROJECT_NAME}_INCLUDE_DIRS ${CMAKE_CURRENT_SOURCE_DIR} ${CMAKE_CURRENT_BINARY_DIR} ${vtkAddon_INCLUDE_DIRS}
+set(${PROJECT_NAME}_INCLUDE_DIRS ${CMAKE_CURRENT_SOURCE_DIR} ${CMAKE_CURRENT_BINARY_DIR} ${vtkAddon_INCLUDE_DIRS} ${vtkSegmentationCore_INCLUDE_DIRS}
   CACHE INTERNAL "${PROJECT_NAME} include dirs" FORCE)

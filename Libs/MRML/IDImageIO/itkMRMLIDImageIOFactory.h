@@ -14,15 +14,15 @@
      PURPOSE.  See the above copyright notices for more information.
 
 =========================================================================*/
-#ifndef __itkMRMLIDImageIOFactory_h
-#define __itkMRMLIDImageIOFactory_h
+#ifndef itkMRMLIDImageIOFactory_h
+#define itkMRMLIDImageIOFactory_h
 
 #include "itkObjectFactoryBase.h"
 #include "itkImageIOBase.h"
 
 #include "itkMRMLIDImageIO.h"
 
-#include "itkMRMLIDIOWin32Header.h"
+#include "itkMRMLIDIOExport.h"
 
 namespace itk
 {
@@ -33,9 +33,9 @@ class MRMLIDImageIO_EXPORT MRMLIDImageIOFactory : public ObjectFactoryBase
 {
 public:
   /** Standard class typedefs. */
-  typedef MRMLIDImageIOFactory   Self;
-  typedef ObjectFactoryBase  Superclass;
-  typedef SmartPointer<Self>  Pointer;
+  typedef MRMLIDImageIOFactory      Self;
+  typedef ObjectFactoryBase         Superclass;
+  typedef SmartPointer<Self>        Pointer;
   typedef SmartPointer<const Self>  ConstPointer;
 
   /** Class methods used to interface with the registered factories. */

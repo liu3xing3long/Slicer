@@ -5,11 +5,6 @@
   See COPYRIGHT.txt
   or http://www.slicer.org/copyright/copyright.txt for details.
 
-  Program:   3D Slicer
-  Module:    $RCSfile: vtkMRMLVolumeRenderingParametersNode.h,v $
-  Date:      $Date: 2006/03/19 17:12:29 $
-  Version:   $Revision: 1.3 $
-
 =========================================================================auto=*/
 // .NAME vtkMRMLVolumeRenderingParametersNode - MRML node for storing a slice through RAS space
 // .SECTION Description
@@ -26,50 +21,67 @@
 #include "vtkSlicerCropVolumeModuleMRMLExport.h"
 
 class vtkMRMLAnnotationROINode;
+class vtkMRMLTransformNode;
 class vtkMRMLVolumeNode;
 
 /// \ingroup Slicer_QtModules_CropVolume
 class VTK_SLICER_CROPVOLUME_MODULE_MRML_EXPORT vtkMRMLCropVolumeParametersNode : public vtkMRMLNode
 {
-  public:
+public:
+  enum
+    {
+    InterpolationNearestNeighbor = 1,
+    InterpolationLinear = 2,
+    InterpolationWindowedSinc = 3,
+    InterpolationBSpline = 4
+    };
 
   static vtkMRMLCropVolumeParametersNode *New();
   vtkTypeMacro(vtkMRMLCropVolumeParametersNode,vtkMRMLNode);
-  void PrintSelf(ostream& os, vtkIndent indent);
+  void PrintSelf(ostream& os, vtkIndent indent) VTK_OVERRIDE;
 
-  virtual vtkMRMLNode* CreateNodeInstance();
+  virtual vtkMRMLNode* CreateNodeInstance() VTK_OVERRIDE;
 
-  // Description:
-  // Set node attributes
-  virtual void ReadXMLAttributes( const char** atts);
+  /// Set node attributes from XML attributes
+  virtual void ReadXMLAttributes( const char** atts) VTK_OVERRIDE;
 
-  // Description:
-  // Write this node's information to a MRML file in XML format.
-  virtual void WriteXML(ostream& of, int indent);
+  /// Write this node's information to a MRML file in XML format.
+  virtual void WriteXML(ostream& of, int indent) VTK_OVERRIDE;
 
-  // Description:
-  // Copy the node's attributes to this object
-  virtual void Copy(vtkMRMLNode *node);
+  /// Copy the node's attributes to this object
+  virtual void Copy(vtkMRMLNode *node) VTK_OVERRIDE;
 
-  // Description:
-  // Get node XML tag name (like Volume, Model)
-  virtual const char* GetNodeTagName() {return "CropVolumeParameters";};
+  /// Get node XML tag name (like Volume, Model)
+  virtual const char* GetNodeTagName() VTK_OVERRIDE {return "CropVolumeParameters";}
 
-  // Description:
-  vtkSetStringMacro(InputVolumeNodeID);
-  vtkGetStringMacro (InputVolumeNodeID);
-  vtkSetStringMacro(OutputVolumeNodeID);
-  vtkGetStringMacro (OutputVolumeNodeID);
-  vtkSetStringMacro(ROINodeID);
-  vtkGetStringMacro (ROINodeID);
+  /// Set volume node to be cropped
+  void SetInputVolumeNodeID(const char *nodeID);
+  /// Get volume node to be cropped
+  const char *GetInputVolumeNodeID();
+  vtkMRMLVolumeNode* GetInputVolumeNode();
+
+  /// Set resulting cropped volume node
+  void SetOutputVolumeNodeID(const char *nodeID);
+  /// Get resulting cropped volume node
+  const char* GetOutputVolumeNodeID();
+  vtkMRMLVolumeNode* GetOutputVolumeNode();
+
+  /// Set cropping region of interest
+  void SetROINodeID(const char *nodeID);
+  /// Get cropping region of interest
+  const char* GetROINodeID();
+  vtkMRMLAnnotationROINode* GetROINode();
+
+  /// Set transform node that may be used for aligning
+  /// the ROI with the input volume.
+  void SetROIAlignmentTransformNodeID(const char *nodeID);
+  const char* GetROIAlignmentTransformNodeID();
+  vtkMRMLTransformNode* GetROIAlignmentTransformNode();
+  void DeleteROIAlignmentTransformNode();
 
   vtkSetMacro(IsotropicResampling,bool);
   vtkGetMacro(IsotropicResampling,bool);
   vtkBooleanMacro(IsotropicResampling,bool);
-
-  vtkSetMacro(ROIVisibility,bool);
-  vtkGetMacro(ROIVisibility,bool);
-  vtkBooleanMacro(ROIVisibility,bool);
 
   vtkSetMacro(VoxelBased,bool);
   vtkGetMacro(VoxelBased,bool);
@@ -81,6 +93,9 @@ class VTK_SLICER_CROPVOLUME_MODULE_MRML_EXPORT vtkMRMLCropVolumeParametersNode :
   vtkSetMacro(SpacingScalingConst, double);
   vtkGetMacro(SpacingScalingConst, double);
 
+  vtkSetMacro(FillValue, double);
+  vtkGetMacro(FillValue, double);
+
 protected:
   vtkMRMLCropVolumeParametersNode();
   ~vtkMRMLCropVolumeParametersNode();
@@ -88,15 +103,11 @@ protected:
   vtkMRMLCropVolumeParametersNode(const vtkMRMLCropVolumeParametersNode&);
   void operator=(const vtkMRMLCropVolumeParametersNode&);
 
-  char *InputVolumeNodeID;
-  char *OutputVolumeNodeID;
-  char *ROINodeID;
-
-  bool ROIVisibility;
   bool VoxelBased;
   int InterpolationMode;
   bool IsotropicResampling;
   double SpacingScalingConst;
+  double FillValue;
 };
 
 #endif

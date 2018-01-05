@@ -4,13 +4,16 @@
     The script does not accept any input arguments. All arguments are to be provided using the option flags. For a list of the option flags, run
         python release.py --help"""
 
+from __future__ import print_function
+
 from optparse import OptionParser
 import re, sys
 
 try:
   import pydas
-except ImportError, e:
-  print e, "\nInstall pydas or update PYTHONPATH"
+except ImportError as e:
+  print(e, "\nInstall pydas or update PYTHONPATH")
+  sys.exit(1)
 
 def _error(message):
   """ Print an error message and exit the program """
@@ -118,14 +121,21 @@ def duplicateFolderfolders(sourceID, destID, token, communicator, overwrite):
   folderChildren = communicator.folder_children(token, sourceID)
   folder_subfolders = folderChildren["folders"]
 
+  destFolderChildren = communicator.folder_children(token, destID)
+
   if len(folder_subfolders) > 0:
     for subfolder in folder_subfolders:
-      # Create a corresponding subfolder at the destination
-      dst_folder = communicator.create_folder(token, subfolder["name"], destID)
+      # If needed, create a corresponding subfolder at the destination
+      dst_index = _getFolderIndex(destFolderChildren, subfolder["name"])
+      if dst_index == -1:
+        dst_folder = communicator.create_folder(token, subfolder["name"], destID)
+        dst_folderID = dst_folder["folder_id"]
+      else:
+        dst_folderID = _getIDfromIndex(destFolderChildren, "folder", dst_index)
       # Duplicate recursively
-      duplicateFolderfolders(subfolder["folder_id"], dst_folder["folder_id"], token, communicator, overwrite)
+      duplicateFolderfolders(subfolder["folder_id"], dst_folderID, token, communicator, overwrite)
       # Duplicate all the items from the source subfolder to new dest subfolder
-      duplicateFolderItems(subfolder["folder_id"], dst_folder["folder_id"], token, communicator, overwrite)
+      duplicateFolderItems(subfolder["folder_id"], dst_folderID, token, communicator, overwrite)
 
 def versionDataApplicationDirectory(sourceVersion, destVersion, token, communicator, applicationID, overwrite):
   """Version the Data/Application directory
@@ -142,7 +152,7 @@ def versionDataApplicationDirectory(sourceVersion, destVersion, token, communica
   sourceID = _getIDfromIndex(availableVersions, "folder", sourceIndex)
 
   # Create a new folder for destination under Application folder
-  print "Creating folder", destVersion, "under Application directory"
+  print("Creating folder %s under Application directory" % destVersion)
   dest_folder = communicator.create_folder(token, destVersion, applicationID)
   destID = dest_folder["folder_id"]
 
@@ -150,10 +160,10 @@ def versionDataApplicationDirectory(sourceVersion, destVersion, token, communica
   duplicateFolderItems(sourceID, destID, token, communicator, overwrite)
 
   message = "Duplicating subfolders from %s to %s..." %(sourceVersion, destVersion)
-  print message
+  print(message)
   # Duplicate all the sub-folders from source to destination
   duplicateFolderfolders(sourceID, destID, token, communicator, overwrite)
-  print message + "[DONE]"
+  print(message + "[DONE]")
 
 def versionDataModulesDirectory(sourceVersion, destVersion, token, communicator, modulesID, ignoreModules, overwrite):
   """Version the Data/Modules directory
@@ -181,25 +191,32 @@ def versionDataModulesDirectory(sourceVersion, destVersion, token, communicator,
       continue
 
     moduleFolderID = _getIDfromIndex(availableModules, "folder", num_module)
+    moduleName = availableModulesFolders[num_module]["name"]
     availableVersions = communicator.folder_children(token, moduleFolderID)
+
     sourceIndex = _getFolderIndex(availableVersions, sourceVersion)
     if sourceIndex == -1:
-      _error("No folder named " + sourceVersion + " in module: " + availableModulesFolders[num_module]["name"])
+      _error("No folder named " + sourceVersion + " in module: " + moduleName)
     sourceID = _getIDfromIndex(availableVersions, "folder", sourceIndex)
 
-    # Create a new folder for destination under the module folder
-    print "Creating folder", destVersion, "under", availableModulesFolders[num_module]["name"], "module directory"
-    dest_folder = communicator.create_folder(token, destVersion, moduleFolderID)
-    destID = dest_folder["folder_id"]
+    # If needed, create a new folder for destination under the module folder
+    destIndex = _getFolderIndex(availableVersions, destVersion)
+    if destIndex == -1:
+      print("Creating folder %s under %s module directory" % (destVersion, moduleName))
+      dest_folder = communicator.create_folder(token, destVersion, moduleFolderID)
+      destID = dest_folder["folder_id"]
+    else:
+      print("Re-using existing folder %s under %s module directory" % (destVersion, moduleName))
+      destID = _getIDfromIndex(availableVersions, "folder", destIndex)
 
     # Duplicate the child items from source to destination
     duplicateFolderItems(sourceID, destID, token, communicator, overwrite)
 
-    message = "Duplicating subfolders from %s to %s for %s module..." % (sourceVersion, destVersion, availableModulesFolders[num_module]["name"])
-    print message
+    message = "Duplicating subfolders from %s to %s for %s module..." % (sourceVersion, destVersion, moduleName)
+    print(message)
     # Duplicate all the sub-folders from source to destination
     duplicateFolderfolders(sourceID, destID, token, communicator, overwrite)
-    print message + "[DONE]"
+    print(message + "[DONE]")
 
 def printSourceStructure(modulesID, applicationID, sourceVersion, token, communicator):
   """Print the directory structure of source version in Application and Modules under the data tree
@@ -215,9 +232,9 @@ def printSourceStructure(modulesID, applicationID, sourceVersion, token, communi
     msg = "No folder named " + sourceVersion + " in Application folder."
     _error(msg)
   sourceApplicationID = _getIDfromIndex(applicationChildren, "folder", sourceVersionApplicationIndex)
-  print "Application", "( folder_id:", applicationID, ")"
+  print("Application ( folder_id:%s )" % applicationID)
   printFolderStructure(sourceApplicationID, token, communicator, 1)
-  print "\n"
+  print("\n")
 
   # Print Modules and their directory structure for the source version
   availableModules = communicator.folder_children(token, modulesID)
@@ -227,12 +244,12 @@ def printSourceStructure(modulesID, applicationID, sourceVersion, token, communi
     sourceVersionModuleIndex = _getFolderIndex(moduleChildren, sourceVersion)
     if sourceVersionModuleIndex == -1:
       msg = "No folder named " + sourceVersion + " in module ", module["name"], "."
-      print "Warning:", msg
+      print("Warning:", msg)
       continue
     sourceModuleID = _getIDfromIndex(moduleChildren, "folder", sourceVersionModuleIndex)
-    print "Module:", module["name"], "( folder_id:", sourceModuleID, ")"
+    print("Module:%s( folder_id:%s )" % (module["name"], sourceModuleID))
     printFolderStructure(sourceModuleID, token, communicator, 1)
-    print "\n"
+    print("\n")
 
 
 def printFolderStructure(folderID, token, communicator, depth = 0):
@@ -299,18 +316,18 @@ def versionData(midas_url, email, apikey, sourceVersion, destVersion, data_id, i
     sys.exit(0)
 
   msgData = "Versioning of the NA-MIC Data tree for release %s..." % (destVersion)
-  print msgData
+  print(msgData)
   msgModules = "Versioning Modules..."
-  print msgModules
+  print(msgModules)
   versionDataModulesDirectory(sourceVersion, destVersion, token, communicator, ModulesID, ignore_modules, overwrite)
-  print msgModules + "[DONE]"
+  print(msgModules + "[DONE]")
 
   msgApplication = "Versioning Application..."
-  print msgApplication
+  print(msgApplication)
   versionDataApplicationDirectory(sourceVersion, destVersion, token, communicator, ApplicationID, overwrite)
-  print msgApplication + "[DONE]"
+  print(msgApplication + "[DONE]")
 
-  print msgData + "[DONE]"
+  print(msgData + "[DONE]")
 
 def _checkRequiredArguments(options, parser):
   """Check the input arguments to see if all REQUIRED arguments are provided by user

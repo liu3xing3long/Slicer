@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.1)
+cmake_minimum_required(VERSION 3.5)
 
 project(TemplateKey)
 
@@ -10,7 +10,7 @@ set(EXTENSION_CONTRIBUTORS "John Doe (AnyWare Corp.)")
 set(EXTENSION_DESCRIPTION "This is an example of an extension using SuperBuild to build a dependent project named Foo")
 set(EXTENSION_ICONURL "http://www.example.com/Slicer/Extensions/TemplateKey.png")
 set(EXTENSION_SCREENSHOTURLS "http://www.example.com/Slicer/Extensions/TemplateKey/Screenshots/1.png")
-set(EXTENSION_DEPENDS "NA") # Specified as a space separated list or 'NA' if any
+set(EXTENSION_DEPENDS "NA") # Specified as a space separated string, a list or 'NA' if any
 set(EXTENSION_BUILD_SUBDIRECTORY inner-build)
 
 set(SUPERBUILD_TOPLEVEL_PROJECT inner)
@@ -40,4 +40,5 @@ endif()
 #-----------------------------------------------------------------------------
 set(CPACK_INSTALL_CMAKE_PROJECTS "${CPACK_INSTALL_CMAKE_PROJECTS};${CMAKE_BINARY_DIR};${EXTENSION_NAME};ALL;/")
 #set(CPACK_INSTALL_CMAKE_PROJECTS "${CPACK_INSTALL_CMAKE_PROJECTS};${Foo_DIR};Foo;RuntimeLibraries;/")
+include(${Slicer_EXTENSION_GENERATE_CONFIG})
 include(${Slicer_EXTENSION_CPACK})

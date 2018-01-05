@@ -31,6 +31,7 @@ vtkMRMLNodeNewMacro(vtkMRMLProceduralColorStorageNode);
 //----------------------------------------------------------------------------
 vtkMRMLProceduralColorStorageNode::vtkMRMLProceduralColorStorageNode()
 {
+  this->DefaultWriteFileExtension = "txt";
 }
 
 //----------------------------------------------------------------------------
@@ -144,7 +145,7 @@ int vtkMRMLProceduralColorStorageNode::ReadDataInternal(vtkMRMLNode *refNode)
 int vtkMRMLProceduralColorStorageNode::WriteDataInternal(vtkMRMLNode *refNode)
 {
   std::string fullName = this->GetFullNameFromFileName();
-  if (fullName == std::string(""))
+  if (fullName.empty())
     {
     vtkErrorMacro("vtkMRMLProceduralColorStorageNode: File name not specified");
     return 0;
@@ -227,10 +228,4 @@ void vtkMRMLProceduralColorStorageNode::InitializeSupportedWriteFileTypes()
 {
   this->SupportedWriteFileTypes->InsertNextValue("Color Function (.cxml)");
   this->SupportedWriteFileTypes->InsertNextValue("Text (.txt)");
-}
-
-//----------------------------------------------------------------------------
-const char* vtkMRMLProceduralColorStorageNode::GetDefaultWriteFileExtension()
-{
-  return "txt";
 }

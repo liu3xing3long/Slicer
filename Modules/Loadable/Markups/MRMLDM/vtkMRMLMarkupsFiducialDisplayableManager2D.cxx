@@ -70,7 +70,14 @@ public:
   static vtkMarkupsFiducialWidgetCallback2D *New()
   { return new vtkMarkupsFiducialWidgetCallback2D; }
 
-  vtkMarkupsFiducialWidgetCallback2D(){}
+  vtkMarkupsFiducialWidgetCallback2D()
+    : Widget(NULL)
+    , Node(NULL)
+    , DisplayableManager(NULL)
+    , LastInteractionEventMarkupIndex(-1)
+    , PointMovedSinceStartInteraction(false)
+  {
+  }
 
   virtual void Execute (vtkObject *vtkNotUsed(caller), unsigned long event, void *callData)
   {
@@ -107,8 +114,15 @@ public:
           {
           this->Node->SetAttribute("Markups.MovingInSliceView", sliceNode->GetLayoutName());
           std::ostringstream seedNumber;
-          unsigned int *n =  reinterpret_cast<unsigned int *>(callData);
-          seedNumber << *n;
+          int *n =  reinterpret_cast<int *>(callData);
+          if (n != NULL)
+            {
+            seedNumber << *n;
+            }
+          else
+            {
+            seedNumber << "-1";
+            }
           this->Node->SetAttribute("Markups.MovingMarkupIndex", seedNumber.str().c_str());
           }
         else
@@ -123,11 +137,19 @@ public:
         }
       }
 
-
     // check which event it is
     if (event ==  vtkCommand::PlacePointEvent)
       {
       // std::cout << "Warning: PlacePointEvent not supported" << std::endl;
+      }
+    else if (event == vtkCommand::StartInteractionEvent)
+      {
+      // If calldata is NULL, invoking an event may cause a crash (e.g., Python observer
+      // tries to dereference the NULL pointer), therefore it's important to always pass a valid pointer
+      // and indicate invalidity with value (-1).
+      this->LastInteractionEventMarkupIndex = (callData ? *(reinterpret_cast<int *>(callData)) : -1);
+      this->PointMovedSinceStartInteraction = false;
+      this->Node->InvokeEvent(vtkMRMLMarkupsNode::PointStartInteractionEvent, &this->LastInteractionEventMarkupIndex);
       }
     else if (event == vtkCommand::EndInteractionEvent)
       {
@@ -136,7 +158,18 @@ public:
         {
         this->Node->GetScene()->SaveStateForUndo(this->Node);
         }
-      this->Node->InvokeEvent(vtkMRMLMarkupsNode::PointEndInteractionEvent, callData);
+      if (callData)
+        {
+        // Most of the time vtkCommand::EndInteractionEvent does not provide
+        // seed index, but in case we get a value then update the markup index.
+        this->LastInteractionEventMarkupIndex = *(reinterpret_cast<int *>(callData));
+        }
+      this->Node->InvokeEvent(vtkMRMLMarkupsNode::PointEndInteractionEvent, &this->LastInteractionEventMarkupIndex);
+      if (!this->PointMovedSinceStartInteraction)
+        {
+        this->Node->InvokeEvent(vtkMRMLMarkupsNode::PointClickedEvent, &this->LastInteractionEventMarkupIndex);
+        }
+      this->LastInteractionEventMarkupIndex = -1;
       }
     else if (event == vtkCommand::InteractionEvent)
       {
@@ -150,34 +183,41 @@ public:
         return;
         }
 
-      double displayCoordinates1[4];
-      if (callData != NULL)
+      // It might be possible that in response to a single point interaction event, other points are adjusted as well,
+      // so treat this callData separately from start/end interaction's callData and don't update this->LastInteractionEventMarkupIndex.
+      int n = -1;
+      int* nPtr =  reinterpret_cast<int *>(callData);
+      if (nPtr)
+        {
+        n = *nPtr;
+        }
+      else if (representation->GetNumberOfSeeds() == 1)
+        {
+        n = 0;
+        }
+      if ( n >= 0 )
         {
         // have a single seed that moved
-        unsigned int *n =  reinterpret_cast<unsigned int *>(callData);
-        if (n ||
-            (n == 0 && representation->GetNumberOfSeeds() == 1))
+        // first, we get the current displayCoordinates of the points
+        double displayCoordinates1[4] = { 0, 0, 0, 1 };
+        representation->GetSeedDisplayPosition(n, displayCoordinates1);
+
+        // second, we copy these to restrictedDisplayCoordinates
+        double restrictedDisplayCoordinates1[4] = {displayCoordinates1[0], displayCoordinates1[1], displayCoordinates1[2], displayCoordinates1[3]};
+
+        // modify restrictedDisplayCoordinates 1 and 2, if these are outside the viewport of the current renderer
+        bool changed = this->DisplayableManager->RestrictDisplayCoordinatesToViewport(restrictedDisplayCoordinates1);
+
+        // only if we had to restrict the coordinates aka. if the coordinates changed, we update the positions
+        if (changed ||
+            this->DisplayableManager->GetDisplayCoordinatesChanged(displayCoordinates1,restrictedDisplayCoordinates1))
           {
-          // first, we get the current displayCoordinates of the points
-          representation->GetSeedDisplayPosition(*n,displayCoordinates1);
-
-          // second, we copy these to restrictedDisplayCoordinates
-          double restrictedDisplayCoordinates1[4] = {displayCoordinates1[0], displayCoordinates1[1], displayCoordinates1[2], displayCoordinates1[3]};
-
-          // modify restrictedDisplayCoordinates 1 and 2, if these are outside the viewport of the current renderer
-          bool changed = this->DisplayableManager->RestrictDisplayCoordinatesToViewport(restrictedDisplayCoordinates1);
-
-          // only if we had to restrict the coordinates aka. if the coordinates changed, we update the positions
-          if (changed ||
-              this->DisplayableManager->GetDisplayCoordinatesChanged(displayCoordinates1,restrictedDisplayCoordinates1))
-            {
-            representation->SetSeedDisplayPosition(*n,restrictedDisplayCoordinates1);
-            }
-
-          // propagate the changes to MRML
-          //std::cout << "callback: n = " << *n << std::endl;
-          this->DisplayableManager->UpdateNthMarkupPositionFromWidget(*n, this->Node, this->Widget);
+          representation->SetSeedDisplayPosition(n,restrictedDisplayCoordinates1);
           }
+
+        // propagate the changes to MRML
+        this->DisplayableManager->UpdateNthMarkupPositionFromWidget(n, this->Node, this->Widget);
+        this->PointMovedSinceStartInteraction = true;
         }
       else
         {
@@ -202,6 +242,8 @@ public:
   vtkAbstractWidget * Widget;
   vtkMRMLMarkupsNode * Node;
   vtkMRMLMarkupsDisplayableManager2D * DisplayableManager;
+  int LastInteractionEventMarkupIndex;
+  bool PointMovedSinceStartInteraction;
 };
 
 //---------------------------------------------------------------------------
@@ -225,8 +267,8 @@ vtkAbstractWidget * vtkMRMLMarkupsFiducialDisplayableManager2D::CreateWidget(vtk
     return 0;
     }
 
-  // 2d glyphs and text need to be scaled by 1/300 to show up properly in the 2d slice windows
-  this->SetScaleFactor2D(0.0033);
+  // 2d glyphs and text need to be scaled by 1/60 to show up properly in the 2d slice windows
+  this->SetScaleFactor2D(0.01667);
 
   vtkMRMLMarkupsFiducialNode* fiducialNode = vtkMRMLMarkupsFiducialNode::SafeDownCast(node);
 
@@ -337,7 +379,8 @@ void vtkMRMLMarkupsFiducialDisplayableManager2D::OnWidgetCreated(vtkAbstractWidg
   myCallback->SetNode(node);
   myCallback->SetWidget(widget);
   myCallback->SetDisplayableManager(this);
-  widget->AddObserver(vtkCommand::EndInteractionEvent,myCallback);
+  widget->AddObserver(vtkCommand::StartInteractionEvent, myCallback);
+  widget->AddObserver(vtkCommand::EndInteractionEvent, myCallback);
   widget->AddObserver(vtkCommand::InteractionEvent,myCallback);
   myCallback->Delete();
 
@@ -801,15 +844,7 @@ void vtkMRMLMarkupsFiducialDisplayableManager2D::SetNthSeed(int n, vtkMRMLMarkup
                   static const double inPlaneOpacity = 1.0;
                   if (displayP1[2] < 0)
                     {
-                    // when the glyph source is a cross2d or a dash2d, filled
-                    // off is not working correctly, the lines extend to the
-                    // edges of the viewer (the scaling is applied to line
-                    // length
-                    if (glyphType != vtkMRMLMarkupsDisplayNode::Dash2D &&
-                        glyphType != vtkMRMLMarkupsDisplayNode::Cross2D)
-                      {
-                      glyphSource->FilledOff();
-                      }
+                    glyphSource->FilledOff();
                     if (displayP1[2] > -threshold)
                       {
                       projectionOpacity = inPlaneOpacity;
@@ -865,15 +900,16 @@ void vtkMRMLMarkupsFiducialDisplayableManager2D::SetNthSeed(int n, vtkMRMLMarkup
         (interactionNode->GetCurrentInteractionMode() == vtkMRMLInteractionNode::Place)
         && (interactionNode->GetPlaceModePersistence() == 1);
       }
-    if (listLocked || seedLocked || persistentPlaceMode)
+    vtkHandleWidget *seed = seedWidget->GetSeed(n);
+    if (listLocked || persistentPlaceMode)
       {
-      seedWidget->GetSeed(n)->ProcessEventsOff();
+      seed->ProcessEventsOff();
       }
     else
       {
-      seedWidget->GetSeed(n)->ProcessEventsOn();
+      seed->ProcessEventsOn();
+      seed->SetEnableTranslation(!seedLocked);
       }
-
     }
   else if (pointHandleRep)
     {
@@ -900,6 +936,7 @@ void vtkMRMLMarkupsFiducialDisplayableManager2D::SetNthSeed(int n, vtkMRMLMarkup
 /// Propagate properties of MRML node to widget.
 void vtkMRMLMarkupsFiducialDisplayableManager2D::PropagateMRMLToWidget(vtkMRMLMarkupsNode* node, vtkAbstractWidget * widget)
 {
+
   if (!widget)
     {
     vtkErrorMacro("PropagateMRMLToWidget: Widget was null!")
@@ -1454,7 +1491,7 @@ void vtkMRMLMarkupsFiducialDisplayableManager2D::OnMRMLMarkupsNodeNthMarkupModif
 }
 
 //---------------------------------------------------------------------------
-void vtkMRMLMarkupsFiducialDisplayableManager2D::OnMRMLMarkupsNodeMarkupAddedEvent(vtkMRMLMarkupsNode * markupsNode)
+void vtkMRMLMarkupsFiducialDisplayableManager2D::OnMRMLMarkupsNodeMarkupAddedEvent(vtkMRMLMarkupsNode * markupsNode, int n)
 {
   vtkDebugMacro("OnMRMLMarkupsNodeMarkupAddedEvent");
 
@@ -1470,6 +1507,14 @@ void vtkMRMLMarkupsFiducialDisplayableManager2D::OnMRMLMarkupsNodeMarkupAddedEve
     return;
     }
 
+  if (n < 0)
+    {
+    // batch update, recreate the widget
+    this->Helper->RemoveWidgetAndNode(markupsNode);
+    this->AddWidget(markupsNode);
+    return;
+    }
+
   vtkSeedWidget* seedWidget = vtkSeedWidget::SafeDownCast(widget);
   if (!seedWidget)
    {
@@ -1479,7 +1524,6 @@ void vtkMRMLMarkupsFiducialDisplayableManager2D::OnMRMLMarkupsNodeMarkupAddedEve
 
   // this call will create a new handle and set it
   // std::cout << "OnMRMLMarkupsNodeMarkupAddedEvent: adding to markups node that currently has " << markupsNode->GetNumberOfMarkups() << std::endl;
-  int n = markupsNode->GetNumberOfMarkups() - 1;
   this->SetNthSeed(n, vtkMRMLMarkupsFiducialNode::SafeDownCast(markupsNode), seedWidget);
 
   vtkSeedRepresentation * seedRepresentation = vtkSeedRepresentation::SafeDownCast(seedWidget->GetRepresentation());
@@ -1488,7 +1532,7 @@ void vtkMRMLMarkupsFiducialDisplayableManager2D::OnMRMLMarkupsNodeMarkupAddedEve
 }
 
 //---------------------------------------------------------------------------
-void vtkMRMLMarkupsFiducialDisplayableManager2D::OnMRMLMarkupsNodeMarkupRemovedEvent(vtkMRMLMarkupsNode * markupsNode)
+void vtkMRMLMarkupsFiducialDisplayableManager2D::OnMRMLMarkupsNodeMarkupRemovedEvent(vtkMRMLMarkupsNode * markupsNode, int vtkNotUsed(n))
 {
   vtkDebugMacro("OnMRMLMarkupsNodeMarkupRemovedEvent");
 

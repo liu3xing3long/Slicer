@@ -1,33 +1,43 @@
 import os
-import slicer
-import qt, ctk
+import unittest
+import vtk, qt, ctk, slicer
+from slicer.ScriptedLoadableModule import *
+import logging
 
 #
 # SampleData
 #
 
-class SampleData:
+class SampleData(ScriptedLoadableModule):
+  """Uses ScriptedLoadableModule base class, available at:
+  https://github.com/Slicer/Slicer/blob/master/Base/Python/slicer/ScriptedLoadableModule.py
+  """
+
   def __init__(self, parent):
-    import string
-    parent.title = "Sample Data"
-    parent.categories = ["Informatics"]
-    parent.contributors = ["Steve Pieper (Isomics), Benjamin Long (Kitware), Jean-Christophe Fillion-Robin (Kitware)"]
-    parent.helpText = string.Template("""
+    ScriptedLoadableModule.__init__(self, parent)
+    self.parent.title = "Sample Data"
+    self.parent.categories = ["Informatics"]
+    self.parent.dependencies = []
+    self.parent.contributors = ["Steve Pieper (Isomics), Benjamin Long (Kitware), Jean-Christophe Fillion-Robin (Kitware)"]
+    self.parent.helpText = """
 The SampleData module can be used to download data for working with in slicer.  Use of this module requires an active network connection.
-See <a href=\"$a/Documentation/$b.$c/Modules/SampleData\">$a/Documentation/$b.$c/Modules/SampleData</a> for more information.
-    """).substitute({ 'a':parent.slicerWikiUrl, 'b':slicer.app.majorVersion, 'c':slicer.app.minorVersion })
-    parent.acknowledgementText = """
-This work is supported by NA-MIC, NAC, BIRN, NCIGT, and the Slicer Community. See <a>http://www.slicer.org</a> for details.  Module implemented by Steve Pieper.
-    """
-    parent.icon = qt.QIcon(':Icons/XLarge/SlicerDownloadMRHead.png')
-    self.parent = parent
+"""
+    self.parent.helpText += self.getDefaultModuleDocumentationLink()
+    self.parent.acknowledgementText = """
+<p>This work was was funded by Cancer Care Ontario
+and the Ontario Consortium for Adaptive Interventions in Radiation Oncology (OCAIRO)</p>
+
+<p>CTA abdomen (Panoramix) dataset comes from <a href="http://www.osirix-viewer.com/resources/dicom-image-library/">Osirix DICOM image library</a>
+and is exclusively available for research and teaching. You are not authorized to redistribute or sell it, or
+use it for commercial purposes.</p>
+"""
 
     if slicer.mrmlScene.GetTagByClassName( "vtkMRMLScriptedModuleNode" ) != 'ScriptedModule':
       slicer.mrmlScene.RegisterNodeClass(vtkMRMLScriptedModuleNode())
 
     # Trigger the menu to be added when application has started up
     if not slicer.app.commandOptions().noMainWindow :
-      qt.QTimer.singleShot(0, self.addMenu);
+      slicer.app.connect("startupCompleted()", self.addMenu)
 
     # allow other modules to register sample data sources by appending
     # instances or subclasses SampleDataSource objects on this list
@@ -66,7 +76,10 @@ class SampleDataSource:
     fixed = sampleDataLogic.downloadFromSource(dataSource)[0]
   """
 
-  def __init__(self,sampleName=None,uris=None,fileNames=None,nodeNames=None,customDownloader=None):
+  def __init__(self, sampleName=None, uris=None, fileNames=None, nodeNames=None,
+    customDownloader=None, thumbnailFileName=None,
+    loadFileType='VolumeFile', loadFileProperties={}):
+
     self.sampleName = sampleName
     if isinstance(uris, basestring):
       uris = [uris,]
@@ -76,6 +89,9 @@ class SampleDataSource:
     self.fileNames = fileNames
     self.nodeNames = nodeNames
     self.customDownloader = customDownloader
+    self.thumbnailFileName = thumbnailFileName
+    self.loadFileType = loadFileType
+    self.loadFileProperties = loadFileProperties
     if len(uris) != len(fileNames) or len(uris) != len(nodeNames):
       raise Exception("All fields of sample data source must have the same length")
 
@@ -84,33 +100,27 @@ class SampleDataSource:
 # SampleData widget
 #
 
-class SampleDataWidget:
+class SampleDataWidget(ScriptedLoadableModuleWidget):
+  """Uses ScriptedLoadableModuleWidget base class, available at:
+  https://github.com/Slicer/Slicer/blob/master/Base/Python/slicer/ScriptedLoadableModule.py
+  """
 
-  def __init__(self, parent=None):
+  def setup(self):
+    ScriptedLoadableModuleWidget.setup(self)
+
+    # This module is often used in developer mode, therefore
+    # collapse reload & test section by default.
+    if hasattr(self, "reloadCollapsibleButton"):
+      self.reloadCollapsibleButton.collapsed = True
+
     self.observerTags = []
     self.logic = SampleDataLogic(self.logMessage)
 
-    if not parent:
-      self.parent = slicer.qMRMLWidget()
-      self.parent.setLayout(qt.QVBoxLayout())
-      self.parent.setMRMLScene(slicer.mrmlScene)
-      self.layout = self.parent.layout()
-      self.setup()
-      self.parent.show()
-    else:
-      self.parent = parent
-      self.layout = parent.layout()
-
-  def enter(self):
-    pass
-
-  def exit(self):
-    pass
-
-  def updateGUIFromMRML(self, caller, event):
-    pass
-
-  def setup(self):
+    numberOfColumns = 3
+    iconPath = os.path.join(os.path.dirname(__file__).replace('\\','/'), 'Resources','Icons')
+    desktop = qt.QDesktopWidget()
+    mainScreenSize = desktop.availableGeometry(desktop.primaryScreen)
+    iconSize = qt.QSize(mainScreenSize.width()/15,mainScreenSize.height()/10)
 
     categories = slicer.modules.sampleDataSources.keys()
     categories.sort()
@@ -122,14 +132,46 @@ class SampleDataWidget:
       self.layout.addWidget(frame)
       frame.title = category
       frame.name = '%sCollapsibleGroupBox' % category
-      layout = qt.QVBoxLayout(frame)
+      layout = qt.QGridLayout(frame)
+      columnIndex = 0
+      rowIndex = 0
       for source in slicer.modules.sampleDataSources[category]:
         name = source.sampleName
         if not name:
           name = source.nodeNames[0]
-        b = qt.QPushButton('Download %s' % name)
+
+        b = qt.QToolButton()
+        b.setText(name)
+
+        # Set thumbnail
+        if source.thumbnailFileName:
+          # Thumbnail provided
+          thumbnailImage = source.thumbnailFileName
+        else:
+          # Look for thumbnail image with the name of any node name with .png extension
+          thumbnailImage = None
+          for nodeName in source.nodeNames:
+            if not nodeName:
+              continue
+            thumbnailImageAttempt = os.path.join(iconPath, nodeName+'.png')
+            if os.path.exists(thumbnailImageAttempt):
+              thumbnailImage = thumbnailImageAttempt
+              break
+        if thumbnailImage and os.path.exists(thumbnailImage):
+          b.setIcon(qt.QIcon(thumbnailImage))
+
+        b.setIconSize(iconSize)
+        b.setToolButtonStyle(qt.Qt.ToolButtonTextUnderIcon)
+        qSize = qt.QSizePolicy()
+        qSize.setHorizontalPolicy(qt.QSizePolicy.Expanding)
+        b.setSizePolicy(qSize)
+
         b.name = '%sPushButton' % name
-        layout.addWidget(b)
+        layout.addWidget(b, rowIndex, columnIndex)
+        columnIndex += 1
+        if columnIndex==numberOfColumns:
+          rowIndex += 1
+          columnIndex = 0
         if source.customDownloader:
           b.connect('clicked()', source.customDownloader)
         else:
@@ -144,6 +186,11 @@ class SampleDataWidget:
     self.layout.addStretch(1)
 
   def logMessage(self,message):
+    # Show message in status bar
+    doc = qt.QTextDocument()
+    doc.setHtml(message)
+    slicer.util.showStatusMessage(doc.toPlainText(),3000)
+    # Show message in log window at the bottom of the module widget
     self.log.insertHtml(message)
     self.log.insertPlainText('\n')
     self.log.ensureCursorVisible()
@@ -163,6 +210,42 @@ class SampleDataLogic:
   list that is assigned to a category following the model
   used in registerBuiltInSampleDataSources below.
   """
+
+  @staticmethod
+  def registerCustomSampleDataSource(category='Custom',
+    sampleName=None, uris=None, fileNames=None, nodeNames=None,
+    customDownloader=None, thumbnailFileName=None,
+    loadFileType='VolumeFile', loadFileProperties={}):
+    """Adds custom data sets to SampleData.
+    :param category: Section title of data set in SampleData module GUI.
+    :param sampleName: Displayed name of data set in SampleData module GUI.
+    :param thumbnailFileName: Displayed thumbnail of data set in SampleData module GUI,
+    :param uris: Download URL(s).
+    :param fileNames: File name(s) that will be loaded.
+    :param nodeNames: Node name in the scene.
+    :param customDownloader: Custom function for downloading.
+    :param loadFileType: file format name ('VolumeFile' by default).
+    :param loadFileProperties: custom properties passed to the IO plugin.
+    """
+
+    try:
+      slicer.modules.sampleDataSources
+    except AttributeError:
+      slicer.modules.sampleDataSources = {}
+
+    if not slicer.modules.sampleDataSources.has_key(category):
+      slicer.modules.sampleDataSources[category] = []
+
+    slicer.modules.sampleDataSources[category].append(SampleDataSource(
+      sampleName=sampleName,
+      uris=uris,
+      fileNames=fileNames,
+      nodeNames=nodeNames,
+      thumbnailFileName=thumbnailFileName,
+      loadFileType=loadFileType,
+      loadFileProperties=loadFileProperties
+      ))
+
   def __init__(self, logMessage=None):
     if logMessage:
       self.logMessage = logMessage
@@ -171,19 +254,19 @@ class SampleDataLogic:
   def registerBuiltInSampleDataSources(self):
     """Fills in the pre-define sample data sources"""
     sourceArguments = (
-        ('MRHead', 'http://www.slicer.org/slicerWiki/images/4/43/MR-head.nrrd', 'MR-head.nrrd', 'MRHead'),
-        ('CTChest', 'http://www.slicer.org/slicerWiki/images/3/31/CT-chest.nrrd', 'CT-chest.nrrd', 'CTChest'),
-        ('CTACardio', 'http://www.slicer.org/slicerWiki/images/0/00/CTA-cardio.nrrd', 'CTA-cardio.nrrd', 'CTACardio'),
-        ('DTIBrain', 'http://www.slicer.org/slicerWiki/images/0/01/DTI-Brain.nrrd', 'DTI-Brain.nrrd', 'DTIBrain'),
-        ('MRBrainTumor1', 'http://www.slicer.org/slicerWiki/images/5/59/RegLib_C01_1.nrrd', 'RegLib_C01_1.nrrd', 'MRBrainTumor1'),
-        ('MRBrainTumor2', 'http://www.slicer.org/slicerWiki/images/e/e3/RegLib_C01_2.nrrd', 'RegLib_C01_2.nrrd', 'MRBrainTumor2'),
+        ('MRHead', 'http://slicer.kitware.com/midas3/download/item/292308/MR-head.nrrd', 'MR-head.nrrd', 'MRHead'),
+        ('CTChest', 'http://slicer.kitware.com/midas3/download/item/292307/CT-chest.nrrd', 'CT-chest.nrrd', 'CTChest'),
+        ('CTACardio', 'http://slicer.kitware.com/midas3/download/item/292309/CTA-cardio.nrrd', 'CTA-cardio.nrrd', 'CTACardio'),
+        ('DTIBrain', 'http://slicer.kitware.com/midas3/download/item/292310/DTI-brain.nrrd', 'DTI-Brain.nrrd', 'DTIBrain'),
+        ('MRBrainTumor1', 'http://slicer.kitware.com/midas3/download/item/292312/RegLib_C01_1.nrrd', 'RegLib_C01_1.nrrd', 'MRBrainTumor1'),
+        ('MRBrainTumor2', 'http://slicer.kitware.com/midas3/download/item/292313/RegLib_C01_2.nrrd', 'RegLib_C01_2.nrrd', 'MRBrainTumor2'),
         ('BaselineVolume', 'http://slicer.kitware.com/midas3/download/?items=2009,1', 'BaselineVolume.nrrd', 'BaselineVolume'),
         ('DTIVolume',
           ('http://slicer.kitware.com/midas3/download/?items=2011,1',
             'http://slicer.kitware.com/midas3/download/?items=2010,1', ),
           ('DTIVolume.raw.gz', 'DTIVolume.nhdr'), (None, 'DTIVolume')),
         ('DWIVolume', ('http://slicer.kitware.com/midas3/download/?items=2142,1', 'http://slicer.kitware.com/midas3/download/?items=2141,1'), ('dwi.raw.gz', 'dwi.nhdr'), (None, 'dwi')),
-        ('Panoramix', 'http://slicer.kitware.com/midas3/download/?items=9073,1', 'Panoramix-cropped.nrrd', 'Panoramix-cropped'),
+        ('CTA abdomen\n(Panoramix)', 'http://slicer.kitware.com/midas3/download/?items=9073,1', 'Panoramix-cropped.nrrd', 'Panoramix-cropped'),
         ('CBCTDentalSurgery',
           ('http://slicer.kitware.com/midas3/download/item/94510/Greyscale_presurg.gipl.gz',
             'http://slicer.kitware.com/midas3/download/item/94509/Greyscale_postsurg.gipl.gz',),
@@ -192,6 +275,12 @@ class SampleDataLogic:
           ('http://slicer.kitware.com/midas3/download/item/142475/Case10-MR.nrrd',
             'http://slicer.kitware.com/midas3/download/item/142476/case10_US_resampled.nrrd',),
           ('Case10-MR.nrrd', 'case10_US_resampled.nrrd'), ('MRProstate', 'USProstate')),
+        ('CT-MR Brain',
+          ('http://slicer.kitware.com/midas3/download/item/284192/CTBrain.nrrd',
+           'http://slicer.kitware.com/midas3/download/item/330508/MRBrainT1.nrrd',
+           'http://slicer.kitware.com/midas3/download/item/330509/MRBrainT2.nrrd',),
+          ('CT-brain.nrrd', 'MR-brain-T1.nrrd', 'MR-brain-T2.nrrd'),
+          ('CTBrain', 'MRBrainT1', 'MRBrainT2')),
         )
 
     if not slicer.modules.sampleDataSources.has_key('BuiltIn'):
@@ -220,7 +309,7 @@ class SampleDataLogic:
     for uri,fileName,nodeName in zip(source.uris,source.fileNames,source.nodeNames):
       filePath = self.downloadFileIntoCache(uri, fileName)
       if nodeName:
-        nodes.append(self.loadVolume(filePath, nodeName))
+        nodes.append(self.loadNode(filePath, nodeName, source.loadFileType, source.loadFileProperties))
     return nodes
 
   def sourceForSampleName(self,sampleName):
@@ -273,7 +362,7 @@ class SampleDataLogic:
     return self.downloadSample('dwi')[0]
 
   def downloadAbdominalCTVolume(self):
-    return self.downloadSample('Panoramix-cropped')[0]
+    return self.downloadSample('CTA abdomen\n(Panoramix)')[0]
 
   def downloadDentalSurgery(self):
     # returns list since that's what earlier method did
@@ -317,16 +406,30 @@ class SampleDataLogic:
       self.logMessage('<b>File already exists in cache - reusing it.</b>')
     return filePath
 
-  def loadVolume(self, uri, name):
+  def loadNode(self, uri, name, fileType = 'VolumeFile', fileProperties = {}):
     self.logMessage('<b>Requesting load</b> <i>%s</i> from %s...\n' % (name, uri))
-    success, volumeNode = slicer.util.loadVolume(uri, properties = {'name' : name}, returnNode=True)
-    if success:
-      self.logMessage('<b>Load finished</b>\n')
-      # since it was read from a temp directory remove the storage node
-      volumeStorageNode = volumeNode.GetStorageNode()
-      if volumeStorageNode is not None:
-        slicer.mrmlScene.RemoveNode(volumeStorageNode)
-      volumeNode.SetAndObserveStorageNodeID(None)
-    else:
+
+    fileProperties['fileName'] = uri
+    fileProperties['name'] = name
+    firstLoadedNode = None
+    loadedNodes = vtk.vtkCollection()
+    success = slicer.app.coreIOManager().loadNodes(fileType, fileProperties, loadedNodes)
+
+    if not success or loadedNodes.GetNumberOfItems()<1:
       self.logMessage('<b><font color="red">\tLoad failed!</font></b>\n')
-    return volumeNode
+      return None
+
+    self.logMessage('<b>Load finished</b>\n')
+
+    # since nodes were read from a temp directory remove the storage nodes
+    for i in range(loadedNodes.GetNumberOfItems()):
+      loadedNode = loadedNodes.GetItemAsObject(i)
+      if not loadedNode.IsA("vtkMRMLStorableNode"):
+        continue
+      storageNode = loadedNode.GetStorageNode()
+      if not storageNode:
+        continue
+      slicer.mrmlScene.RemoveNode(storageNode)
+      loadedNode.SetAndObserveStorageNodeID(None)
+
+    return loadedNodes.GetItemAsObject(0)

@@ -22,6 +22,9 @@
 #include <QApplication>
 #include <QTimer>
 
+// Slicer includes
+#include "vtkSlicerConfigure.h"
+
 // qMRML includes
 #include "qMRMLSliceControllerWidget.h"
 #include "qMRMLSliceView.h"
@@ -30,10 +33,12 @@
 
 // MRML includes
 #include <vtkMRMLAbstractSliceViewDisplayableManager.h>
+#include <vtkMRMLApplicationLogic.h>
 #include <vtkMRMLColorTableNode.h>
 #include <vtkMRMLScene.h>
 #include <vtkMRMLSliceLogic.h>
 #include <vtkMRMLSliceCompositeNode.h>
+#include <vtkMRMLSliceNode.h>
 #include <vtkMRMLScalarVolumeNode.h>
 #include <vtkMRMLScalarVolumeDisplayNode.h>
 #include <vtkMRMLVolumeArchetypeStorageNode.h>
@@ -41,6 +46,9 @@
 // VTK includes
 #include <vtkCollection.h>
 #include <vtkNew.h>
+#ifdef Slicer_VTK_USE_QVTKOPENGLWIDGET
+#include <QVTKOpenGLWidget.h>
+#endif
 
 vtkMRMLScalarVolumeNode* loadVolume(const char* volume, vtkMRMLScene* scene)
 {
@@ -78,6 +86,13 @@ vtkMRMLScalarVolumeNode* loadVolume(const char* volume, vtkMRMLScene* scene)
 
 int qMRMLSliceWidgetTest2(int argc, char * argv [] )
 {
+#ifdef Slicer_VTK_USE_QVTKOPENGLWIDGET
+  // Set default surface format for QVTKOpenGLWidget
+  QSurfaceFormat format = QVTKOpenGLWidget::defaultFormat();
+  format.setSamples(0);
+  QSurfaceFormat::setDefaultFormat(format);
+#endif
+
   QApplication app(argc, argv);
   if( argc < 2 )
     {
@@ -88,6 +103,9 @@ int qMRMLSliceWidgetTest2(int argc, char * argv [] )
     }
 
   vtkNew<vtkMRMLScene> scene;
+  vtkNew<vtkMRMLApplicationLogic> applicationLogic;
+  applicationLogic->SetMRMLScene(scene.GetPointer());
+
   vtkMRMLScalarVolumeNode* scalarNode = loadVolume(argv[1], scene.GetPointer());
   if (scalarNode == 0)
     {
@@ -98,6 +116,7 @@ int qMRMLSliceWidgetTest2(int argc, char * argv [] )
   QSize viewSize(256, 256);
   qMRMLSliceWidget sliceWidget;
   sliceWidget.setMRMLScene(scene.GetPointer());
+
   sliceWidget.resize(viewSize.width(), sliceWidget.sliceController()->height() + viewSize.height() );
 
   vtkMRMLSliceCompositeNode* sliceCompositeNode = sliceWidget.sliceLogic()->GetSliceCompositeNode();

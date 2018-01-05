@@ -46,6 +46,29 @@ class QMRML_WIDGETS_EXPORT qMRMLColorModel : public QStandardItemModel
   Q_ENUMS(ItemDataRole)
   Q_PROPERTY(bool noneEnabled READ noneEnabled WRITE setNoneEnabled)
 
+  /// The color column contains a Qt::DecorationRole with a pixmap of the color,
+  /// the ColorRole with the color QColor, the colorName as Qt::TooltipRole
+  /// 0 by default.
+  /// \sa colorColumn(), setColorColumn(), labelColumn, opacityColumn,
+  /// checkableColumn
+  Q_PROPERTY(int colorColumn READ colorColumn WRITE setColorColumn)
+  /// The label column contains the colorName as Qt::DisplayRole.
+  /// 1 by default.
+  /// \sa labelColumn(), setLabelColumn(), colorColumn, opacityColumn,
+  /// checkableColumn
+  Q_PROPERTY(int labelColumn READ labelColumn WRITE setLabelColumn)
+  /// The opacity column contains the color opacity as Qt::DisplayRole
+  /// 2 by default.
+  /// \sa opacityColumn(), setOpacityColumn(), colorColumn, labelColumn,
+  /// checkableColumn
+  Q_PROPERTY(int opacityColumn READ opacityColumn WRITE setOpacityColumn)
+  /// The checkable column adds a checkbox for each entry.
+  /// Note that the checkboxes are unlinked to the color table node.
+  /// -1 by default
+  /// \sa checkableColumn(), setCheckableColumn(), colorColumn, labelColumn,
+  /// opacityColumn
+  Q_PROPERTY(int checkableColumn READ checkableColumn WRITE setCheckableColumn)
+
 public:
   typedef QAbstractItemModel Superclass;
   qMRMLColorModel(QObject *parent=0);
@@ -60,36 +83,34 @@ public:
   };
 
 
-  /// The color column contains a Qt::DecorationRole with a pixmap of the color,
-  /// the ColorRole with the color QColor, the colorName as Qt::TooltipRole and
-  /// the colorName as Qt::DisplayRole only if LabelInColorColumn is true.
-  enum Columns{
-    ColorColumn = 0,
-    LabelColumn = 1,
-    OpacityColumn = 2
-  };
-
   void setMRMLColorNode(vtkMRMLColorNode* node);
   vtkMRMLColorNode* mrmlColorNode()const;
-
-  /// A color logic is needed to access terminology linked with color nodes
-  void setMRMLColorLogic(vtkMRMLColorLogic* colorLogic);
-  vtkMRMLColorLogic* mrmlColorLogic()const;
-
 
   /// Set/Get NoneEnabled flags
   /// An additional item is added into the menu list, where the user can select "None".
   void setNoneEnabled(bool enable);
   bool noneEnabled()const;
 
-  /// Control wether or not displaying the label in the color column
-  void setLabelInColorColumn(bool enable);
-  bool isLabelInColorColumn()const;
+  int colorColumn()const;
+  void setColorColumn(int column);
 
-  /// Return the vtkMRMLNode associated to the node index.
-  /// -1 if the node index is not a MRML node (i.e. vtkMRMLScene, extra item...)
-  inline int colorFromIndex(const QModelIndex &nodeIndex)const;
-  int colorFromItem(QStandardItem* nodeItem)const;
+  int labelColumn()const;
+  void setLabelColumn(int column);
+
+  int opacityColumn()const;
+  void setOpacityColumn(int column);
+
+  int checkableColumn()const;
+  void setCheckableColumn(int column);
+
+  /// Return the color entry associated to the index.
+  /// -1 if the index is not in the model.
+  /// \sa colorFromItem(), nameFromColor(), colorFromName()
+  inline int colorFromIndex(const QModelIndex &index)const;
+  /// Return the color entry associated to the item.
+  /// -1 if the item is not in the model.
+  /// \sa colorFromIndex(), nameFromColor(), colorFromName()
+  int colorFromItem(QStandardItem* item)const;
 
   QStandardItem* itemFromColor(int color, int column = 0)const;
   QModelIndexList indexes(int color)const;
@@ -99,7 +120,11 @@ public:
   QColor qcolorFromColor(int color)const;
 
   /// Return the name of the color \a colorEntry
+  /// \sa colorFromName(), colorFromIndex(), colorFromItem()
   QString nameFromColor(int colorEntry)const;
+  /// Return the color entry of the first color with name \a name.
+  /// \sa nameFromColor(), colorFromIndex(), colorFromItem()
+  int colorFromName(const QString& name)const;
 
   /// Overload the header data method for the veritical header
   /// so that can return the color index rather than the row

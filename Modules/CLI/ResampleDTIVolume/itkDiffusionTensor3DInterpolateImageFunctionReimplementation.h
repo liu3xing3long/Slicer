@@ -11,8 +11,8 @@
   See License.txt or http://www.slicer.org/copyright/copyright.txt for details.
 
 ==========================================================================*/
-#ifndef __itkDiffusionTensor3DInterpolateImageFunctionReimplementation_h
-#define __itkDiffusionTensor3DInterpolateImageFunctionReimplementation_h
+#ifndef itkDiffusionTensor3DInterpolateImageFunctionReimplementation_h
+#define itkDiffusionTensor3DInterpolateImageFunctionReimplementation_h
 
 #include "itkDiffusionTensor3DInterpolateImageFunction.h"
 #include <itkImage.h>
@@ -67,9 +67,9 @@ public:
   /** Evaluate the interpolated tensor at a position
    */
   // TensorDataType Evaluate( const PointType &point ) ;
-  TensorDataType EvaluateAtContinuousIndex( const ContinuousIndexType & index ) const;
+  TensorDataType EvaluateAtContinuousIndex( const ContinuousIndexType & index ) const ITK_OVERRIDE;
 
-  virtual void SetInputImage( const DiffusionImageType *inputImage );
+  virtual void SetInputImage( const DiffusionImageType *inputImage ) ITK_OVERRIDE;
 
   itkSetMacro( NumberOfThreads, int );
 protected:

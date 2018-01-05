@@ -86,7 +86,7 @@ vtkMRMLMarkupsDisplayableManager2D::vtkMRMLMarkupsDisplayableManager2D()
   this->SliceNode = 0;
 
   // by default, multiply the display node scale by this when setting scale on elements in 2d windows
-  this->ScaleFactor2D = 0.00333;
+  this->ScaleFactor2D = 0.01667;
 
   this->LastClickWorldCoordinates[0]=0.0;
   this->LastClickWorldCoordinates[1]=0.0;
@@ -242,21 +242,25 @@ void vtkMRMLMarkupsDisplayableManager2D::UpdateFromMRML()
     {
     return;
     }
+
+  std::vector<vtkMRMLNode*> nodes;
+  this->GetMRMLScene()->GetNodesByClass(this->Focus, nodes);
+
   // check if there are any of these nodes in the scene
-  if (this->GetMRMLScene()->GetNumberOfNodesByClass(this->Focus) < 1)
+  if (nodes.size() < 1)
     {
     return;
     }
-  // loop over the nodes for which this manager provides widgets
-  this->GetMRMLScene()->InitTraversal();
-  vtkMRMLNode *node = this->GetMRMLScene()->GetNextNodeByClass(this->Focus);
+
   // turn off update from mrml requested, as we're doing it now, and create
   // widget requests a render which checks this flag before calling update
   // from mrml again
   this->SetUpdateFromMRMLRequested(0);
-  while (node != NULL)
+
+  // loop over the nodes for which this manager provides widgets
+  for (std::vector< vtkMRMLNode* >::iterator nodeIt = nodes.begin(); nodeIt != nodes.end(); ++nodeIt)
     {
-    vtkMRMLMarkupsNode *markupsNode = vtkMRMLMarkupsNode::SafeDownCast(node);
+    vtkMRMLMarkupsNode *markupsNode = vtkMRMLMarkupsNode::SafeDownCast(*nodeIt);
     if (markupsNode)
       {
       // do we  have a widget for it?
@@ -275,7 +279,6 @@ void vtkMRMLMarkupsDisplayableManager2D::UpdateFromMRML()
           }
         }
       }
-    node = this->GetMRMLScene()->GetNextNodeByClass(this->Focus);
     }
   // set up observers on all the nodes
 //  this->SetAndObserveNodes();
@@ -334,10 +337,10 @@ void vtkMRMLMarkupsDisplayableManager2D
         this->OnMRMLMarkupsNodeNthMarkupModifiedEvent(markupsNode, n);
         break;
       case vtkMRMLMarkupsNode::MarkupAddedEvent:
-        this->OnMRMLMarkupsNodeMarkupAddedEvent(markupsNode);
+        this->OnMRMLMarkupsNodeMarkupAddedEvent(markupsNode, n);
         break;
       case vtkMRMLMarkupsNode::MarkupRemovedEvent:
-        this->OnMRMLMarkupsNodeMarkupRemovedEvent(markupsNode);
+        this->OnMRMLMarkupsNodeMarkupRemovedEvent(markupsNode, n);
         break;
       case vtkMRMLTransformableNode::TransformModifiedEvent:
         this->OnMRMLMarkupsNodeTransformModifiedEvent(markupsNode);
@@ -1172,17 +1175,6 @@ void vtkMRMLMarkupsDisplayableManager2D::GetDisplayToWorldCoordinates(double x, 
 
   // we will get the transformation matrix to convert display coordinates to RAS
 
-//    double windowWidth = this->GetInteractor()->GetRenderWindow()->GetSize()[0];
-//    double windowHeight = this->GetInteractor()->GetRenderWindow()->GetSize()[1];
-
-//    int numberOfColumns = this->GetMRMLSliceNode()->GetLayoutGridColumns();
-//    int numberOfRows = this->GetMRMLSliceNode()->GetLayoutGridRows();
-
-//    float tempX = x / windowWidth;
-//    float tempY = (windowHeight - y) / windowHeight;
-
-//    float z = floor(tempY*numberOfRows)*numberOfColumns + floor(tempX*numberOfColumns);
-
   vtkRenderer* pokedRenderer = this->GetInteractor()->FindPokedRenderer(x,y);
 
   vtkMatrix4x4 * xyToRasMatrix = this->GetMRMLSliceNode()->GetXYToRAS();
@@ -1260,25 +1252,13 @@ void vtkMRMLMarkupsDisplayableManager2D::GetDisplayToViewportCoordinates(double 
     vtkErrorMacro("GetDisplayToViewportCoordinates: No interactor!");
     return;
     }
-  double windowWidth = this->GetInteractor()->GetRenderWindow()->GetSize()[0];
-  double windowHeight = this->GetInteractor()->GetRenderWindow()->GetSize()[1];
-
-  int numberOfColumns = this->GetMRMLSliceNode()->GetLayoutGridColumns();
-  int numberOfRows = this->GetMRMLSliceNode()->GetLayoutGridRows();
-
-  float tempX = x / windowWidth;
-  float tempY = (windowHeight - y) / windowHeight;
-
-  float z = floor(tempY*numberOfRows)*numberOfColumns + floor(tempX*numberOfColumns);
-
-  vtkRenderer* pokedRenderer = this->GetInteractor()->FindPokedRenderer(x,y);
 
   double displayCoordinates[4];
-  displayCoordinates[0] = x - pokedRenderer->GetOrigin()[0];
-  displayCoordinates[1] = y - pokedRenderer->GetOrigin()[1];
-  displayCoordinates[2] = z;
+  this->ConvertDeviceToXYZ(x, y, displayCoordinates);
   displayCoordinates[3] = 1;
 
+  double windowWidth = this->GetInteractor()->GetRenderWindow()->GetSize()[0];
+  double windowHeight = this->GetInteractor()->GetRenderWindow()->GetSize()[1];
   if (windowWidth != 0.0)
     {
     viewportCoordinates[0] = displayCoordinates[0]/windowWidth;

@@ -64,7 +64,7 @@ public:
 
   static vtkSlicerVolumeRenderingLogic *New();
   vtkTypeMacro(vtkSlicerVolumeRenderingLogic,vtkSlicerModuleLogic);
-  void PrintSelf(ostream& os, vtkIndent indent);
+  void PrintSelf(ostream& os, vtkIndent indent) VTK_OVERRIDE;
 
   /// Inform the logic and observers that a rendering method (class deriving
   /// from vtkMRMLVolumeRenderingDisplayNode) is available.
@@ -211,15 +211,13 @@ public:
     vtkScalarsToColors* lut, vtkVolumeProperty* node);
 
   /// Update DisplayNode from VolumeNode,
-  /// If needed create vtkMRMLVolumePropertyNode and vtkMRMLAnnotationROINode
-  /// and initialize them from VolumeNode
-  void UpdateDisplayNodeFromVolumeNode(vtkMRMLVolumeRenderingDisplayNode *paramNode,
+  /// Can pass a VolumePropertyNode and a AnnotationROINode to be the display node.
+  /// If they are NULL and the display node does not already have any, new ones
+  /// will be created then set and observed to the display node.
+  void UpdateDisplayNodeFromVolumeNode(vtkMRMLVolumeRenderingDisplayNode *displayNode,
                                        vtkMRMLVolumeNode *volumeNode,
-                                       vtkMRMLVolumePropertyNode **propNode,
-                                       vtkMRMLAnnotationROINode **roiNode);
-  /// Utility function that calls UpdateDisplayNodeFromVolumeNode()
-  inline void UpdateDisplayNodeFromVolumeNode(vtkMRMLVolumeRenderingDisplayNode *paramNode,
-                                              vtkMRMLVolumeNode *volumeNode);
+                                       vtkMRMLVolumePropertyNode *propNode = NULL,
+                                       vtkMRMLAnnotationROINode *roiNode = NULL);
 
   /// \deprecated
   /// Create and add into the scene a vtkMRMLVolumeRenderingScenarioNode
@@ -272,6 +270,22 @@ public:
   /// module share directory
   /// \sa vtkMRMLVolumePropertyNode, GetModuleShareDirectory()
   vtkMRMLScene* GetPresetsScene();
+  
+  /// Add a preset to the preset scene.
+  /// If the optional icon image is specified then that will be used to
+  /// in preset selector widgets. The icon is stored as a volume node
+  /// in the preset scene.
+  /// \sa GetPresetsScene(), GetIconVolumeReferenceRole()
+  void AddPreset(vtkMRMLVolumePropertyNode* preset, vtkImageData* icon = NULL);
+  
+  /// Removes a preset and its associated icon (if specified) from the preset scene.
+  /// \sa GetPresetsScene(), GetIconVolumeReferenceRole()
+  void RemovePreset(vtkMRMLVolumePropertyNode* preset);
+  
+  /// This node reference role name allows linking from a preset node to a volume
+  /// node that contains an icon for the preset node.
+  /// For example, the icon is used for representing the node in qSlicerPresetComboBox.
+  static const char* GetIconVolumeReferenceRole() { return "IconVolume"; };
 
   /// Return the preset \a presetName contained in the presets scene
   /// loaded using \a GetPresetsScene().
@@ -294,15 +308,15 @@ protected:
   vtkSlicerVolumeRenderingLogic();
   virtual ~vtkSlicerVolumeRenderingLogic();
 
-  virtual void SetMRMLSceneInternal(vtkMRMLScene* scene);
+  virtual void SetMRMLSceneInternal(vtkMRMLScene* scene) VTK_OVERRIDE;
   // Register local MRML nodes
-  virtual void RegisterNodes();
+  virtual void RegisterNodes() VTK_OVERRIDE;
 
   /// Reimplemented to initialize display nodes in the scene.
-  void ObserveMRMLScene();
-  void OnMRMLSceneNodeAdded(vtkMRMLNode* node);
-  void OnMRMLSceneNodeRemoved(vtkMRMLNode* node);
-  void OnMRMLNodeModified(vtkMRMLNode* node);
+  void ObserveMRMLScene() VTK_OVERRIDE;
+  void OnMRMLSceneNodeAdded(vtkMRMLNode* node) VTK_OVERRIDE;
+  void OnMRMLSceneNodeRemoved(vtkMRMLNode* node) VTK_OVERRIDE;
+  void OnMRMLNodeModified(vtkMRMLNode* node) VTK_OVERRIDE;
 
   // Update from
   void UpdateVolumeRenderingDisplayNode(vtkMRMLVolumeRenderingDisplayNode* node);
@@ -327,15 +341,5 @@ private:
   vtkSlicerVolumeRenderingLogic(const vtkSlicerVolumeRenderingLogic&); // Not implemented
   void operator=(const vtkSlicerVolumeRenderingLogic&);               // Not implemented
 };
-
-//----------------------------------------------------------------------------
-void vtkSlicerVolumeRenderingLogic
-::UpdateDisplayNodeFromVolumeNode(vtkMRMLVolumeRenderingDisplayNode *paramNode,
-                                  vtkMRMLVolumeNode *volumeNode)
-{
-  vtkMRMLVolumePropertyNode *propNode = NULL;
-  vtkMRMLAnnotationROINode *roiNode = NULL;
-  this->UpdateDisplayNodeFromVolumeNode(paramNode, volumeNode, &propNode, &roiNode);
-}
 
 #endif

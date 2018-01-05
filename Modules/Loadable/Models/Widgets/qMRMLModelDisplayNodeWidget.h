@@ -42,7 +42,7 @@ class Q_SLICER_QTMODULES_MODELS_WIDGETS_EXPORT qMRMLModelDisplayNodeWidget : pub
   Q_OBJECT
   QVTK_OBJECT
 
-  Q_PROPERTY(ControlMode autoScalarRange READ autoScalarRange WRITE setAutoScalarRange)
+  Q_PROPERTY(ControlMode scalarRangeMode READ scalarRangeMode WRITE setScalarRangeMode)
   Q_PROPERTY(double minimumValue READ minimumValue WRITE setMinimumValue)
   Q_PROPERTY(double maximumValue READ maximumValue WRITE setMaximumValue)
   Q_ENUMS(ControlMode)
@@ -55,19 +55,27 @@ public:
   vtkMRMLModelDisplayNode* mrmlModelDisplayNode()const;
   vtkMRMLNode* mrmlDisplayableNode()const;
 
+  bool visibility()const;
+  bool clipping()const;
+  bool sliceIntersectionVisible()const;
+  int sliceIntersectionThickness()const;
+  double sliceIntersectionOpacity()const;
+
   bool scalarsVisibility()const;
   QString activeScalarName()const;
   vtkMRMLColorNode* scalarsColorNode()const;
 
   enum ControlMode
   {
-    Auto = 0,
-    Manual = 1
+    Data = 0,
+    LUT = 1,
+    DataType = 2,
+    Manual = 3
   };
 
-  /// Set Auto/Manual mode
-  void setAutoScalarRange(ControlMode autoScalarRange);
-  ControlMode autoScalarRange() const;
+  /// Set scalar range mode
+  void setScalarRangeMode(ControlMode autoScalarRange);
+  ControlMode scalarRangeMode() const;
 
   /// Get minimum of the scalar display range
   double minimumValue()const;
@@ -81,7 +89,7 @@ signals:
   void minMaxValuesChanged(double min, double max);
   ///
   /// Signal sent if the auto/manual value is updated
-  void autoScalarRangeValueChanged(ControlMode value);
+  void scalarRangeModeValueChanged(ControlMode value);
 
 public slots:
   /// Set the volume node to display
@@ -93,22 +101,44 @@ public slots:
   /// can be set from a model node or a model hierarchy node
   void setMRMLModelOrHierarchyNode(vtkMRMLNode* modelNode);
 
+  void setVisibility(bool);
+  void setClipping(bool);
+
+  void setSliceIntersectionVisible(bool);
+  void setSliceDisplayMode(int);
+  void setSliceIntersectionThickness(int);
+  void setSliceIntersectionOpacity(double);
+  void setDistanceToColorNode(vtkMRMLNode*);
+
+  void setRepresentation(int);
+  void setPointSize(double);
+  void setLineWidth(double);
+  void setShowFaces(int);
+  void setColor(const QColor&);
+  void setOpacity(double);
+  void setEdgeVisibility(bool);
+  void setEdgeColor(const QColor&);
+  void setLighting(bool);
+  void setInterpolation(int);
+
   void setScalarsVisibility(bool);
   void setActiveScalarName(const QString&);
   void setScalarsColorNode(vtkMRMLNode*);
   void setScalarsColorNode(vtkMRMLColorNode*);
   void setScalarsDisplayRange(double min, double max);
-  void setScalarsScalarRangeFlag();
+  void setTresholdEnabled(bool b);
+  void setThresholdRange(double min, double max);
 
   /// Set Auto/Manual mode
-  void setAutoScalarRange(int autoScalarRange);
+  void setScalarRangeMode(int scalarRangeMode);
 
-  /// Set min/max range
+  /// Set min/max of scalar range
   void setMinimumValue(double min);
   void setMaximumValue(double max);
 
 protected slots:
   void updateWidgetFromMRML();
+  void updateNodeFromProperty();
   vtkMRMLSelectionNode* getSelectionNode(vtkMRMLScene *mrmlScene);
 
 protected:

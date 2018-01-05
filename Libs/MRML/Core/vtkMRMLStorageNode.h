@@ -32,13 +32,13 @@ class VTK_MRML_EXPORT vtkMRMLStorageNode : public vtkMRMLNode
 {
 public:
   vtkTypeMacro(vtkMRMLStorageNode,vtkMRMLNode);
-  void PrintSelf(ostream& os, vtkIndent indent);
+  void PrintSelf(ostream& os, vtkIndent indent) VTK_OVERRIDE;
 
-  virtual vtkMRMLNode* CreateNodeInstance() = 0;
+  virtual vtkMRMLNode* CreateNodeInstance() VTK_OVERRIDE = 0;
 
   ///
   /// Read node attributes from XML file
-  virtual void ReadXMLAttributes( const char** atts);
+  virtual void ReadXMLAttributes( const char** atts) VTK_OVERRIDE;
 
   ///
   /// Read data from \a FileName and set it in the referenced node.
@@ -59,20 +59,27 @@ public:
 
   ///
   /// Write this node's information to a MRML file in XML format.
-  virtual void WriteXML(ostream& of, int indent);
+  virtual void WriteXML(ostream& of, int indent) VTK_OVERRIDE;
 
   ///
   /// Copy the node's attributes to this object
-  virtual void Copy(vtkMRMLNode *node);
+  virtual void Copy(vtkMRMLNode *node) VTK_OVERRIDE;
 
   ///
   /// Get node XML tag name (like Storage, Model)
-  virtual const char* GetNodeTagName() = 0;
+  virtual const char* GetNodeTagName() VTK_OVERRIDE = 0;
 
   /// A file name or the archetype file name for a series used for read or write
   /// \sa ReadData(), WriteData()
   vtkSetStringMacro(FileName);
   vtkGetStringMacro(FileName);
+
+  /// Return complete file extension for the specified filename.
+  /// Longest matched extension will be returned (.seg.nrrd will be returned
+  /// if both .nrrd and .seg.nrrd are matched), including dot.
+  /// If filename is not specified then the current FileName will be used
+  /// If there is no match then empty is returned.
+  virtual std::string GetSupportedFileExtension(const char* fileName = NULL, bool includeReadable = true, bool includeWriteable = true);
 
   ///
   /// return the nth file name, null if doesn't exist
@@ -94,7 +101,7 @@ public:
 
   ///
   /// Propagate Progress Event generated in ReadData
-  virtual void ProcessMRMLEvents ( vtkObject *caller, unsigned long event, void *callData );
+  virtual void ProcessMRMLEvents ( vtkObject *caller, unsigned long event, void *callData ) VTK_OVERRIDE;
 
   ///
   /// Possible Read and Write states
@@ -147,7 +154,13 @@ public:
   ///
   /// Check to see if this storage node can handle the file type in the input
   /// string. If input string is null, check URI, then check FileName. Returns
-  /// 1 if is supported, 0 otherwise.
+  /// nonzero if supported, 0 otherwise.
+  /// The higher the value, the higher the confidence that this reader
+  /// is the most suitable for reading the file.
+  /// Typically, the confidence is the length of the file matched file extension
+  /// (including the dot). So, for example for .nrrd file extension the returned
+  /// value is 5, for .seg.nrrd the returned value is 9. If a reader looks into
+  /// the file content then it may return with much higher confidence values.
   /// Subclasses should implement this method.
   virtual int SupportedFileType(const char *fileName);
 
@@ -160,6 +173,13 @@ public:
   /// Get all the supported write file types
   /// Subclasses should overwrite InitializeSupportedWriteFileTypes().
   virtual vtkStringArray* GetSupportedWriteFileTypes();
+
+  ///
+  /// Get all file extensions from file types list
+  /// returned by GetSupportedReadFileTypes() or GetSupportedWriteFileTypes().
+  /// Always includes a dot.
+  /// If extension is not specified for a type or .* is specified then .* will be returned.
+  virtual void GetFileExtensionsFromFileTypes(vtkStringArray* inputFileTypes, vtkStringArray* outputFileExtensions);
 
   ///
   /// Allow to set specific file format that this node will write output.
@@ -212,11 +232,14 @@ public:
   void SetURIPrefix(const char *uriPrefix);
 
   ///
-  /// Return a default file extension for writting
-  virtual const char* GetDefaultWriteFileExtension()
-    {
-    return NULL;
-    };
+  /// Return default file extension for writing.
+  virtual const char* GetDefaultWriteFileExtension();
+
+  ///
+  /// Set default file extension for writing.
+  /// It is just a hint, the storage node may choose a different
+  /// extension if the provided extension is not suitable.
+  virtual void SetDefaultWriteFileExtension(const char* ext);
 
   ///
   /// Set the nth file in FileNameList, checks that it is already defined
@@ -275,6 +298,10 @@ public:
   /// It always returns lowercase extension.
   static std::string GetLowercaseExtensionFromFileName(const std::string& filename);
 
+  /// Remove suported extension from filename.
+  /// If filename is not specified then the current FileName will be used.
+  std::string GetFileNameWithoutExtension(const char* fileName = NULL);
+
 protected:
   vtkMRMLStorageNode();
   ~vtkMRMLStorageNode();
@@ -319,6 +346,7 @@ protected:
   vtkStringArray* SupportedReadFileTypes;
 
   /// List of supported extensions to write in
+  std::string DefaultWriteFileExtension;
   vtkStringArray* SupportedWriteFileTypes;
   char* WriteFileFormat;
 

@@ -44,23 +44,23 @@ class VTK_MRML_EXPORT vtkMRMLDisplayableNode : public vtkMRMLTransformableNode
 {
 public:
   vtkTypeMacro(vtkMRMLDisplayableNode,vtkMRMLTransformableNode);
-  void PrintSelf(ostream& os, vtkIndent indent);
+  void PrintSelf(ostream& os, vtkIndent indent) VTK_OVERRIDE;
 
   //--------------------------------------------------------------------------
   /// MRMLNode methods
   //--------------------------------------------------------------------------
 
-  virtual vtkMRMLNode* CreateNodeInstance() = 0;
+  virtual vtkMRMLNode* CreateNodeInstance() VTK_OVERRIDE = 0;
 
-  virtual const char* GetNodeTagName() = 0;
+  virtual const char* GetNodeTagName() VTK_OVERRIDE = 0;
 
   ///
   /// Read node attributes from XML file
-  virtual void ReadXMLAttributes( const char** atts);
+  virtual void ReadXMLAttributes( const char** atts) VTK_OVERRIDE;
 
   ///
   /// Write this node's information to a MRML file in XML format.
-  virtual void WriteXML(ostream& of, int indent);
+  virtual void WriteXML(ostream& of, int indent) VTK_OVERRIDE;
 
   /// Write this node's information to a vector of strings for passing to a CLI.
   /// If the prefix is not an empty string, it gets pushed onto the vector
@@ -74,7 +74,7 @@ public:
 
   ///
   /// Copy the node's attributes to this object
-  virtual void Copy(vtkMRMLNode *node);
+  virtual void Copy(vtkMRMLNode *node) VTK_OVERRIDE;
 
   ///
   /// Convenience method that sets the first display node ID.
@@ -160,7 +160,7 @@ public:
   /// alternative method to propagate events generated in Display nodes
   virtual void ProcessMRMLEvents ( vtkObject * /*caller*/,
                                    unsigned long /*event*/,
-                                   void * /*callData*/ );
+                                   void * /*callData*/ ) VTK_OVERRIDE;
 
   /// DisplayModifiedEvent is fired when:
   ///  - a new display node is observed
@@ -193,8 +193,16 @@ public:
   virtual int GetDisplayClassVisibility(const char* nodeClass);
   virtual void SetDisplayClassVisibility(const char* nodeClass, int visible);
 
-  /// Get bounding box in global RAS the form (xmin,xmax, ymin,ymax, zmin,zmax).
+  /// Get bounding box in global RAS form (xmin,xmax, ymin,ymax, zmin,zmax).
+  /// This method returns the bounds of the object with any transforms that may
+  /// be applied to it.
+  /// \sa GetBounds()
   virtual void GetRASBounds(double bounds[6]);
+
+  /// Get bounding box in global RAS form (xmin,xmax, ymin,ymax, zmin,zmax).
+  /// This method always returns the bounds of the untransformed object.
+  /// \sa GetRASBounds()
+  virtual void GetBounds(double bounds[6]);
 
   virtual const char* GetDisplayNodeReferenceRole();
 
@@ -211,15 +219,15 @@ public:
 
   ///
   /// Called when a node reference ID is added (list size increased).
-  virtual void OnNodeReferenceAdded(vtkMRMLNodeReference *reference);
+  virtual void OnNodeReferenceAdded(vtkMRMLNodeReference *reference) VTK_OVERRIDE;
 
   ///
   /// Called when a node reference ID is modified.
-  virtual void OnNodeReferenceModified(vtkMRMLNodeReference *reference);
+  virtual void OnNodeReferenceModified(vtkMRMLNodeReference *reference) VTK_OVERRIDE;
 
   ///
   /// Called after a node reference ID is removed (list size decreased).
-  virtual void OnNodeReferenceRemoved(vtkMRMLNodeReference *reference);
+  virtual void OnNodeReferenceRemoved(vtkMRMLNodeReference *reference) VTK_OVERRIDE;
 
  private:
 

@@ -1,7 +1,7 @@
 project(vtkAddon)
 
 #-----------------------------------------------------------------------------
-cmake_minimum_required(VERSION 2.8.4)
+cmake_minimum_required(VERSION 3.5)
 #-----------------------------------------------------------------------------
 
 # --------------------------------------------------------------------------
@@ -49,6 +49,9 @@ endif()
 # Sources
 # --------------------------------------------------------------------------
 set(vtkAddon_SRCS
+  vtkAddonTestingUtilities.cxx
+  vtkAddonTestingUtilities.h
+  vtkAddonTestingUtilities.txx
   vtkLoggingMacros.h
   vtkTestingOutputWindow.cxx
   vtkTestingOutputWindow.h
@@ -56,6 +59,8 @@ set(vtkAddon_SRCS
   vtkOrientedBSplineTransform.h
   vtkOrientedGridTransform.cxx
   vtkOrientedGridTransform.h
+  vtkAddonMathUtilities.h
+  vtkAddonMathUtilities.cxx
   )
 
 # Abstract/pure virtual classes
@@ -67,6 +72,7 @@ set(vtkAddon_SRCS
 # Helper classes
 
 set_source_files_properties(
+  vtkAddonTestingUtilities.h
   vtkLoggingMacros.h 
   WRAP_EXCLUDE
   )
@@ -86,10 +92,6 @@ set(lib_name ${PROJECT_NAME})
 
 set(srcs ${vtkAddon_SRCS})
 add_library(${lib_name} ${srcs})
-
-# Teem vtkNRRDReader overwrites VTK vtkNrrdReader
-set(VTK_WRAP_INCLUDE_DIRS ${CMAKE_CURRENT_SOURCE_DIR} ${VTK_INCLUDE_DIRS}
-    CACHE INTERNAL "VTK wrap include dirs" FORCE)
 
 set(libs
   ${VTK_LIBRARIES}

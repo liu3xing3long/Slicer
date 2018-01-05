@@ -33,10 +33,12 @@
 #   SLICER_LIBRARY_PATHS_BUILD
 #   SLICER_PATHS_BUILD
 #   SLICER_ENVVARS_BUILD
+#   SLICER_ADDITIONAL_PATH_ENVVARS_BUILD
 #
 #   SLICER_LIBRARY_PATHS_INSTALLED
 #   SLICER_PATHS_INSTALLED
 #   SLICER_ENVVARS_INSTALLED
+#   SLICER_ADDITIONAL_PATH_ENVVARS_INSTALLED
 #
 
 #
@@ -91,7 +93,7 @@ if(Slicer_BUILD_QTLOADABLEMODULES)
     )
 endif()
 
-# External projects
+# External projects - library paths
 foreach(varname IN LISTS Slicer_EP_LABEL_LIBRARY_PATHS_LAUNCHER_BUILD)
   list(APPEND SLICER_LIBRARY_PATHS_BUILD ${${varname}})
 endforeach()
@@ -110,7 +112,7 @@ if(Slicer_BUILD_CLI_SUPPORT AND Slicer_BUILD_CLI)
     )
 endif()
 
-# External projects
+# External projects - paths
 foreach(varname IN LISTS Slicer_EP_LABEL_PATHS_LAUNCHER_BUILD)
   list(APPEND SLICER_PATHS_BUILD ${${varname}})
 endforeach()
@@ -120,12 +122,24 @@ endforeach()
 #-----------------------------------------------------------------------------
 set(SLICER_ENVVARS_BUILD
   "SLICER_HOME=${Slicer_BINARY_DIR}" # See note below
+  "ITK_AUTOLOAD_PATH=<APPLAUNCHER_DIR>/${Slicer_ITKFACTORIES_DIR}/<CMAKE_CFG_INTDIR>"
   )
 if(Slicer_USE_PYTHONQT_WITH_OPENSSL)
   list(APPEND SLICER_ENVVARS_BUILD
     "SSL_CERT_FILE=<APPLAUNCHER_DIR>/${Slicer_SHARE_DIR}/Slicer.crt"
     )
 endif()
+
+# External projects - environment variables
+foreach(varname IN LISTS Slicer_EP_LABEL_ENVVARS_LAUNCHER_BUILD)
+  list(APPEND SLICER_ENVVARS_BUILD ${${varname}})
+endforeach()
+
+#-----------------------------------------------------------------------------
+# PATH ENVVARS
+#-----------------------------------------------------------------------------
+
+# QT_PLUGIN_PATH
 set(SLICER_QT_PLUGIN_PATH_BUILD
   "<APPLAUNCHER_DIR>/bin"
   "${CTK_DIR}/CTK-build/bin"
@@ -142,11 +156,8 @@ set(SLICER_ADDITIONAL_PATH_ENVVARS_BUILD
 #       Please note that the environment variable is SLICER_HOME,
 #       CMake refers to the variable as Slicer_HOME, and the tcl variable is SlicerHome.
 
+# PYTHONPATH
 if(Slicer_USE_PYTHONQT)
-
-  list(APPEND SLICER_ADDITIONAL_PATH_ENVVARS_BUILD
-    "PYTHONPATH"
-    )
 
   set(SLICER_PYTHONPATH_BUILD
     "<APPLAUNCHER_DIR>/bin/<CMAKE_CFG_INTDIR>"
@@ -159,15 +170,22 @@ if(Slicer_USE_PYTHONQT)
       )
   endif()
 
+  if(Slicer_USE_PYTHONQT)
+    list(APPEND SLICER_PYTHONPATH_BUILD
+      "<APPLAUNCHER_DIR>/${Slicer_QTSCRIPTEDMODULES_LIB_DIR}"
+      )
+  endif()
+
   # External projects - pythonpath
   foreach(varname IN LISTS Slicer_EP_LABEL_PYTHONPATH_LAUNCHER_BUILD)
     list(APPEND SLICER_PYTHONPATH_BUILD ${${varname}})
   endforeach()
 
-  # External projects - environment variables
-  foreach(varname IN LISTS Slicer_EP_LABEL_ENVVARS_LAUNCHER_BUILD)
-    list(APPEND SLICER_ENVVARS_BUILD ${${varname}})
-  endforeach()
+  # External projects - path environment variables
+  list(APPEND SLICER_ADDITIONAL_PATH_ENVVARS_BUILD
+    "PYTHONPATH"
+    )
+
 endif()
 
 
@@ -177,14 +195,25 @@ endif()
 #-----------------------------------------------------------------------------
 #-----------------------------------------------------------------------------
 
+# Note(s):
+#
+#  Do not use Slicer_INSTALL_* variables
+#  -------------------------------------
+#
+#  Indeed, on MacOSX, since Slicer_INSTALL_* variables already includes
+#  Slicer_BUNDLE_LOCATION (<appname>.app/Contents) they can *NOT*
+#  be used to reference paths from <APPLAUNCHER_DIR> which is itself
+#  set to /path/to/<appname>.app/Contents.
+#
+
 #-----------------------------------------------------------------------------
 # LIBRARY_PATHS
 #-----------------------------------------------------------------------------
 set(SLICER_LIBRARY_PATHS_INSTALLED
-  <APPLAUNCHER_DIR>/${Slicer_INSTALL_BIN_DIR}
-  <APPLAUNCHER_DIR>/${Slicer_INSTALL_LIB_DIR}
-  <APPLAUNCHER_DIR>/${Slicer_INSTALL_CLIMODULES_LIB_DIR}
-  <APPLAUNCHER_DIR>/${Slicer_INSTALL_QTLOADABLEMODULES_LIB_DIR}
+  <APPLAUNCHER_DIR>/${Slicer_BIN_DIR}
+  <APPLAUNCHER_DIR>/${Slicer_LIB_DIR}
+  <APPLAUNCHER_DIR>/${Slicer_CLIMODULES_LIB_DIR}
+  <APPLAUNCHER_DIR>/${Slicer_QTLOADABLEMODULES_LIB_DIR}
   )
 
 # The following lines allow Slicer to load a CLI module extension that depends
@@ -194,7 +223,7 @@ if(CMAKE_CONFIGURATION_TYPES)
   list(APPEND SLICER_LIBRARY_PATHS_INSTALLED ../${Slicer_QTLOADABLEMODULES_LIB_DIR}/<CMAKE_CFG_INTDIR>)
 endif()
 
-# External projects
+# External projects - library paths
 foreach(varname IN LISTS Slicer_EP_LABEL_LIBRARY_PATHS_LAUNCHER_INSTALLED)
   list(APPEND SLICER_LIBRARY_PATHS_INSTALLED ${${varname}})
 endforeach()
@@ -203,12 +232,12 @@ endforeach()
 # PATHS
 #-----------------------------------------------------------------------------
 set(SLICER_PATHS_INSTALLED
-  <APPLAUNCHER_DIR>/${Slicer_INSTALL_BIN_DIR}
-  <APPLAUNCHER_DIR>/${Slicer_INSTALL_CLIMODULES_BIN_DIR}
-  <APPLAUNCHER_DIR>/${Slicer_INSTALL_QTLOADABLEMODULES_BIN_DIR}
+  <APPLAUNCHER_DIR>/${Slicer_BIN_DIR}
+  <APPLAUNCHER_DIR>/${Slicer_CLIMODULES_BIN_DIR}
+  <APPLAUNCHER_DIR>/${Slicer_QTLOADABLEMODULES_BIN_DIR}
   )
 
-# External projects
+# External projects - paths
 foreach(varname IN LISTS Slicer_EP_LABEL_PATHS_LAUNCHER_INSTALLED)
   list(APPEND SLICER_PATHS_INSTALLED ${${varname}})
 endforeach()
@@ -220,24 +249,37 @@ set(SLICER_ENVVARS_INSTALLED
   # SLICER_HOME might already be set on the machine, overwrite it because it
   # could have unwanted side effects
   "SLICER_HOME=<APPLAUNCHER_DIR>"
+  "ITK_AUTOLOAD_PATH=<APPLAUNCHER_DIR>/${Slicer_ITKFACTORIES_DIR}"
   )
 if(Slicer_USE_PYTHONQT_WITH_OPENSSL)
   list(APPEND SLICER_ENVVARS_INSTALLED
     "SSL_CERT_FILE=<APPLAUNCHER_DIR>/${Slicer_SHARE_DIR}/Slicer.crt"
     )
 endif()
+
+# External projects - environment variables
+foreach(varname IN LISTS Slicer_EP_LABEL_ENVVARS_LAUNCHER_INSTALLED)
+  list(APPEND SLICER_ENVVARS_INSTALLED ${${varname}})
+endforeach()
+
+#-----------------------------------------------------------------------------
+# PATH ENVVARS
+#-----------------------------------------------------------------------------
+
+# QT_PLUGIN_PATH
 set(SLICER_QT_PLUGIN_PATH_INSTALLED
-  "<APPLAUNCHER_DIR>/${Slicer_INSTALL_QtPlugins_DIR}"
+  "<APPLAUNCHER_DIR>/${Slicer_QtPlugins_DIR}"
   )
 set(SLICER_ADDITIONAL_PATH_ENVVARS_INSTALLED
   "QT_PLUGIN_PATH"
   )
 
+# PYTHONPATH
 if(Slicer_USE_PYTHONQT)
   set(SLICER_PYTHONPATH_INSTALLED
-    "<APPLAUNCHER_DIR>/${Slicer_INSTALL_LIB_DIR}"
-    "<APPLAUNCHER_DIR>/${Slicer_INSTALL_QTSCRIPTEDMODULES_LIB_DIR}"
-    "<APPLAUNCHER_DIR>/${Slicer_INSTALL_QTLOADABLEMODULES_LIB_DIR}"
+    "<APPLAUNCHER_DIR>/${Slicer_LIB_DIR}"
+    "<APPLAUNCHER_DIR>/${Slicer_QTSCRIPTEDMODULES_LIB_DIR}"
+    "<APPLAUNCHER_DIR>/${Slicer_QTLOADABLEMODULES_LIB_DIR}"
     "<APPLAUNCHER_DIR>/lib/vtkTeem"
     "<APPLAUNCHER_DIR>/bin/Python"
     "<APPLAUNCHER_DIR>/${Slicer_QTLOADABLEMODULES_PYTHON_LIB_DIR}"
@@ -248,14 +290,9 @@ if(Slicer_USE_PYTHONQT)
     list(APPEND SLICER_PYTHONPATH_INSTALLED ${${varname}})
   endforeach()
 
+  # External projects - path environment variables
   list(APPEND SLICER_ADDITIONAL_PATH_ENVVARS_INSTALLED
     "PYTHONPATH"
     )
 
-  # External projects - environment variables
-  foreach(varname IN LISTS Slicer_EP_LABEL_ENVVARS_LAUNCHER_INSTALLED)
-    list(APPEND SLICER_ENVVARS_INSTALLED ${${varname}})
-  endforeach()
-
 endif()
-

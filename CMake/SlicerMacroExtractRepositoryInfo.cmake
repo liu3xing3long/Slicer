@@ -27,7 +27,7 @@
 #
 # SlicerMacroExtractRepositoryInfo(VAR_PREFIX <var-prefix> [SOURCE_DIR <dir>])
 #
-# If no SOURCE_DIR is provided, it will default to CMAKE_CURRENT_SOURCE_DIR.
+# If no SOURCE_DIR is provided, it will default to CMAKE_SOURCE_DIR.
 #
 # The macro will define the following variables:
 #  <var-prefix>_WC_TYPE - Either 'git', 'svn' or 'local' - The type will also be 'svn' if 'git-svn' is used.
@@ -50,6 +50,10 @@
 #  <var-prefix>_WC_LAST_CHANGED_REV - revision of last commit
 #  <var-prefix>_WC_INFO
 #
+# If source directory is not a SVN, GIT or CVS, the macro will return early
+# displaying an warning message:
+#
+#   -- Skipping repository info extraction: directory [/path/to/src] is not a GIT, SVN or CVS checkout
 
 macro(SlicerMacroExtractRepositoryInfo)
   include(CMakeParseArguments)
@@ -66,7 +70,7 @@ macro(SlicerMacroExtractRepositoryInfo)
   set(wc_info_prefix ${MY_VAR_PREFIX})
 
   if(NOT EXISTS "${MY_SOURCE_DIR}")
-    set(MY_SOURCE_DIR ${CMAKE_CURRENT_SOURCE_DIR})
+    set(MY_SOURCE_DIR ${CMAKE_SOURCE_DIR})
   endif()
 
   # Clear variables
@@ -84,49 +88,59 @@ macro(SlicerMacroExtractRepositoryInfo)
   set(${wc_info_prefix}_WC_REVISION_NAME "NA")
   set(${wc_info_prefix}_WC_REVISION_HASH "NA")
 
-  find_package(Git REQUIRED)
+  if(NOT EXISTS ${MY_SOURCE_DIR}/.git
+      AND NOT EXISTS ${MY_SOURCE_DIR}/.svn
+      AND NOT EXISTS ${MY_SOURCE_DIR}/CVS)
 
-  # Is <SOURCE_DIR> a git working copy ?
-  execute_process(COMMAND ${GIT_EXECUTABLE} rev-list -n 1 HEAD
-    WORKING_DIRECTORY ${MY_SOURCE_DIR}
-    RESULT_VARIABLE GIT_result
-    OUTPUT_QUIET
-    ERROR_QUIET)
-
-  if(${GIT_result} EQUAL 0)
-
-    set(${wc_info_prefix}_WC_TYPE git)
-    GIT_WC_INFO(${MY_SOURCE_DIR} ${wc_info_prefix})
-    if(${wc_info_prefix}_WC_GITSVN)
-      set(${wc_info_prefix}_WC_TYPE svn)
-    endif()
+    message(AUTHOR_WARNING "Skipping repository info extraction: directory [${MY_SOURCE_DIR}] is not a GIT, SVN or CVS checkout")
 
   else()
+  
+    find_package(Git REQUIRED)
 
-    find_package(Subversion REQUIRED)
-
-    # Is <SOURCE_DIR> a svn working copy ?
-    execute_process(COMMAND ${Subversion_SVN_EXECUTABLE} info
+    # Is <SOURCE_DIR> a git working copy ?
+    execute_process(COMMAND ${GIT_EXECUTABLE} rev-list -n 1 HEAD
       WORKING_DIRECTORY ${MY_SOURCE_DIR}
-      RESULT_VARIABLE Subversion_result
+      RESULT_VARIABLE GIT_result
       OUTPUT_QUIET
       ERROR_QUIET)
 
-    if(${Subversion_result} EQUAL 0)
+    if(${GIT_result} EQUAL 0)
 
-      set(${wc_info_prefix}_WC_TYPE svn)
-      Subversion_WC_INFO(${MY_SOURCE_DIR} ${wc_info_prefix})
-
+      set(${wc_info_prefix}_WC_TYPE git)
+      GIT_WC_INFO(${MY_SOURCE_DIR} ${wc_info_prefix})
+      if(${wc_info_prefix}_WC_GITSVN)
+        set(${wc_info_prefix}_WC_TYPE svn)
+      endif()
+   
     else()
 
-      # Is <SOURCE_DIR> a CVS working copy ?
-      if(EXISTS ${MY_SOURCE_DIR}/CVS)
+      find_package(Subversion REQUIRED)
 
-        message(AUTHOR_WARNING "CVS info extraction *NOT* implemented !")
+      # Is <SOURCE_DIR> a svn working copy ?
+      execute_process(COMMAND ${Subversion_SVN_EXECUTABLE} info
+        WORKING_DIRECTORY ${MY_SOURCE_DIR}
+        RESULT_VARIABLE Subversion_result
+        OUTPUT_QUIET
+        ERROR_QUIET)
 
+      if(${Subversion_result} EQUAL 0)
+
+        set(${wc_info_prefix}_WC_TYPE svn)
+        Subversion_WC_INFO(${MY_SOURCE_DIR} ${wc_info_prefix})
+
+      else()
+
+        # Is <SOURCE_DIR> a CVS working copy ?
+        if(EXISTS ${MY_SOURCE_DIR}/CVS)
+
+          message(AUTHOR_WARNING "CVS info extraction *NOT* implemented !")
+
+        endif()
       endif()
     endif()
   endif()
+
 endmacro()
 
 

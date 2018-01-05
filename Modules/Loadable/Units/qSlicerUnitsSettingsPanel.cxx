@@ -205,7 +205,7 @@ void qSlicerUnitsSettingsPanelPrivate::setMRMLScene(vtkMRMLScene* scene)
   if (this->MRMLScene)
     {
     newSelectionNode = vtkMRMLSelectionNode::SafeDownCast(
-      scene->GetNthNodeByClass(0, "vtkMRMLSelectionNode"));
+      scene->GetNodeByID("vtkMRMLSelectionNodeSingleton"));
     }
 
   this->setSelectionNode(newSelectionNode);
@@ -231,7 +231,6 @@ void qSlicerUnitsSettingsPanelPrivate
 // ---------------------------------------------------------------------------
 void qSlicerUnitsSettingsPanelPrivate::resize(bool showall)
 {
-  Q_Q(qSlicerUnitsSettingsPanel);
   if(showall)
     {
     this->scrollArea->setMinimumSize(QSize(0, 700));
@@ -302,7 +301,7 @@ void qSlicerUnitsSettingsPanel::setQuantities(const QStringList& newQuantities)
 
   foreach(QString newQuantity, newQuantities)
     {
-    if (d->Quantities.contains(newQuantity))
+    if (!d->Quantities.contains(newQuantity))
       {
       d->addQuantity(newQuantity);
       }

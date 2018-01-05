@@ -21,7 +21,9 @@
 #include <QFileInfo>
 #include <QHBoxLayout>
 #include <QToolButton>
+#if (QT_VERSION < QT_VERSION_CHECK(5, 6, 0))
 #include <QWebFrame>
+#endif
 
 // STD includes
 #include <vector>
@@ -107,7 +109,11 @@ void qMRMLChartViewPrivate::init()
   q->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
 
   // Expose the ChartView class to Javascript
+#if (QT_VERSION < QT_VERSION_CHECK(5, 6, 0))
   q->page()->mainFrame()->addToJavaScriptWindowObject(QString("qtobject"), this);
+#else
+  // XXX Change to webchannel
+#endif
 
   this->PopupWidget = new ctkPopupWidget;
   QHBoxLayout* popupLayout = new QHBoxLayout;
@@ -347,7 +353,11 @@ void qMRMLChartViewPrivate::updateWidgetFromMRML()
 
   // expose this object to the Javascript code so Javascript can call
   // slots in this Qt object, e.g. onDataPointClicked()
+#if (QT_VERSION < QT_VERSION_CHECK(5, 6, 0))
   q->page()->mainFrame()->addToJavaScriptWindowObject(QString("qtobject"), this);
+#else
+  // XXX Change to webchannel
+#endif
 
 }
 
@@ -841,6 +851,17 @@ QString qMRMLChartViewPrivate::lineOptions(vtkMRMLChartNode *cn)
     options << ", seriesColors: " << this->seriesColorsString(colorNode);
     }
 
+  // markerOptions
+  options << ", markerOptions: {" ;
+  // markers size
+  const char *markersSize = cn->GetProperty("default", "size");
+  if (markersSize && QString(markersSize).toInt() > 0)  // Checks if given size is an integer and if larger than 0
+    {
+    options << "size: " << markersSize;
+    }
+  options << "}" ;
+  // end of markerOptions
+
   // default properties for a series
   //
   //
@@ -904,6 +925,13 @@ QString qMRMLChartViewPrivate::lineOptions(vtkMRMLChartNode *cn)
     options << ", linePattern: '-.'";
     }
 
+  // line width
+  const char *lineWidth = cn->GetProperty("default", "lineWidth");
+  if (lineWidth && QString(lineWidth).toInt() > 0)  // Checks if given lineWidth is an integer and if larger than 0
+    {
+    options << ", lineWidth: " << lineWidth;
+    }
+
   // end of seriesDefaults properties
   options << "}";
 
@@ -964,6 +992,13 @@ QString qMRMLChartViewPrivate::lineOptions(vtkMRMLChartNode *cn)
       options << ", linePattern: '-.'";
       }
 
+    // line width
+  const char *lineWidth = cn->GetProperty(arrayName.c_str(), "lineWidth");
+  if (lineWidth && QString(lineWidth).toInt() > 0)  // Checks if given lineWidth is an integer and if larger than 0
+    {
+    options << ", lineWidth: " << lineWidth;
+    }
+
     // color
     const char *color = cn->GetProperty(arrayName.c_str(), "color");
 
@@ -972,6 +1007,16 @@ QString qMRMLChartViewPrivate::lineOptions(vtkMRMLChartNode *cn)
       options << ", color: '" << color << "'";
       }
 
+    // markerOptions
+    options << ", markerOptions: {" ;
+    // markers size
+    const char *markersSize = cn->GetProperty(arrayName.c_str(), "size");
+    if (markersSize && QString(markersSize).toInt() > 0)  // Checks if given size is an integer and if larger than 0
+      {
+      options << "size: " << markersSize;
+      }
+    options << "}" ;
+    // end of markerOptions
     // end of a series
     options << "}";
     if (idx < arrayNames->GetNumberOfValues()-1)

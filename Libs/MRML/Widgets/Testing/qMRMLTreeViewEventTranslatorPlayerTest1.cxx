@@ -27,6 +27,9 @@
 #include <QTimer>
 #include <QTreeView>
 
+// Slicer includes
+#include "vtkSlicerConfigure.h"
+
 // CTK includes
 #include "ctkCallback.h"
 #include "ctkEventTranslatorPlayerWidget.h"
@@ -39,12 +42,16 @@
 #include <qMRMLTreeViewEventTranslator.h>
 
 // MRML includes
+#include <vtkMRMLApplicationLogic.h>
 #include <vtkMRMLScene.h>
 #include <vtkMRMLModelNode.h>
 #include <vtkMRMLModelDisplayNode.h>
 
 // VTK includes
 #include <vtkNew.h>
+#ifdef Slicer_VTK_USE_QVTKOPENGLWIDGET
+#include <QVTKOpenGLWidget.h>
+#endif
 
 // STD includes
 #include <cstdlib>
@@ -75,6 +82,13 @@ void checkFinalWidgetState2(void* data)
 //-----------------------------------------------------------------------------
 int qMRMLTreeViewEventTranslatorPlayerTest1(int argc, char * argv [] )
 {
+#ifdef Slicer_VTK_USE_QVTKOPENGLWIDGET
+  // Set default surface format for QVTKOpenGLWidget
+  QSurfaceFormat format = QVTKOpenGLWidget::defaultFormat();
+  format.setSamples(0);
+  QSurfaceFormat::setDefaultFormat(format);
+#endif
+
   QApplication app(argc, argv);
 
   QString xmlDirectory = QString(argv[1]) + "/Libs/MRML/Widgets/Testing/";
@@ -90,6 +104,8 @@ int qMRMLTreeViewEventTranslatorPlayerTest1(int argc, char * argv [] )
   qMRMLTreeView widget;
 
   vtkNew<vtkMRMLScene> scene;
+  vtkNew<vtkMRMLApplicationLogic> applicationLogic;
+  applicationLogic->SetMRMLScene(scene.GetPointer());
   widget.setMRMLScene(scene.GetPointer());
   scene->SetURL(argv[2]);
   scene->Import();
@@ -107,6 +123,7 @@ int qMRMLTreeViewEventTranslatorPlayerTest1(int argc, char * argv [] )
   vtkNew<vtkMRMLModelDisplayNode> displayModelNode2;
 
   vtkNew<vtkMRMLScene> scene2;
+  applicationLogic->SetMRMLScene(scene2.GetPointer());
   scene2->AddNode(modelNode.GetPointer());
   scene2->AddNode(modelNode2.GetPointer());
   scene2->AddNode(displayModelNode.GetPointer());

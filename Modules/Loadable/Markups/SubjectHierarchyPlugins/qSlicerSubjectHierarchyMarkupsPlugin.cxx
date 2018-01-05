@@ -73,10 +73,18 @@ qSlicerSubjectHierarchyMarkupsPluginPrivate::qSlicerSubjectHierarchyMarkupsPlugi
   this->MarkupIcon = QIcon(":Icons/Markup.png");
 }
 
+//------------------------------------------------------------------------------
+void qSlicerSubjectHierarchyMarkupsPluginPrivate::init()
+{
+}
+
 //-----------------------------------------------------------------------------
 qSlicerSubjectHierarchyMarkupsPluginPrivate::~qSlicerSubjectHierarchyMarkupsPluginPrivate()
 {
 }
+
+//-----------------------------------------------------------------------------
+// qSlicerSubjectHierarchyMarkupsPlugin methods
 
 //-----------------------------------------------------------------------------
 qSlicerSubjectHierarchyMarkupsPlugin::qSlicerSubjectHierarchyMarkupsPlugin(QObject* parent)
@@ -89,47 +97,49 @@ qSlicerSubjectHierarchyMarkupsPlugin::qSlicerSubjectHierarchyMarkupsPlugin(QObje
   d->init();
 }
 
-//------------------------------------------------------------------------------
-void qSlicerSubjectHierarchyMarkupsPluginPrivate::init()
-{
-}
-
 //-----------------------------------------------------------------------------
 qSlicerSubjectHierarchyMarkupsPlugin::~qSlicerSubjectHierarchyMarkupsPlugin()
 {
 }
 
 //----------------------------------------------------------------------------
-double qSlicerSubjectHierarchyMarkupsPlugin::canAddNodeToSubjectHierarchy(vtkMRMLNode* node, vtkMRMLSubjectHierarchyNode* parent/*=NULL*/)const
+double qSlicerSubjectHierarchyMarkupsPlugin::canAddNodeToSubjectHierarchy(
+  vtkMRMLNode* node, vtkIdType parentItemID/*=vtkMRMLSubjectHierarchyNode::INVALID_ITEM_ID*/)const
 {
-  Q_UNUSED(parent);
+  Q_UNUSED(parentItemID);
   if (!node)
     {
-    qCritical() << "qSlicerSubjectHierarchyMarkupsPlugin::canAddNodeToSubjectHierarchy: Input node is NULL!";
+    qCritical() << Q_FUNC_INFO << ": Input node is NULL!";
     return 0.0;
     }
   else if (node->IsA("vtkMRMLMarkupsFiducialNode"))
     {
-    // Node is a markup fiducial
+    // Item is a markup fiducial
     return 0.5;
     }
   return 0.0;
 }
 
 //---------------------------------------------------------------------------
-double qSlicerSubjectHierarchyMarkupsPlugin::canOwnSubjectHierarchyNode(vtkMRMLSubjectHierarchyNode* node)const
+double qSlicerSubjectHierarchyMarkupsPlugin::canOwnSubjectHierarchyItem(vtkIdType itemID)const
 {
-  if (!node)
+  if (itemID == vtkMRMLSubjectHierarchyNode::INVALID_ITEM_ID)
     {
-    qCritical() << "qSlicerSubjectHierarchyMarkupsPlugin::canOwnSubjectHierarchyNode: Input node is NULL!";
+    qCritical() << Q_FUNC_INFO << ": Invalid input item";
+    return 0.0;
+    }
+  vtkMRMLSubjectHierarchyNode* shNode = qSlicerSubjectHierarchyPluginHandler::instance()->subjectHierarchyNode();
+  if (!shNode)
+    {
+    qCritical() << Q_FUNC_INFO << ": Failed to access subject hierarchy node";
     return 0.0;
     }
 
   // Markup
-  vtkMRMLNode* associatedNode = node->GetAssociatedNode();
+  vtkMRMLNode* associatedNode = shNode->GetItemDataNode(itemID);
   if (associatedNode && associatedNode->IsA("vtkMRMLMarkupsFiducialNode"))
     {
-    // Node is a markup fiducial
+    // Item is a markup fiducial
     return 0.5;
     }
 
@@ -143,22 +153,22 @@ const QString qSlicerSubjectHierarchyMarkupsPlugin::roleForPlugin()const
 }
 
 //---------------------------------------------------------------------------
-QIcon qSlicerSubjectHierarchyMarkupsPlugin::icon(vtkMRMLSubjectHierarchyNode* node)
+QIcon qSlicerSubjectHierarchyMarkupsPlugin::icon(vtkIdType itemID)
 {
-  if (!node)
+  if (itemID == vtkMRMLSubjectHierarchyNode::INVALID_ITEM_ID)
     {
-    qCritical() << "qSlicerSubjectHierarchyMarkupsPlugin::icon: NULL node given!";
+    qCritical() << Q_FUNC_INFO << ": Invalid input item";
     return QIcon();
     }
 
   Q_D(qSlicerSubjectHierarchyMarkupsPlugin);
 
-  if (this->canOwnSubjectHierarchyNode(node))
+  if (this->canOwnSubjectHierarchyItem(itemID))
     {
     return d->MarkupIcon;
     }
 
-  // Node unknown by plugin
+  // Item unknown by plugin
   return QIcon();
 }
 
@@ -167,22 +177,4 @@ QIcon qSlicerSubjectHierarchyMarkupsPlugin::visibilityIcon(int visible)
 {
   // Have the default plugin (which is not registered) take care of this
   return qSlicerSubjectHierarchyPluginHandler::instance()->defaultPlugin()->visibilityIcon(visible);
-}
-
-//---------------------------------------------------------------------------
-void qSlicerSubjectHierarchyMarkupsPlugin::editProperties(vtkMRMLSubjectHierarchyNode* node)
-{
-  // Switch to markups module
-  qSlicerAbstractModuleWidget* moduleWidget = qSlicerSubjectHierarchyAbstractPlugin::switchToModule("Markups");
-  if (moduleWidget)
-    {
-    // Get node selector combobox
-    qMRMLNodeComboBox* nodeSelector = moduleWidget->findChild<qMRMLNodeComboBox*>("activeMarkupMRMLNodeComboBox");
-
-    // Choose current data node
-    if (nodeSelector)
-      {
-      nodeSelector->setCurrentNode(node->GetAssociatedNode());
-      }
-    }
 }

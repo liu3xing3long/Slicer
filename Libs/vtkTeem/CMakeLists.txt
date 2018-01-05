@@ -1,7 +1,7 @@
 project(vtkTeem)
 
 #-----------------------------------------------------------------------------
-cmake_minimum_required(VERSION 2.8.4)
+cmake_minimum_required(VERSION 3.5)
 #-----------------------------------------------------------------------------
 
 # --------------------------------------------------------------------------
@@ -63,39 +63,12 @@ endif()
 # --------------------------------------------------------------------------
 set(vtkTeem_SRCS
   vtkDiffusionTensorMathematics.cxx
-  vtkTeemEstimateDiffusionTensor.cxx
   vtkDiffusionTensorGlyph.cxx
-  vtkPolyDataTensorToColor.cxx
-  vtkPolyDataColorLinesByOrientation.cxx
-  vtkBSplineInterpolateImageFunction.cxx
-  vtkHyperPointandArray.cxx
-  vtkHyperStreamlineDTMRI.cxx
-  vtkHyperStreamlineTeem.cxx
   vtkNRRDReader.cxx
   vtkNRRDWriter.cxx
-  vtkPreciseHyperStreamline.cxx
-  vtkPreciseHyperStreamlinePoints.cxx
-  vtkSeedTracts.cxx
-  vtkTensorImplicitFunctionToFunctionSet.cxx
-  vtkTractographyPointAndArray.cxx
-  vtkTensorMask.cxx
-  vtkTensorRotate.cxx
   vtkImageLabelCombine.cxx
   )
 
-# Abstract/pure virtual classes
-
-#set_source_files_properties(
-#  ABSTRACT
-#  )
-
-# Helper classes
-
-set_source_files_properties(
-  vtkHyperPointandArray.cxx
-  vtkTractographyPointAndArray.cxx
-  WRAP_EXCLUDE
-  )
 # --------------------------------------------------------------------------
 # Include dirs
 # --------------------------------------------------------------------------
@@ -112,10 +85,6 @@ set(lib_name ${PROJECT_NAME})
 
 set(srcs ${vtkTeem_SRCS})
 add_library(${lib_name} ${srcs})
-
-# Teem vtkNRRDReader overwrites VTK vtkNrrdReader
-set(VTK_WRAP_INCLUDE_DIRS ${CMAKE_CURRENT_SOURCE_DIR} ${VTK_INCLUDE_DIRS}
-    CACHE INTERNAL "VTK wrap include dirs" FORCE)
 
 set(libs
   ${Teem_LIBRARIES}

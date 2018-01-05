@@ -17,8 +17,10 @@
 
 // MRMLDisplayableManager includes
 #include "vtkMRMLModelSliceDisplayableManager.h"
+#include "vtkMRMLModelDisplayableManager.h"
 
 // MRML includes
+#include <vtkMRMLApplicationLogic.h>
 #include <vtkMRMLColorNode.h>
 #include <vtkMRMLDisplayNode.h>
 #include <vtkMRMLDisplayableNode.h>
@@ -34,7 +36,9 @@
 #include <vtkActor2D.h>
 #include <vtkAlgorithmOutput.h>
 #include <vtkCallbackCommand.h>
+#include <vtkDataSetSurfaceFilter.h>
 #include <vtkEventBroker.h>
+#include <vtkLookupTable.h>
 #include <vtkMatrix4x4.h>
 #include <vtkNew.h>
 #include <vtkObjectFactory.h>
@@ -45,6 +49,7 @@
 #include <vtkSmartPointer.h>
 #include <vtkTransform.h>
 #include <vtkGeneralTransform.h>
+#include <vtkTransformFilter.h>
 #include <vtkTransformPolyDataFilter.h>
 #include <vtkWeakPointer.h>
 #include <vtkPointLocator.h>
@@ -52,6 +57,7 @@
 
 // VTK includes: customization
 #include <vtkCutter.h>
+#include <vtkSampleImplicitFunctionFilter.h>
 
 // STD includes
 #include <algorithm>
@@ -71,9 +77,11 @@ public:
     vtkSmartPointer<vtkGeneralTransform> NodeToWorld;
     vtkSmartPointer<vtkTransform> TransformToSlice;
     vtkSmartPointer<vtkTransformPolyDataFilter> Transformer;
-    vtkSmartPointer<vtkTransformPolyDataFilter> ModelWarper;
+    vtkSmartPointer<vtkDataSetSurfaceFilter> SurfaceExtractor;
+    vtkSmartPointer<vtkTransformFilter> ModelWarper;
     vtkSmartPointer<vtkPlane> Plane;
     vtkSmartPointer<vtkCutter> Cutter;
+    vtkSmartPointer<vtkSampleImplicitFunctionFilter> SliceDistance;
     vtkSmartPointer<vtkProp> Actor;
     };
 
@@ -171,7 +179,35 @@ bool vtkMRMLModelSliceDisplayableManager::vtkInternal
       visibleOnNode = (displayNode->GetVisibility() == 1 ? true : false);
       }
     }
-  return visibleOnNode && (displayNode->GetSliceIntersectionVisibility() != 0);
+  else
+    {
+    // Only show slice intersection if it is mapped into layout and in the same view group
+    vtkMRMLSliceNode* intersectedSliceNode = NULL;
+    vtkMRMLApplicationLogic *mrmlAppLogic = this->External->GetMRMLApplicationLogic();
+    if (mrmlAppLogic)
+      {
+      vtkMRMLSliceLogic *sliceLogic = mrmlAppLogic->GetSliceLogicByModelDisplayNode(vtkMRMLModelDisplayNode::SafeDownCast(displayNode));
+      if (sliceLogic)
+        {
+        intersectedSliceNode = sliceLogic->GetSliceNode();
+        }
+      }
+    if (intersectedSliceNode)
+      {
+      if (!intersectedSliceNode->IsMappedInLayout())
+        {
+        visibleOnNode = false;
+        }
+      else if (this->SliceNode)
+        {
+        if (this->SliceNode->GetViewGroup() != intersectedSliceNode->GetViewGroup())
+          {
+          visibleOnNode = false;
+          }
+        }
+      }
+    }
+  return visibleOnNode && (displayNode->GetSliceIntersectionVisibility() != 0) ;
 }
 
 //---------------------------------------------------------------------------
@@ -303,10 +339,12 @@ void vtkMRMLModelSliceDisplayableManager::vtkInternal
   Pipeline* pipeline = new Pipeline();
   pipeline->Actor = actor.GetPointer();
   pipeline->Cutter = vtkSmartPointer<vtkCutter>::New();
+  pipeline->SliceDistance = vtkSmartPointer<vtkSampleImplicitFunctionFilter>::New();
   pipeline->TransformToSlice = vtkSmartPointer<vtkTransform>::New();
   pipeline->NodeToWorld = vtkSmartPointer<vtkGeneralTransform>::New();
   pipeline->Transformer = vtkSmartPointer<vtkTransformPolyDataFilter>::New();
-  pipeline->ModelWarper = vtkSmartPointer<vtkTransformPolyDataFilter>::New();
+  pipeline->ModelWarper = vtkSmartPointer<vtkTransformFilter>::New();
+  pipeline->SurfaceExtractor = vtkSmartPointer<vtkDataSetSurfaceFilter>::New();
   pipeline->Plane = vtkSmartPointer<vtkPlane>::New();
 
   // Set up pipeline
@@ -315,6 +353,11 @@ void vtkMRMLModelSliceDisplayableManager::vtkInternal
   pipeline->Cutter->SetCutFunction(pipeline->Plane);
   pipeline->Cutter->SetGenerateCutScalars(0);
   pipeline->Cutter->SetInputConnection(pipeline->ModelWarper->GetOutputPort());
+  // Projection is created from outer surface of volumetric meshes (for polydata surface
+  // extraction is just shallow-copy)
+  pipeline->SurfaceExtractor->SetInputConnection(pipeline->ModelWarper->GetOutputPort());
+  pipeline->SliceDistance->SetImplicitFunction(pipeline->Plane);
+  pipeline->SliceDistance->SetInputConnection(pipeline->SurfaceExtractor->GetOutputPort());
   pipeline->Actor->SetVisibility(0);
 
   // Add actor to Renderer and local cache
@@ -352,66 +395,192 @@ void vtkMRMLModelSliceDisplayableManager::vtkInternal
 void vtkMRMLModelSliceDisplayableManager::vtkInternal
 ::UpdateDisplayNodePipeline(vtkMRMLDisplayNode* displayNode, const Pipeline* pipeline)
 {
-  // Sets visibility, set pipeline polydata input, update color
+  // Sets visibility, set pipeline mesh input, update color
   //   calculate and set pipeline transforms.
 
-  if (!displayNode || !pipeline)
+  if (!pipeline)
     {
+    vtkErrorWithObjectMacro(this->External, "vtkMRMLModelSliceDisplayableManager::"
+      "vtkInternal::UpdateDisplayNodePipeline failed: pipeline is invalid");
     return;
     }
 
-  // Update visibility
-  bool visible = this->IsVisible(displayNode);
-  pipeline->Actor->SetVisibility(visible);
-
-  if (visible)
+  vtkMRMLModelDisplayNode* modelDisplayNode = vtkMRMLModelDisplayNode::SafeDownCast(displayNode);
+  if (!modelDisplayNode)
     {
-    vtkMRMLModelDisplayNode* modelDisplayNode =
-      vtkMRMLModelDisplayNode::SafeDownCast(displayNode);
-    vtkPolyData* polyData = modelDisplayNode->GetOutputPolyData();
-    if (!polyData)
+    vtkErrorWithObjectMacro(this->External, "vtkMRMLModelSliceDisplayableManager::"
+      "vtkInternal::UpdateDisplayNodePipeline failed: vtkMRMLModelDisplayNode display node type is expected");
+    pipeline->Actor->SetVisibility(false);
+    return;
+    }
+
+  if (!this->IsVisible(displayNode))
+    {
+    pipeline->Actor->SetVisibility(false);
+    return;
+    }
+
+  vtkPointSet* pointSet = modelDisplayNode->GetOutputMesh();
+  if (!pointSet)
+    {
+    pipeline->Actor->SetVisibility(false);
+    return;
+    }
+
+  // Need this to update bounds of the locator, to avoid crash in the cutter
+  modelDisplayNode->GetOutputMeshConnection()->GetProducer()->Update();
+
+  if (!pointSet->GetPoints() || pointSet->GetNumberOfPoints() == 0)
+    {
+    // there are no points, so there is nothing to cut
+    pipeline->Actor->SetVisibility(false);
+    return;
+    }
+
+  pipeline->ModelWarper->SetInputData(pointSet); //why here? +connection?
+  pipeline->ModelWarper->SetTransform(pipeline->NodeToWorld);
+
+  //  Set Plane Transform
+  this->SetSlicePlaneFromMatrix(this->SliceXYToRAS, pipeline->Plane);
+  pipeline->Plane->Modified();
+
+  if (modelDisplayNode->GetSliceDisplayMode() == vtkMRMLModelDisplayNode::SliceDisplayProjection
+    || modelDisplayNode->GetSliceDisplayMode() == vtkMRMLModelDisplayNode::SliceDisplayDistanceEncodedProjection)
+    {
+
+    if (modelDisplayNode->GetSliceDisplayMode() == vtkMRMLModelDisplayNode::SliceDisplayProjection)
       {
-      return;
+      // remove cutter from the pipeline if projection mode is used, we just need to extract surface
+      // and flatten the model
+      pipeline->Transformer->SetInputConnection(pipeline->SurfaceExtractor->GetOutputPort());
       }
-    pipeline->ModelWarper->SetInputData(polyData);
-    // need this to update bounds of the locator, to avoid crash in the cutter
-    modelDisplayNode->GetOutputPolyDataConnection()->GetProducer()->Update();
+    else
+      {
+      // replace cutter in the pipeline by surface extraction, slice distance computation,
+      // and flattening of the model
+      pipeline->Transformer->SetInputConnection(pipeline->SliceDistance->GetOutputPort());
+      }
 
-    pipeline->ModelWarper->SetTransform(pipeline->NodeToWorld);
+    //  Set Poly Data Transform that projects model to the slice plane
+    vtkNew<vtkMatrix4x4> rasToSliceXY;
+    vtkMatrix4x4::Invert(this->SliceXYToRAS, rasToSliceXY.GetPointer());
+    // Project all points to the slice plane (slice Z coordinate = 0)
+    rasToSliceXY->SetElement(2, 0, 0);
+    rasToSliceXY->SetElement(2, 1, 0);
+    rasToSliceXY->SetElement(2, 2, 0);
+    pipeline->TransformToSlice->SetMatrix(rasToSliceXY.GetPointer());
+    }
+  else
+    {
+    // show intersection in the slice view
+    // include clipper in the pipeline
+    pipeline->Transformer->SetInputConnection(pipeline->Cutter->GetOutputPort());
+    pipeline->Cutter->SetInputConnection(pipeline->ModelWarper->GetOutputPort());
 
-    //  Set Plane Transform
-    this->SetSlicePlaneFromMatrix(this->SliceXYToRAS, pipeline->Plane);
-    pipeline->Plane->Modified();
-
-    //  Set PolyData Transform
+    //  Set Poly Data Transform
     vtkNew<vtkMatrix4x4> rasToSliceXY;
     vtkMatrix4x4::Invert(this->SliceXYToRAS, rasToSliceXY.GetPointer());
     pipeline->TransformToSlice->SetMatrix(rasToSliceXY.GetPointer());
 
     // optimization for slice to slice intersections which are 1 quad polydatas
     // no need for 50^3 default locator divisons
-    if (polyData->GetPoints() != NULL && polyData->GetNumberOfPoints() <= 4)
-    {
+    if (pointSet->GetPoints() != NULL && pointSet->GetNumberOfPoints() <= 4)
+      {
       vtkNew<vtkPointLocator> locator;
-      double *bounds = polyData->GetBounds();
+      double *bounds = pointSet->GetBounds();
       locator->SetDivisions(2,2,2);
-      locator->InitPointInsertion(polyData->GetPoints(), bounds);
+      locator->InitPointInsertion(pointSet->GetPoints(), bounds);
       pipeline->Cutter->SetLocator(locator.GetPointer());
+      }
     }
 
-    // Update pipeline actor
-    vtkActor2D* actor = vtkActor2D::SafeDownCast(pipeline->Actor);
-    vtkPolyDataMapper2D* mapper = vtkPolyDataMapper2D::SafeDownCast(
-      actor->GetMapper());
+  // Update pipeline actor
+  vtkActor2D* actor = vtkActor2D::SafeDownCast(pipeline->Actor);
+  vtkPolyDataMapper2D* mapper = vtkPolyDataMapper2D::SafeDownCast(actor->GetMapper());
+
+  if (mapper)
+    {
     mapper->SetInputConnection( pipeline->Transformer->GetOutputPort() );
-    mapper->SetLookupTable( displayNode->GetColorNode() ?
-                            displayNode->GetColorNode()->GetScalarsToColors() : 0);
-    mapper->SetScalarRange(modelDisplayNode->GetScalarRange());
-    actor->SetPosition(0,0);
-    vtkProperty2D* actorProperties = actor->GetProperty();
-    actorProperties->SetColor(displayNode->GetColor() );
-    actorProperties->SetLineWidth(displayNode->GetSliceIntersectionThickness() );
+
+    if (modelDisplayNode->GetSliceDisplayMode() == vtkMRMLModelDisplayNode::SliceDisplayDistanceEncodedProjection)
+      {
+      vtkMRMLColorNode* colorNode = modelDisplayNode->GetDistanceEncodedProjectionColorNode();
+      vtkLookupTable* dNodeLUT = (colorNode ? colorNode->GetLookupTable() : NULL);
+      if (dNodeLUT)
+        {
+        mapper->SetScalarRange(modelDisplayNode->GetScalarRange());
+        vtkSmartPointer<vtkLookupTable> lut = vtkSmartPointer<vtkLookupTable>::Take(
+          vtkMRMLModelDisplayableManager::CreateLookupTableCopy(dNodeLUT));
+        lut->SetAlpha(displayNode->GetSliceIntersectionOpacity());
+        mapper->SetLookupTable(lut.GetPointer());
+        mapper->SetScalarRange(lut->GetRange());
+        mapper->SetScalarVisibility(true);
+        }
+      else
+        {
+        mapper->SetScalarVisibility(false);
+        }
+      }
+    else if (modelDisplayNode->GetScalarVisibility())
+      {
+      // Check if using point data or cell data
+      vtkMRMLModelNode* modelNode = vtkMRMLModelNode::SafeDownCast(modelDisplayNode->GetDisplayableNode());
+      if (vtkMRMLModelDisplayableManager::IsCellScalarsActive(modelDisplayNode, modelNode))
+        {
+        mapper->SetScalarModeToUseCellData();
+        mapper->SetColorModeToDefault();
+        }
+      else
+        {
+        mapper->SetScalarModeToUsePointData();
+        mapper->SetColorModeToMapScalars();
+      }
+
+      // The renderer uses the lookup table scalar range to
+      // render colors. By default, UseLookupTableScalarRange
+      // is set to false and SetScalarRange can be used on the
+      // mapper to map scalars into the lookup table. When set
+      // to true, SetScalarRange has no effect and it is necessary
+      // to force the scalarRange on the lookup table manually.
+      // Whichever way is used, the look up table range needs
+      // to be changed to render the correct scalar values, thus
+      // one lookup table can not be shared by multiple mappers
+      // if any of those mappers needs to map using its scalar
+      // values range. It is therefore necessary to make a copy
+      // of the colorNode vtkLookupTable in order not to impact
+      // that lookup table original range.
+      vtkLookupTable* dNodeLUT = modelDisplayNode->GetColorNode() ?
+                                 modelDisplayNode->GetColorNode()->GetLookupTable() : NULL;
+      vtkSmartPointer<vtkLookupTable> lut = vtkSmartPointer<vtkLookupTable>::Take(
+        vtkMRMLModelDisplayableManager::CreateLookupTableCopy(dNodeLUT));
+      lut->SetAlpha(displayNode->GetSliceIntersectionOpacity());
+      mapper->SetLookupTable(lut.GetPointer());
+
+      // Set scalar range
+      mapper->SetScalarRange(modelDisplayNode->GetScalarRange());
+
+      mapper->SetScalarVisibility(true);
+      }
+    else
+      {
+      mapper->SetScalarVisibility(false);
+      }
     }
+
+  vtkProperty2D* actorProperties = actor->GetProperty();
+  actorProperties->SetColor(displayNode->GetColor());
+  actorProperties->SetLineWidth(displayNode->GetSliceIntersectionThickness());
+  actorProperties->SetOpacity(displayNode->GetSliceIntersectionOpacity());
+
+  // Opacity of the slice intersection is intentionally not set by
+  // actorProperties->SetOpacity(displayNode->GetOpacity()),
+  // because most often users only want to make 3D model transparent.
+  // Visibility of slice intersections can be tuned by modifying
+  // slice intersection thickness or a new SliceIntersectionOpacity attribute
+  // could be introduced.
+
+  actor->SetPosition(0,0);
+  actor->SetVisibility(true);
 }
 
 //---------------------------------------------------------------------------

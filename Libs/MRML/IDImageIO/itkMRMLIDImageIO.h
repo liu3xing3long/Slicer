@@ -5,15 +5,10 @@
   See COPYRIGHT.txt
   or http://www.slicer.org/copyright/copyright.txt for details.
 
-  Program:   MRML
-  Module:    $RCSfile: itkMRMLIDImageIO.h,v $
-  Date:      $Date: 2006-06-19 09:16:30 -0400 (Mon, 19 Jun 2006) $
-  Version:   $Rev: 607 $
-
 =========================================================================auto=*/
 
-#ifndef __itkMRMLIDImageIO_h
-#define __itkMRMLIDImageIO_h
+#ifndef itkMRMLIDImageIO_h
+#define itkMRMLIDImageIO_h
 
 #ifdef _MSC_VER
 #pragma warning ( disable : 4786 )
@@ -21,7 +16,7 @@
 
 #include <vtkVersion.h>
 
-#include "itkMRMLIDIOWin32Header.h"
+#include "itkMRMLIDIOExport.h"
 
 #include "itkImageIOBase.h"
 
@@ -59,8 +54,8 @@ class MRMLIDImageIO_EXPORT MRMLIDImageIO : public ImageIOBase
 {
 public:
   /** Standard class typedefs. */
-  typedef MRMLIDImageIO            Self;
-  typedef ImageIOBase  Superclass;
+  typedef MRMLIDImageIO       Self;
+  typedef ImageIOBase         Superclass;
   typedef SmartPointer<Self>  Pointer;
 
   /** Method for creation through the object factory. */
@@ -133,14 +128,13 @@ private:
   bool IsAVolumeNode(const char*);
   vtkMRMLVolumeNode* FileNameToVolumeNodePtr(const char*);
 
-  std::string Scheme;
-  std::string Authority;
-  std::string SceneID;
-  std::string NodeID;
+  std::string m_Scheme;
+  std::string m_Authority;
+  std::string m_SceneID;
+  std::string m_NodeID;
 
 };
 
 
 } /// end namespace itk
-#endif /// __itkMRMLIDImageIO_h
-
+#endif /// itkMRMLIDImageIO_h

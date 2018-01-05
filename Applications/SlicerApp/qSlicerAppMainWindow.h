@@ -88,6 +88,8 @@ public slots:
   virtual void on_EditUndoAction_triggered();
   virtual void on_EditRedoAction_triggered();
 
+  virtual void on_ModuleHomeAction_triggered();
+
   virtual void onLayoutActionTriggered(QAction* action);
   virtual void onLayoutCompareActionTriggered(QAction* action);
   virtual void onLayoutCompareWidescreenActionTriggered(QAction* action);
@@ -97,8 +99,9 @@ public slots:
   virtual void setLayoutNumberOfCompareViewRows(int);
   virtual void setLayoutNumberOfCompareViewColumns(int);
 
+  virtual void onPythonConsoleToggled(bool);
+
   virtual void on_WindowErrorLogAction_triggered();
-  virtual void on_WindowPythonInteractorAction_triggered();
   virtual void on_WindowToolbarsResetToDefaultAction_triggered();
 
   virtual void on_HelpKeyboardShortcutsAction_triggered();
@@ -116,6 +119,11 @@ public slots:
   virtual void on_PasteAction_triggered();
   virtual void on_ViewExtensionsManagerAction_triggered();
 
+signals:
+  /// Emitted when the window is first shown to the user.
+  /// \sa showEvent(QShowEvent *)
+  void initialWindowShown();
+
 protected slots:
   virtual void onModuleLoaded(const QString& moduleName);
   virtual void onModuleAboutToBeUnloaded(const QString& moduleName);
@@ -132,6 +140,9 @@ protected slots:
 protected:
   /// Connect MainWindow action with slots defined in MainWindowCore
   virtual void setupMenuActions();
+
+  /// Open Python interactor if it was requested
+  virtual void pythonConsoleInitialDisplay();
 
   /// Open a popup to warn the user Slicer is not for clinical use.
   virtual void disclaimer();

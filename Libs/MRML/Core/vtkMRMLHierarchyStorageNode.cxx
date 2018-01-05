@@ -25,6 +25,7 @@ vtkMRMLNodeNewMacro(vtkMRMLHierarchyStorageNode);
 //----------------------------------------------------------------------------
 vtkMRMLHierarchyStorageNode::vtkMRMLHierarchyStorageNode()
 {
+  this->DefaultWriteFileExtension = "txt";
 }
 
 //----------------------------------------------------------------------------
@@ -49,7 +50,7 @@ int vtkMRMLHierarchyStorageNode::ReadDataInternal(vtkMRMLNode *refNode)
 {
   std::string fullName = this->GetFullNameFromFileName();
 
-  if (fullName == std::string(""))
+  if (fullName.empty())
     {
     vtkErrorMacro("vtkMRMLHierarchyStorageNode: File name not specified");
     return 0;
@@ -101,7 +102,7 @@ int vtkMRMLHierarchyStorageNode::ReadDataInternal(vtkMRMLNode *refNode)
 int vtkMRMLHierarchyStorageNode::WriteDataInternal(vtkMRMLNode *refNode)
 {
   std::string fullName = this->GetFullNameFromFileName();
-  if (fullName == std::string(""))
+  if (fullName.empty())
     {
     vtkErrorMacro("vtkMRMLHierarchyStorageNode: File name not specified");
     return 0;
@@ -152,10 +153,4 @@ void vtkMRMLHierarchyStorageNode::InitializeSupportedReadFileTypes()
 void vtkMRMLHierarchyStorageNode::InitializeSupportedWriteFileTypes()
 {
   this->SupportedWriteFileTypes->InsertNextValue("Text (.txt)");
-}
-
-//----------------------------------------------------------------------------
-const char* vtkMRMLHierarchyStorageNode::GetDefaultWriteFileExtension()
-{
-  return "txt";
 }

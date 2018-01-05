@@ -27,8 +27,8 @@ if(NOT ${CMAKE_PROJECT_NAME}_USE_SYSTEM_${proj})
   set(tcl_CONFIGURE_COMMAND ${CMAKE_COMMAND} -E echo Configuring tcl)
   set(tcl_BUILD_COMMAND ${CMAKE_COMMAND} -E echo Building tcl)
   set(tcl_INSTALL_COMMAND ${CMAKE_COMMAND} -E echo Installing tcl)
-  set(tcl_base ${CMAKE_CURRENT_BINARY_DIR}/tcl)
-  set(tcl_build ${CMAKE_CURRENT_BINARY_DIR}/tcl-build)
+  set(tcl_base ${CMAKE_BINARY_DIR}/tcl)
+  set(tcl_build ${CMAKE_BINARY_DIR}/tcl-build)
 
   set(tcl_DOWNLOAD_COMMAND)
   set(tcl_PATCH_COMMAND)
@@ -49,7 +49,7 @@ if(NOT ${CMAKE_PROJECT_NAME}_USE_SYSTEM_${proj})
       URL ${tcl_URL}
       URL_MD5 ${tcl_MD5}
       )
-    set(tcl_SOURCE_DIR tcl-build)
+    set(tcl_SOURCE_DIR ${CMAKE_BINARY_DIR}/tcl-build)
     mark_as_superbuild(
       INCR_TCL_VERSION_DOT:STRING
       INCR_TCL_VERSION:STRING
@@ -106,7 +106,7 @@ if(NOT ${CMAKE_PROJECT_NAME}_USE_SYSTEM_${proj})
   else()
     set(TCL_TK_VERSION_DOT "8.6")
     set(TCL_TK_VERSION "86")
-    set(tcl_SOURCE_DIR tcl/tcl)
+    set(tcl_SOURCE_DIR ${CMAKE_BINARY_DIR}/tcl/tcl)
     set(tcl_BUILD_IN_SOURCE 1)
 
     set(tcl_DOWNLOAD_COMMAND
@@ -181,6 +181,10 @@ ExternalProject_Execute(${proj} \"install\" make install)
       ${${proj}_DEPENDENCIES}
     )
 
+  ExternalProject_GenerateProjectDescription_Step(${proj}
+    VERSION ${TCL_TK_VERSION_DOT}
+    )
+
   #-----------------------------------------------------------------------------
   # Since fixup_bundle expects the library to be writable, let's add an extra step
   # to make sure it's the case.
@@ -204,6 +208,17 @@ ExternalProject_Execute(${proj} \"install\" make install)
   set(Slicer_TCL_DIR ${tcl_build})
 
   #-----------------------------------------------------------------------------
+  # Sanity checks
+
+  foreach(varname IN ITEMS
+      PYTHON_STDLIB_SUBDIR
+      )
+    if("${${varname}}" STREQUAL "")
+      message(FATAL_ERROR "${varname} CMake variable is expected to be set")
+    endif()
+  endforeach()
+
+  #-----------------------------------------------------------------------------
   # Launcher setting specific to build tree
 
   # library paths
@@ -213,21 +228,17 @@ ExternalProject_Execute(${proj} \"install\" make install)
     )
 
   # paths
-  set(${proj}_PATHS_LAUNCHER_BUILD ${tcl_build}/bin)
+  set(${proj}_PATHS_LAUNCHER_BUILD ${Slicer_TCL_DIR}/bin)
   mark_as_superbuild(
     VARS ${proj}_PATHS_LAUNCHER_BUILD
     LABELS "PATHS_LAUNCHER_BUILD"
     )
 
   set(_pythonhome ${CMAKE_BINARY_DIR}/python-install)
-  set(pythonpath_subdir lib/python2.7)
-  if(CMAKE_SYSTEM_NAME STREQUAL "Windows")
-    set(pythonpath_subdir Lib)
-  endif()
 
   # pythonpath
   set(${proj}_PYTHONPATH_LAUNCHER_BUILD
-    ${_pythonhome}/${pythonpath_subdir}/lib-tk
+    ${_pythonhome}/${PYTHON_STDLIB_SUBDIR}/lib-tk
     )
   mark_as_superbuild(
     VARS ${proj}_PYTHONPATH_LAUNCHER_BUILD
@@ -236,8 +247,8 @@ ExternalProject_Execute(${proj} \"install\" make install)
 
   # environment variables
   set(${proj}_ENVVARS_LAUNCHER_BUILD
-    "TCL_LIBRARY=${tcl_build}/lib/tcl${TCL_TK_VERSION_DOT}"
-    "TK_LIBRARY=${tcl_build}/lib/tk${TCL_TK_VERSION_DOT}"
+    "TCL_LIBRARY=${Slicer_TCL_DIR}/lib/tcl${TCL_TK_VERSION_DOT}"
+    "TK_LIBRARY=${Slicer_TCL_DIR}/lib/tk${TCL_TK_VERSION_DOT}"
     )
   mark_as_superbuild(
     VARS ${proj}_ENVVARS_LAUNCHER_BUILD
@@ -261,7 +272,7 @@ ExternalProject_Execute(${proj} \"install\" make install)
 
   # pythonpath
   set(${proj}_PYTHONPATH_LAUNCHER_INSTALLED
-    <APPLAUNCHER_DIR>/lib/Python/${pythonpath_subdir}/lib-tk
+    <APPLAUNCHER_DIR>/lib/Python/${PYTHON_STDLIB_SUBDIR}/lib-tk
     )
   mark_as_superbuild(
     VARS ${proj}_PYTHONPATH_LAUNCHER_INSTALLED

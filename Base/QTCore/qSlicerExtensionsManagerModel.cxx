@@ -30,6 +30,9 @@
 #include <QTemporaryFile>
 #include <QTextStream>
 #include <QUrl>
+#if (QT_VERSION >= QT_VERSION_CHECK(5, 0, 0))
+#include <QUrlQuery>
+#endif
 
 // CTK includes
 #include <ctkScopedCurrentDir.h>
@@ -76,10 +79,18 @@ struct UpdateDownloadInformation
 class QStandardItemModelWithRole : public QStandardItemModel
 {
 public:
+#if (QT_VERSION < QT_VERSION_CHECK(5, 0, 0))
   void setRoleNames(const QHash<int,QByteArray> &roleNames)
   {
     this->QStandardItemModel::setRoleNames(roleNames);
   }
+#else
+  QHash<int, QByteArray> roleNames() const
+  {
+    return this->CustomRoleNames;
+  }
+  QHash<int,QByteArray> CustomRoleNames;
+#endif
 };
 
 } // end of anonymous namespace
@@ -203,6 +214,10 @@ public:
 #endif
   static bool validateExtensionMetadata(const ExtensionMetadataType &extensionMetadata);
 
+  static QStringList isExtensionCompatible(
+      const ExtensionMetadataType& metadata, const QString& slicerRevision,
+      const QString& slicerOs, const QString& slicerArch);
+
   void saveExtensionDescription(const QString& extensionDescriptionFile, const ExtensionMetadataType &allExtensionMetadata);
 
   qSlicerExtensionsManagerModel::ExtensionMetadataType retrieveExtensionMetadata(
@@ -277,7 +292,15 @@ void qSlicerExtensionsManagerModelPrivate::init()
     roleNames[Qt::UserRole + 1 + columnIdx] = columnName.toLatin1();
     ++columnIdx;
     }
+
+#if (QT_VERSION < QT_VERSION_CHECK(5, 0, 0))
+  //
+  // See QStandardItemModelWithRole::roleNames() for Qt5 implementation
+  //
   this->Model.setRoleNames(roleNames);
+#else
+  this->Model.CustomRoleNames = roleNames;
+#endif
 
   QObject::connect(q, SIGNAL(slicerRequirementsChanged(QString,QString,QString)),
                    q, SLOT(identifyIncompatibleExtensions()));
@@ -420,17 +443,6 @@ bool hasPath(const QStringList& paths, const QString& pathToCheck)
 }
 
 // --------------------------------------------------------------------------
-QStringList appendToPathList(const QStringList& paths, const QString& pathToAppend, bool shouldExist = true)
-{
-  QStringList updatedPaths(paths);
-  if (!hasPath(paths, pathToAppend) && shouldExist ? QDir(pathToAppend).exists() : true)
-    {
-    updatedPaths << pathToAppend;
-    }
-  return updatedPaths;
-}
-
-// --------------------------------------------------------------------------
 QStringList appendToPathList(const QStringList& paths, const QStringList& pathsToAppend, bool shouldExist = true)
 {
   QStringList updatedPaths(paths);
@@ -480,12 +492,6 @@ void qSlicerExtensionsManagerModelPrivate::addExtensionPathToApplicationSettings
   QStringList additionalPaths = settings.value("Modules/AdditionalPaths").toStringList();
   settings.setValue("Modules/AdditionalPaths",
                     appendToPathList(additionalPaths, q->extensionModulePaths(extensionName)));
-
-#if defined(Q_OS_MAC) && defined(Slicer_USE_PYTHONQT)
-  QStringList additionalPythonPaths = settings.value("Python/AdditionalPythonPaths").toStringList();
-  settings.setValue("Python/AdditionalPythonPaths",
-                    appendToPathList(additionalPythonPaths, this->extensionPythonPaths(extensionName)));
-#endif
 }
 
 // --------------------------------------------------------------------------
@@ -496,12 +502,6 @@ void qSlicerExtensionsManagerModelPrivate::removeExtensionPathFromApplicationSet
   QStringList additionalPaths = settings.value("Modules/AdditionalPaths").toStringList();
   settings.setValue("Modules/AdditionalPaths",
                     removeFromPathList(additionalPaths, q->extensionModulePaths(extensionName)));
-
-#if defined(Q_OS_MAC) && defined(Slicer_USE_PYTHONQT)
-  QStringList additionalPythonPaths = settings.value("Python/AdditionalPythonPaths").toStringList();
-  settings.setValue("Python/AdditionalPythonPaths",
-                    removeFromPathList(additionalPythonPaths, this->extensionPythonPaths(extensionName)));
-#endif
 }
 
 // --------------------------------------------------------------------------
@@ -703,6 +703,7 @@ QStringList qSlicerExtensionsManagerModelPrivate::extensionLibraryPaths(const QS
                    << path + "/" + QString(Slicer_LIB_DIR).replace(Slicer_VERSION, this->SlicerVersion)
                    << path + "/" + QString(Slicer_CLIMODULES_LIB_DIR).replace(Slicer_VERSION, this->SlicerVersion)
                    << path + "/" + QString(Slicer_QTLOADABLEMODULES_LIB_DIR).replace(Slicer_VERSION, this->SlicerVersion)
+                   << path + "/" + QString(Slicer_THIRDPARTY_LIB_DIR)
                    );
 }
 
@@ -717,6 +718,7 @@ QStringList qSlicerExtensionsManagerModelPrivate::extensionPaths(const QString& 
   QString path = q->extensionInstallPath(extensionName);
   return appendToPathList(QStringList(), QStringList()
                    << path + "/" + QString(Slicer_CLIMODULES_BIN_DIR).replace(Slicer_VERSION, this->SlicerVersion)
+                   << path + "/" + QString(Slicer_THIRDPARTY_BIN_DIR)
                    );
 }
 
@@ -733,6 +735,7 @@ QStringList qSlicerExtensionsManagerModelPrivate::extensionPythonPaths(const QSt
   return appendToPathList(QStringList(), QStringList()
                           << path + "/" + QString(Slicer_QTSCRIPTEDMODULES_LIB_DIR).replace(Slicer_VERSION, this->SlicerVersion)
                           << path + "/" + QString(Slicer_QTLOADABLEMODULES_PYTHON_LIB_DIR).replace(Slicer_VERSION, this->SlicerVersion)
+                          << path + "/" + QString(PYTHON_SITE_PACKAGES_SUBDIR)
                           );
 }
 #endif
@@ -750,6 +753,42 @@ bool qSlicerExtensionsManagerModelPrivate::validateExtensionMetadata(
     valid = valid && !extensionMetadata.value(key).toString().isEmpty();
     }
   return valid;
+}
+
+// --------------------------------------------------------------------------
+QStringList qSlicerExtensionsManagerModelPrivate::isExtensionCompatible(
+    const ExtensionMetadataType& metadata, const QString& slicerRevision,
+    const QString& slicerOs, const QString& slicerArch)
+{
+  if (slicerRevision.isEmpty())
+    {
+    return QStringList() << QObject::tr("slicerRevision is not specified");
+    }
+  if (slicerOs.isEmpty())
+    {
+    return QStringList() << QObject::tr("slicerOs is not specified");
+    }
+  if (slicerArch.isEmpty())
+    {
+    return QStringList() << QObject::tr("slicerArch is not specified");
+    }
+  QStringList reasons;
+  QString extensionSlicerRevision = metadata.value("slicer_revision").toString();
+  if (slicerRevision != extensionSlicerRevision)
+    {
+    reasons << QObject::tr("extensionSlicerRevision [%1] is different from slicerRevision [%2]").arg(extensionSlicerRevision).arg(slicerRevision);
+    }
+  QString extensionArch = metadata.value("arch").toString();
+  if (slicerArch != extensionArch)
+    {
+    reasons << QObject::tr("extensionArch [%1] is different from slicerArch [%2]").arg(extensionArch).arg(slicerArch);
+    }
+  QString extensionOs = metadata.value("os").toString();
+  if (slicerOs != extensionOs)
+    {
+    reasons << QObject::tr("extensionOs [%1] is different from slicerOs [%2]").arg(extensionOs).arg(slicerOs);
+    }
+  return reasons;
 }
 
 // --------------------------------------------------------------------------
@@ -834,6 +873,8 @@ QUrl qSlicerExtensionsManagerModel::serverUrl()const
 {
   QSettings settings(this->extensionsSettingsFilePath(), QSettings::IniFormat);
   return QUrl(settings.value("Extensions/ServerUrl").toString());
+  //HS Uncomment the following line for debugging and comment above line.
+  //return QUrl("http://10.171.2.133:8080");
 }
 
 // --------------------------------------------------------------------------
@@ -1103,8 +1144,15 @@ qSlicerExtensionsManagerModelPrivate::downloadExtension(
   this->debug(QString("Downloading extension [ itemId: %1]").arg(itemId));
   QUrl downloadUrl(q->serverUrl());
   downloadUrl.setPath(downloadUrl.path() + "/download");
+#if (QT_VERSION < QT_VERSION_CHECK(5, 0, 0))
   downloadUrl.setQueryItems(
         QList<QPair<QString, QString> >() << QPair<QString, QString>("items", itemId));
+#else
+  QUrlQuery urlQuery;
+  urlQuery.setQueryItems(
+        QList<QPair<QString, QString> >() << QPair<QString, QString>("items", itemId));
+  downloadUrl.setQuery(urlQuery);
+#endif
 
   QNetworkReply* const reply =
     this->NetworkManager.get(QNetworkRequest(downloadUrl));
@@ -1121,14 +1169,12 @@ qSlicerExtensionsManagerModelPrivate::downloadExtension(
 bool qSlicerExtensionsManagerModel::downloadAndInstallExtension(const QString& extensionId)
 {
   Q_D(qSlicerExtensionsManagerModel);
-
   QString error;
   if (!d->checkExtensionSettingsPermissions(error))
     {
     d->critical(error);
     return false;
     }
-
   qSlicerExtensionDownloadTask* const task = d->downloadExtension(extensionId);
   if (!task)
     {
@@ -1150,7 +1196,11 @@ void qSlicerExtensionsManagerModel::onInstallDownloadFinished(
 
   QNetworkReply* const reply = task->reply();
   QUrl downloadUrl = reply->url();
+#if (QT_VERSION < QT_VERSION_CHECK(5, 0, 0))
   Q_ASSERT(downloadUrl.hasQueryItem("items"));
+#else
+  Q_ASSERT(QUrlQuery(downloadUrl).hasQueryItem("items"));
+#endif
 
   emit this->downloadFinished(reply);
 
@@ -1162,7 +1212,6 @@ void qSlicerExtensionsManagerModel::onInstallDownloadFinished(
 
   const QString& extensionName = task->extensionName();
   const QString& archiveName = task->archiveName();
-
   QTemporaryFile file(QString("%1/%2.XXXXXX").arg(QDir::tempPath(), archiveName));
   if (!file.open())
     {
@@ -1171,7 +1220,6 @@ void qSlicerExtensionsManagerModel::onInstallDownloadFinished(
     }
   file.write(reply->readAll());
   file.close();
-
   const ExtensionMetadataType& extensionMetadata =
     this->filterExtensionMetadata(task->metadata());
   this->installExtension(extensionName, extensionMetadata, file.fileName());
@@ -1190,7 +1238,6 @@ bool qSlicerExtensionsManagerModel::installExtension(
       QString("Failed to list extension archive '%1'").arg(archiveFile));
     return false;
     }
-
   for (size_t n = 0; n < archiveContents.size(); ++n)
     {
     const std::string& s = archiveContents[n];
@@ -1560,7 +1607,11 @@ void qSlicerExtensionsManagerModel::onUpdateDownloadFinished(
   // Get network reply
   QNetworkReply* const reply = task->reply();
   QUrl downloadUrl = reply->url();
+#if (QT_VERSION < QT_VERSION_CHECK(5, 0, 0))
   Q_ASSERT(downloadUrl.hasQueryItem("items"));
+#else
+  Q_ASSERT(QUrlQuery(downloadUrl).hasQueryItem("items"));
+#endif
 
   // Notify observers of event
   emit this->downloadFinished(reply);
@@ -2079,36 +2130,9 @@ QStringList qSlicerExtensionsManagerModel::isExtensionCompatible(
     {
     return QStringList() << tr("extensionName is not specified");
     }
-  if (slicerRevision.isEmpty())
-    {
-    return QStringList() << tr("slicerRevision is not specified");
-    }
-  if (slicerOs.isEmpty())
-    {
-    return QStringList() << tr("slicerOs is not specified");
-    }
-  if (slicerArch.isEmpty())
-    {
-    return QStringList() << tr("slicerArch is not specified");
-    }
-  QStringList reasons;
   ExtensionMetadataType metadata = this->extensionMetadata(extensionName);
-  QString extensionSlicerRevision = metadata.value("slicer_revision").toString();
-  if (slicerRevision != extensionSlicerRevision)
-    {
-    reasons << tr("extensionSlicerRevision [%1] is different from slicerRevision [%2]").arg(extensionSlicerRevision).arg(slicerRevision);
-    }
-  QString extensionArch = metadata.value("arch").toString();
-  if (slicerArch != extensionArch)
-    {
-    reasons << tr("extensionArch [%1] is different from slicerArch [%2]").arg(extensionArch).arg(slicerArch);
-    }
-  QString extensionOs = metadata.value("os").toString();
-  if (slicerOs != extensionOs)
-    {
-    reasons << tr("extensionOs [%1] is different from slicerOs [%2]").arg(extensionOs).arg(slicerOs);
-    }
-  return reasons;
+  return qSlicerExtensionsManagerModelPrivate::isExtensionCompatible(
+        metadata, slicerRevision, slicerOs, slicerArch);
 }
 
 // --------------------------------------------------------------------------

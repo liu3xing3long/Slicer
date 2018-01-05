@@ -20,17 +20,12 @@
 
 ==============================================================================*/
 
-// SubjectHierarchy MRML includes
-#include "vtkMRMLSubjectHierarchyNode.h"
-#include "vtkMRMLSubjectHierarchyConstants.h"
-
 // SubjectHierarchy Plugins includes
 #include "qSlicerSubjectHierarchyPluginHandler.h"
 #include "qSlicerSubjectHierarchyModelsPlugin.h"
 #include "qSlicerSubjectHierarchyDefaultPlugin.h"
 
 // MRML includes
-#include <vtkMRMLNode.h>
 #include <vtkMRMLScene.h>
 #include <vtkMRMLModelNode.h>
 #include <vtkMRMLModelDisplayNode.h>
@@ -44,7 +39,6 @@
 #include <QDebug>
 #include <QStandardItem>
 #include <QAction>
-#include <QLineEdit>
 
 // SlicerQt includes
 #include "qSlicerAbstractModuleWidget.h"
@@ -74,10 +68,18 @@ qSlicerSubjectHierarchyModelsPluginPrivate::qSlicerSubjectHierarchyModelsPluginP
   this->ModelIcon = QIcon(":Icons/Model.png");
 }
 
+//------------------------------------------------------------------------------
+void qSlicerSubjectHierarchyModelsPluginPrivate::init()
+{
+}
+
 //-----------------------------------------------------------------------------
 qSlicerSubjectHierarchyModelsPluginPrivate::~qSlicerSubjectHierarchyModelsPluginPrivate()
 {
 }
+
+//-----------------------------------------------------------------------------
+// qSlicerSubjectHierarchyModelsPlugin methods
 
 //-----------------------------------------------------------------------------
 qSlicerSubjectHierarchyModelsPlugin::qSlicerSubjectHierarchyModelsPlugin(QObject* parent)
@@ -90,23 +92,19 @@ qSlicerSubjectHierarchyModelsPlugin::qSlicerSubjectHierarchyModelsPlugin(QObject
   d->init();
 }
 
-//------------------------------------------------------------------------------
-void qSlicerSubjectHierarchyModelsPluginPrivate::init()
-{
-}
-
 //-----------------------------------------------------------------------------
 qSlicerSubjectHierarchyModelsPlugin::~qSlicerSubjectHierarchyModelsPlugin()
 {
 }
 
 //----------------------------------------------------------------------------
-double qSlicerSubjectHierarchyModelsPlugin::canAddNodeToSubjectHierarchy(vtkMRMLNode* node, vtkMRMLSubjectHierarchyNode* parent/*=NULL*/)const
+double qSlicerSubjectHierarchyModelsPlugin::canAddNodeToSubjectHierarchy(
+  vtkMRMLNode* node, vtkIdType parentItemID/*=vtkMRMLSubjectHierarchyNode::INVALID_ITEM_ID*/)const
 {
-  Q_UNUSED(parent);
+  Q_UNUSED(parentItemID);
   if (!node)
     {
-    qCritical() << "qSlicerSubjectHierarchyModelsPlugin::canAddNodeToSubjectHierarchy: Input node is NULL!";
+    qCritical() << Q_FUNC_INFO << ": Input node is NULL!";
     return 0.0;
     }
   else if (node->IsA("vtkMRMLModelNode"))
@@ -118,16 +116,22 @@ double qSlicerSubjectHierarchyModelsPlugin::canAddNodeToSubjectHierarchy(vtkMRML
 }
 
 //---------------------------------------------------------------------------
-double qSlicerSubjectHierarchyModelsPlugin::canOwnSubjectHierarchyNode(vtkMRMLSubjectHierarchyNode* node)const
+double qSlicerSubjectHierarchyModelsPlugin::canOwnSubjectHierarchyItem(vtkIdType itemID)const
 {
-  if (!node)
+  if (itemID == vtkMRMLSubjectHierarchyNode::INVALID_ITEM_ID)
     {
-    qCritical() << "qSlicerSubjectHierarchyModelsPlugin::canOwnSubjectHierarchyNode: Input node is NULL!";
+    qCritical() << Q_FUNC_INFO << ": Invalid input item";
+    return 0.0;
+    }
+  vtkMRMLSubjectHierarchyNode* shNode = qSlicerSubjectHierarchyPluginHandler::instance()->subjectHierarchyNode();
+  if (!shNode)
+    {
+    qCritical() << Q_FUNC_INFO << ": Failed to access subject hierarchy node";
     return 0.0;
     }
 
   // Model
-  vtkMRMLNode* associatedNode = node->GetAssociatedNode();
+  vtkMRMLNode* associatedNode = shNode->GetItemDataNode(itemID);
   if (associatedNode && associatedNode->IsA("vtkMRMLModelNode"))
     {
     return 0.5; // There may be other plugins that can handle special models better
@@ -143,22 +147,22 @@ const QString qSlicerSubjectHierarchyModelsPlugin::roleForPlugin()const
 }
 
 //---------------------------------------------------------------------------
-QIcon qSlicerSubjectHierarchyModelsPlugin::icon(vtkMRMLSubjectHierarchyNode* node)
+QIcon qSlicerSubjectHierarchyModelsPlugin::icon(vtkIdType itemID)
 {
-  if (!node)
+  Q_D(qSlicerSubjectHierarchyModelsPlugin);
+
+  if (itemID == vtkMRMLSubjectHierarchyNode::INVALID_ITEM_ID)
     {
-    qCritical() << "qSlicerSubjectHierarchyModelsPlugin::icon: NULL node given!";
+    qCritical() << Q_FUNC_INFO << ": Invalid input item";
     return QIcon();
     }
 
-  Q_D(qSlicerSubjectHierarchyModelsPlugin);
-
-  if (this->canOwnSubjectHierarchyNode(node))
+  if (this->canOwnSubjectHierarchyItem(itemID))
     {
     return d->ModelIcon;
     }
 
-  // Node unknown by plugin
+  // Item unknown by plugin
   return QIcon();
 }
 
@@ -169,36 +173,25 @@ QIcon qSlicerSubjectHierarchyModelsPlugin::visibilityIcon(int visible)
   return qSlicerSubjectHierarchyPluginHandler::instance()->defaultPlugin()->visibilityIcon(visible);
 }
 
-//---------------------------------------------------------------------------
-void qSlicerSubjectHierarchyModelsPlugin::editProperties(vtkMRMLSubjectHierarchyNode* node)
-{
-  // Switch to models module
-  qSlicerAbstractModuleWidget* moduleWidget = qSlicerSubjectHierarchyAbstractPlugin::switchToModule("Models");
-  if (moduleWidget)
-    {
-    // Get filter search box
-    QLineEdit* searchBox = moduleWidget->findChild<QLineEdit*>("ScrollToModelSearchBox");
-    if (searchBox && node->GetAssociatedNode())
-      {
-      // Enter node name in the filter box to select it
-      searchBox->setText(node->GetAssociatedNode()->GetName());
-      }
-    }
-}
-
 //-----------------------------------------------------------------------------
-QString qSlicerSubjectHierarchyModelsPlugin::tooltip(vtkMRMLSubjectHierarchyNode* node)const
+QString qSlicerSubjectHierarchyModelsPlugin::tooltip(vtkIdType itemID)const
 {
-  if (!node)
+  if (itemID == vtkMRMLSubjectHierarchyNode::INVALID_ITEM_ID)
     {
-    qCritical() << "qSlicerSubjectHierarchyModelsPlugin::tooltip: Subject hierarchy node is NULL!";
+    qCritical() << Q_FUNC_INFO << ": Invalid input item";
     return QString("Invalid!");
+    }
+  vtkMRMLSubjectHierarchyNode* shNode = qSlicerSubjectHierarchyPluginHandler::instance()->subjectHierarchyNode();
+  if (!shNode)
+    {
+    qCritical() << Q_FUNC_INFO << ": Failed to access subject hierarchy node";
+    return QString("Error!");
     }
 
   // Get basic tooltip from abstract plugin
-  QString tooltipString = Superclass::tooltip(node);
+  QString tooltipString = Superclass::tooltip(itemID);
 
-  vtkMRMLModelNode* modelNode = vtkMRMLModelNode::SafeDownCast(node->GetAssociatedNode());
+  vtkMRMLModelNode* modelNode = vtkMRMLModelNode::SafeDownCast(shNode->GetItemDataNode(itemID));
   vtkPolyData* polyData = modelNode ? modelNode->GetPolyData() : NULL;
   vtkMRMLModelDisplayNode* displayNode = modelNode ? vtkMRMLModelDisplayNode::SafeDownCast(modelNode->GetDisplayNode()) : NULL;
   if (modelNode && displayNode && polyData)

@@ -18,9 +18,6 @@
 
 ==============================================================================*/
 
-// Qt includes
-#include <QtPlugin>
-
 // SlicerQt includes
 #include <qSlicerCoreApplication.h>
 #include <qSlicerIOManager.h>
@@ -45,10 +42,14 @@
 #include "qSlicerSubjectHierarchyPluginHandler.h"
 #include "qSlicerSubjectHierarchyVolumesPlugin.h"
 #include "qSlicerSubjectHierarchyLabelMapsPlugin.h"
+#include "qSlicerSubjectHierarchyDiffusionTensorVolumesPlugin.h"
 
 
 //-----------------------------------------------------------------------------
+#if (QT_VERSION < QT_VERSION_CHECK(5, 0, 0))
+#include <QtPlugin>
 Q_EXPORT_PLUGIN2(qSlicerVolumesModule, qSlicerVolumesModule);
+#endif
 
 //-----------------------------------------------------------------------------
 /// \ingroup Slicer_QtModules_Volumes
@@ -73,7 +74,9 @@ qSlicerVolumesModule::~qSlicerVolumesModule()
 QString qSlicerVolumesModule::helpText()const
 {
   QString help = QString(
-    "The Volumes Module loads and adjusts display parameters of volume data.<br>"
+    "The Volumes Module is the interface for adjusting Window, Level, Threshold, "
+    "Color LUT and other parameters that control the display of volume image data "
+    "in the scene.<br>"
     "<a href=\"%1/Documentation/%2.%3/Modules/Volumes\">"
     "%1/Documentation/%2.%3/Modules/Volumes</a><br>");
   return help.arg(this->slicerWikiUrl()).arg(Slicer_VERSION_MAJOR).arg(Slicer_VERSION_MINOR);
@@ -155,6 +158,7 @@ void qSlicerVolumesModule::setup()
   // Register Subject Hierarchy core plugins
   qSlicerSubjectHierarchyPluginHandler::instance()->registerPlugin(new qSlicerSubjectHierarchyVolumesPlugin());
   qSlicerSubjectHierarchyPluginHandler::instance()->registerPlugin(new qSlicerSubjectHierarchyLabelMapsPlugin());
+  qSlicerSubjectHierarchyPluginHandler::instance()->registerPlugin(new qSlicerSubjectHierarchyDiffusionTensorVolumesPlugin());
 }
 
 //-----------------------------------------------------------------------------
@@ -167,4 +171,12 @@ qSlicerAbstractModuleRepresentation* qSlicerVolumesModule::createWidgetRepresent
 vtkMRMLAbstractLogic* qSlicerVolumesModule::createLogic()
 {
   return vtkSlicerVolumesLogic::New();
+}
+
+//-----------------------------------------------------------------------------
+QStringList qSlicerVolumesModule::associatedNodeTypes() const
+{
+  return QStringList()
+    << "vtkMRMLVolumeNode"
+    << "vtkMRMLVolumeDisplayNode";
 }

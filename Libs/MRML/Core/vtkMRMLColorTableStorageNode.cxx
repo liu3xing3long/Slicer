@@ -33,6 +33,7 @@ vtkMRMLColorTableStorageNode::vtkMRMLColorTableStorageNode()
 {
   // use 32K as a maximum color id for now
   this->MaximumColorID = 32768;
+  this->DefaultWriteFileExtension = "ctbl";
 }
 
 //----------------------------------------------------------------------------
@@ -233,7 +234,7 @@ int vtkMRMLColorTableStorageNode::ReadDataInternal(vtkMRMLNode *refNode)
 int vtkMRMLColorTableStorageNode::WriteDataInternal(vtkMRMLNode *refNode)
 {
   std::string fullName = this->GetFullNameFromFileName();
-  if (fullName == std::string(""))
+  if (fullName.empty())
     {
     vtkErrorMacro("vtkMRMLColorTableStorageNode: File name not specified");
     return 0;
@@ -316,10 +317,4 @@ void vtkMRMLColorTableStorageNode::InitializeSupportedWriteFileTypes()
 {
   this->SupportedWriteFileTypes->InsertNextValue("Color Table (.ctbl)");
   this->SupportedWriteFileTypes->InsertNextValue("Text (.txt)");
-}
-
-//----------------------------------------------------------------------------
-const char* vtkMRMLColorTableStorageNode::GetDefaultWriteFileExtension()
-{
-  return "ctbl";
 }

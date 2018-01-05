@@ -147,12 +147,7 @@ void vtkSlicerMarkupsLogic::ObserveMRMLScene()
     return;
     }
   // add known markup types to the selection node
-  vtkMRMLSelectionNode *selectionNode = NULL;
-  vtkMRMLNode *mrmlNode = this->GetMRMLScene()->GetNodeByID(this->GetSelectionNodeID().c_str());
-  if (mrmlNode)
-    {
-    selectionNode = vtkMRMLSelectionNode::SafeDownCast(mrmlNode);
-    }
+  vtkMRMLSelectionNode *selectionNode = vtkMRMLSelectionNode::SafeDownCast(this->GetMRMLScene()->GetNodeByID(this->GetSelectionNodeID().c_str()));
   if (selectionNode)
     {
     // got into batch process mode so that an update on the mouse mode tool
@@ -307,16 +302,7 @@ std::string vtkSlicerMarkupsLogic::GetActiveListID()
     }
 
   // get the selection node
-  vtkMRMLSelectionNode *selectionNode = NULL;;
-  std::string selectionNodeID = this->GetSelectionNodeID();
-  vtkMRMLNode *node = this->GetMRMLScene()->GetNodeByID(selectionNodeID.c_str());
-  if (!node)
-    {
-    vtkErrorMacro("GetActiveListID: no selection node to govern active lists.");
-    return listID;
-    }
-  selectionNode = vtkMRMLSelectionNode::SafeDownCast(node);
-
+  vtkMRMLSelectionNode *selectionNode = vtkMRMLSelectionNode::SafeDownCast(this->GetMRMLScene()->GetNodeByID(this->GetSelectionNodeID().c_str()));
   if (!selectionNode)
     {
     vtkErrorMacro("GetActiveListID: unable to get the selection node that governs active lists.");
@@ -338,31 +324,44 @@ std::string vtkSlicerMarkupsLogic::GetActiveListID()
 //---------------------------------------------------------------------------
 void vtkSlicerMarkupsLogic::SetActiveListID(vtkMRMLMarkupsNode *markupsNode)
 {
-  std::string selectionNodeID = this->GetSelectionNodeID();
-  vtkMRMLNode *node = this->GetMRMLScene()->GetNodeByID(selectionNodeID.c_str());
-  vtkMRMLSelectionNode *selectionNode = NULL;
-  if (node)
+  vtkMRMLSelectionNode *selectionNode = vtkMRMLSelectionNode::SafeDownCast(this->GetMRMLScene()->GetNodeByID(this->GetSelectionNodeID().c_str()));
+  if (!selectionNode)
     {
-    selectionNode = vtkMRMLSelectionNode::SafeDownCast(node);
+    vtkErrorMacro("vtkSlicerMarkupsLogic::SetActiveListID: No selection node in the scene.");
+    return;
     }
-  if (selectionNode)
+
+  if (markupsNode == NULL)
     {
-    // check if need to update the current type of node that's being placed
+    // If fiducial node was placed then reset node ID and deactivate placement
     const char *activePlaceNodeClassName = selectionNode->GetActivePlaceNodeClassName();
-    if (!activePlaceNodeClassName ||
-        (activePlaceNodeClassName &&
-         strcmp(activePlaceNodeClassName, markupsNode->GetClassName()) != 0))
+    if (activePlaceNodeClassName && strcmp(activePlaceNodeClassName, "vtkMRMLMarkupsFiducialNode") == 0)
       {
-      // call the set reference to make sure the event is invoked
-      selectionNode->SetReferenceActivePlaceNodeClassName(markupsNode->GetClassName());
+      selectionNode->SetActivePlaceNodeID(NULL);
+      vtkMRMLInteractionNode *interactionNode = vtkMRMLInteractionNode::SafeDownCast(this->GetMRMLScene()->GetNodeByID("vtkMRMLInteractionNodeSingleton"));
+      if (interactionNode && interactionNode->GetCurrentInteractionMode() == vtkMRMLInteractionNode::Place)
+        {
+        interactionNode->SetCurrentInteractionMode(vtkMRMLInteractionNode::ViewTransform);
+        }
       }
-    // set this markup node active if it's not already
-    const char *activePlaceNodeID = selectionNode->GetActivePlaceNodeID();
-    if (!activePlaceNodeID ||
-        (activePlaceNodeID && strcmp(activePlaceNodeID, markupsNode->GetID()) != 0))
-      {
-      selectionNode->SetActivePlaceNodeID(markupsNode->GetID());
-      }
+    return;
+    }
+
+  // check if need to update the current type of node that's being placed
+  const char *activePlaceNodeClassName = selectionNode->GetActivePlaceNodeClassName();
+  if (!activePlaceNodeClassName ||
+      (activePlaceNodeClassName &&
+        strcmp(activePlaceNodeClassName, markupsNode->GetClassName()) != 0))
+    {
+    // call the set reference to make sure the event is invoked
+    selectionNode->SetReferenceActivePlaceNodeClassName(markupsNode->GetClassName());
+    }
+  // set this markup node active if it's not already
+  const char *activePlaceNodeID = selectionNode->GetActivePlaceNodeID();
+  if (!activePlaceNodeID ||
+      (activePlaceNodeID && strcmp(activePlaceNodeID, markupsNode->GetID()) != 0))
+    {
+    selectionNode->SetActivePlaceNodeID(markupsNode->GetID());
     }
 }
 
@@ -517,7 +516,7 @@ int vtkSlicerMarkupsLogic::AddFiducial(double r, double a, double s)
 }
 
 //---------------------------------------------------------------------------
-void vtkSlicerMarkupsLogic::JumpSlicesToLocation(double x, double y, double z, bool centered)
+void vtkSlicerMarkupsLogic::JumpSlicesToLocation(double x, double y, double z, bool centered, int viewGroup /* =-1 */)
 {
   if (!this->GetMRMLScene())
     {
@@ -527,34 +526,12 @@ void vtkSlicerMarkupsLogic::JumpSlicesToLocation(double x, double y, double z, b
 
   // save the whole state as iterating over all slice nodes
   this->GetMRMLScene()->SaveStateForUndo();
-
-  // jump all the slice nodes in the scene
-  int numSliceNodes = this->GetMRMLScene()->GetNumberOfNodesByClass("vtkMRMLSliceNode");
-  for (int n = 0; n < numSliceNodes; ++n)
-    {
-    vtkMRMLNode *mrmlNode = this->GetMRMLScene()->GetNthNodeByClass(n,"vtkMRMLSliceNode");
-    if (!mrmlNode)
-      {
-      vtkErrorMacro("JumpSlicesToLocation: could not get slice node " << n << " from scene");
-      return;
-      }
-    vtkMRMLSliceNode *sliceNode = vtkMRMLSliceNode::SafeDownCast(mrmlNode);
-    if (sliceNode)
-      {
-      if (centered)
-        {
-        sliceNode->JumpSliceByCentering(x,y,z);
-        }
-      else
-        {
-        sliceNode->JumpSliceByOffsetting(x,y,z);
-        }
-      }
-    }
+  int jumpMode = centered ? vtkMRMLSliceNode::CenteredJumpSlice: vtkMRMLSliceNode::OffsetJumpSlice;
+  vtkMRMLSliceNode::JumpAllSlices(this->GetMRMLScene(), x, y, z, jumpMode, viewGroup);
 }
 
 //---------------------------------------------------------------------------
-void vtkSlicerMarkupsLogic::JumpSlicesToNthPointInMarkup(const char *id, int n, bool centered)
+void vtkSlicerMarkupsLogic::JumpSlicesToNthPointInMarkup(const char *id, int n, bool centered, int viewGroup /* =-1 */)
 {
   if (!id)
     {
@@ -577,7 +554,7 @@ void vtkSlicerMarkupsLogic::JumpSlicesToNthPointInMarkup(const char *id, int n, 
     double point[4];
     // get the first point for now
     markup->GetMarkupPointWorld(n, 0, point);
-    this->JumpSlicesToLocation(point[0], point[1], point[2], centered);
+    this->JumpSlicesToLocation(point[0], point[1], point[2], centered, viewGroup);
     }
 }
 

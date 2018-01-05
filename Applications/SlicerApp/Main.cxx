@@ -58,6 +58,9 @@
 // VTK includes
 //#include <vtkObject.h>
 #include <vtksys/SystemTools.hxx>
+#ifdef Slicer_VTK_USE_QVTKOPENGLWIDGET
+#include <QVTKOpenGLWidget.h>
+#endif
 
 #if defined (_WIN32) && !defined (Slicer_BUILD_WIN32_CONSOLE)
 # include <windows.h>
@@ -105,6 +108,19 @@ int SlicerAppMain(int argc, char* argv[])
 #endif
 #endif
 
+#ifdef Slicer_VTK_USE_QVTKOPENGLWIDGET
+  // Set default surface format for QVTKOpenGLWidget. Disable multisampling to
+  // support volume rendering and other VTK functionality that reads from the
+  // framebuffer; see https://gitlab.kitware.com/vtk/vtk/issues/17095.
+  QSurfaceFormat format = QVTKOpenGLWidget::defaultFormat();
+  format.setSamples(0);
+  QSurfaceFormat::setDefaultFormat(format);
+#endif
+
+#if (QT_VERSION >= QT_VERSION_CHECK(5, 6, 0))
+  // Enable automatic scaling based on the pixel density of the monitor
+  QApplication::setAttribute(Qt::AA_EnableHighDpiScaling);
+#endif
 
   // Allow a custom appliction name so that the settings
   // can be distinct for differently named applications
@@ -134,15 +150,6 @@ int SlicerAppMain(int argc, char* argv[])
   setEnableQtTesting(); // disabled the native menu bar.
 #endif
 
-#ifdef Slicer_USE_PYTHONQT
-  ctkPythonConsole pythonConsole;
-  pythonConsole.setWindowTitle("Slicer Python Interactor");
-  if (!qSlicerApplication::testAttribute(qSlicerApplication::AA_DisablePython))
-    {
-    qSlicerApplicationHelper::initializePythonConsole(&pythonConsole);
-    }
-#endif
-
   bool enableMainWindow = !app.commandOptions()->noMainWindow();
   enableMainWindow = enableMainWindow && !app.commandOptions()->runPythonAndExit();
   bool showSplashScreen = !app.commandOptions()->noSplash() && enableMainWindow;
@@ -159,7 +166,7 @@ int SlicerAppMain(int argc, char* argv[])
   qSlicerModuleManager * moduleManager = qSlicerApplication::application()->moduleManager();
   qSlicerModuleFactoryManager * moduleFactoryManager = moduleManager->factoryManager();
   QStringList additionalModulePaths;
-  foreach(const QString& extensionOrModulePath, app.commandOptions()->additonalModulePaths())
+  foreach(const QString& extensionOrModulePath, app.commandOptions()->additionalModulePaths())
     {
     QStringList modulePaths = moduleFactoryManager->modulePaths(extensionOrModulePath);
     if (!modulePaths.empty())
@@ -173,6 +180,12 @@ int SlicerAppMain(int argc, char* argv[])
     }
   moduleFactoryManager->addSearchPaths(additionalModulePaths);
   qSlicerApplicationHelper::setupModuleFactoryManager(moduleFactoryManager);
+
+  // Set list of modules to ignore
+  foreach(const QString& moduleToIgnore, app.commandOptions()->modulesToIgnore())
+    {
+    moduleFactoryManager->addModuleToIgnore(moduleToIgnore);
+    }
 
   // Register and instantiate modules
   splashMessage(splashScreen, "Registering modules...");
@@ -197,6 +210,19 @@ int SlicerAppMain(int argc, char* argv[])
     window.reset(new qSlicerAppMainWindow);
     window->setWindowTitle(window->windowTitle()+ " " + Slicer_VERSION_FULL);
     }
+  else if (app.commandOptions()->showPythonInteractor()
+    && !app.commandOptions()->runPythonAndExit())
+    {
+    // there is no main window but we need to show Python interactor
+#ifdef Slicer_USE_PYTHONQT
+    ctkPythonConsole* pythonConsole = app.pythonConsole();
+    pythonConsole->setWindowTitle("Slicer Python Interactor");
+    pythonConsole->resize(600, 280);
+    pythonConsole->show();
+    pythonConsole->activateWindow();
+    pythonConsole->raise();
+#endif
+    }
 
   // Load all available modules
   foreach(const QString& name, moduleFactoryManager->instantiatedModuleNames())
@@ -211,6 +237,15 @@ int SlicerAppMain(int argc, char* argv[])
     }
 
   splashMessage(splashScreen, QString());
+
+  if (window)
+    {
+    QObject::connect(window.data(), SIGNAL(initialWindowShown()), &app, SIGNAL(startupCompleted()));
+    }
+  else
+    {
+    QTimer::singleShot(0, &app, SIGNAL(startupCompleted()));
+    }
 
   if (window)
     {

@@ -20,19 +20,18 @@
 
 ==============================================================================*/
 
-// SubjectHierarchy MRML includes
-#include "vtkMRMLSubjectHierarchyNode.h"
-#include "vtkMRMLSubjectHierarchyConstants.h"
-
 // SubjectHierarchy Plugins includes
 #include "qSlicerSubjectHierarchyPluginHandler.h"
 #include "qSlicerSubjectHierarchyTransformsPlugin.h"
 #include "qSlicerSubjectHierarchyDefaultPlugin.h"
 
+// Subject Hierarchy includes
+#include <vtkSlicerSubjectHierarchyModuleLogic.h>
+
 // MRML includes
-#include <vtkMRMLNode.h>
 #include <vtkMRMLScene.h>
 #include <vtkMRMLTransformNode.h>
+#include <vtkMRMLTransformableNode.h>
 
 // VTK includes
 #include <vtkObjectFactory.h>
@@ -44,6 +43,7 @@
 #include <QDebug>
 #include <QStandardItem>
 #include <QAction>
+#include <QMessageBox>
 
 // SlicerQt includes
 #include "qSlicerAbstractModuleWidget.h"
@@ -82,22 +82,6 @@ qSlicerSubjectHierarchyTransformsPluginPrivate::qSlicerSubjectHierarchyTransform
   this->IdentityAction = NULL;
 }
 
-//-----------------------------------------------------------------------------
-qSlicerSubjectHierarchyTransformsPluginPrivate::~qSlicerSubjectHierarchyTransformsPluginPrivate()
-{
-}
-
-//-----------------------------------------------------------------------------
-qSlicerSubjectHierarchyTransformsPlugin::qSlicerSubjectHierarchyTransformsPlugin(QObject* parent)
- : Superclass(parent)
- , d_ptr( new qSlicerSubjectHierarchyTransformsPluginPrivate(*this) )
-{
-  this->m_Name = QString("Transforms");
-
-  Q_D(qSlicerSubjectHierarchyTransformsPlugin);
-  d->init();
-}
-
 //------------------------------------------------------------------------------
 void qSlicerSubjectHierarchyTransformsPluginPrivate::init()
 {
@@ -111,17 +95,111 @@ void qSlicerSubjectHierarchyTransformsPluginPrivate::init()
 }
 
 //-----------------------------------------------------------------------------
+qSlicerSubjectHierarchyTransformsPluginPrivate::~qSlicerSubjectHierarchyTransformsPluginPrivate()
+{
+}
+
+//-----------------------------------------------------------------------------
+// qSlicerSubjectHierarchyTransformsPlugin methods
+
+//-----------------------------------------------------------------------------
+qSlicerSubjectHierarchyTransformsPlugin::qSlicerSubjectHierarchyTransformsPlugin(QObject* parent)
+ : Superclass(parent)
+ , d_ptr( new qSlicerSubjectHierarchyTransformsPluginPrivate(*this) )
+{
+  this->m_Name = QString("Transforms");
+
+  Q_D(qSlicerSubjectHierarchyTransformsPlugin);
+  d->init();
+}
+
+//-----------------------------------------------------------------------------
 qSlicerSubjectHierarchyTransformsPlugin::~qSlicerSubjectHierarchyTransformsPlugin()
 {
 }
 
 //----------------------------------------------------------------------------
-double qSlicerSubjectHierarchyTransformsPlugin::canAddNodeToSubjectHierarchy(vtkMRMLNode* node, vtkMRMLSubjectHierarchyNode* parent/*=NULL*/)const
+double qSlicerSubjectHierarchyTransformsPlugin::canReparentItemInsideSubjectHierarchy(vtkIdType itemID, vtkIdType parentItemID)const
 {
-  Q_UNUSED(parent);
+  if (!itemID || !parentItemID)
+    {
+    qCritical() << Q_FUNC_INFO << ": Invalid input item";
+    return 0.0;
+    }
+  vtkMRMLSubjectHierarchyNode* shNode = qSlicerSubjectHierarchyPluginHandler::instance()->subjectHierarchyNode();
+  if (!shNode)
+    {
+    qCritical() << Q_FUNC_INFO << ": Failed to access subject hierarchy node";
+    return 0.0;
+    }
+
+  vtkMRMLTransformNode* transformNode = vtkMRMLTransformNode::SafeDownCast(shNode->GetItemDataNode(parentItemID));
+  if (transformNode)
+    {
+    // If parent item is transform then can reparent
+    return 1.0;
+    }
+
+  return 0.0;
+}
+
+//---------------------------------------------------------------------------
+bool qSlicerSubjectHierarchyTransformsPlugin::reparentItemInsideSubjectHierarchy(vtkIdType itemID, vtkIdType parentItemID)
+{
+  if (!itemID || !parentItemID)
+    {
+    qCritical() << Q_FUNC_INFO << ": Invalid input item";
+    return false;
+    }
+  vtkMRMLSubjectHierarchyNode* shNode = qSlicerSubjectHierarchyPluginHandler::instance()->subjectHierarchyNode();
+  if (!shNode)
+    {
+    qCritical() << Q_FUNC_INFO << ": Failed to access subject hierarchy node";
+    return false;
+    }
+
+  vtkMRMLTransformNode* transformNode = vtkMRMLTransformNode::SafeDownCast(shNode->GetItemDataNode(parentItemID));
+  if (!transformNode)
+    {
+    qCritical() << Q_FUNC_INFO << ": Failed to access transform node from parent item " << parentItemID;
+    return false;
+    }
+
+  // Ask the user if any child node in the branch is transformed with a transform different from the chosen one
+  bool hardenExistingTransforms = true;
+  if (shNode->IsAnyNodeInBranchTransformed(itemID))
+    {
+    QMessageBox::StandardButton answer =
+      QMessageBox::question(NULL, tr("Some nodes in the branch are already transformed"),
+      tr("Do you want to harden all already applied transforms before setting the new one?\n\n"
+      "  Note: If you choose no, then the applied transform will simply be replaced."),
+      QMessageBox::Yes | QMessageBox::No | QMessageBox::Cancel,
+      QMessageBox::Yes);
+    if (answer == QMessageBox::No)
+      {
+      hardenExistingTransforms = false;
+      }
+    else if (answer == QMessageBox::Cancel)
+      {
+      return false;
+      }
+    }
+
+  // Transform all items in branch
+  vtkSlicerSubjectHierarchyModuleLogic::TransformBranch(shNode, itemID, transformNode, hardenExistingTransforms);
+
+  // Actual reparenting will never happen, only setting of the transform
+  return false;
+}
+
+//----------------------------------------------------------------------------
+double qSlicerSubjectHierarchyTransformsPlugin::canAddNodeToSubjectHierarchy(
+  vtkMRMLNode* node, vtkIdType parentItemID/*=vtkMRMLSubjectHierarchyNode::INVALID_ITEM_ID*/)const
+{
+  Q_UNUSED(parentItemID);
   if (!node)
     {
-    qCritical() << "qSlicerSubjectHierarchyTransformsPlugin::canAddNodeToSubjectHierarchy: Input node is NULL!";
+    qCritical() << Q_FUNC_INFO << ": Input node is NULL!";
     return 0.0;
     }
   else if (node->IsA("vtkMRMLTransformNode"))
@@ -133,16 +211,22 @@ double qSlicerSubjectHierarchyTransformsPlugin::canAddNodeToSubjectHierarchy(vtk
 }
 
 //---------------------------------------------------------------------------
-double qSlicerSubjectHierarchyTransformsPlugin::canOwnSubjectHierarchyNode(vtkMRMLSubjectHierarchyNode* node)const
+double qSlicerSubjectHierarchyTransformsPlugin::canOwnSubjectHierarchyItem(vtkIdType itemID)const
 {
-  if (!node)
+  if (itemID == vtkMRMLSubjectHierarchyNode::INVALID_ITEM_ID)
     {
-    qCritical() << "qSlicerSubjectHierarchyTransformsPlugin::canOwnSubjectHierarchyNode: Input node is NULL!";
+    qCritical() << Q_FUNC_INFO << ": Invalid input item";
+    return 0.0;
+    }
+  vtkMRMLSubjectHierarchyNode* shNode = qSlicerSubjectHierarchyPluginHandler::instance()->subjectHierarchyNode();
+  if (!shNode)
+    {
+    qCritical() << Q_FUNC_INFO << ": Failed to access subject hierarchy node";
     return 0.0;
     }
 
   // Transform
-  vtkMRMLNode* associatedNode = node->GetAssociatedNode();
+  vtkMRMLNode* associatedNode = shNode->GetItemDataNode(itemID);
   if (associatedNode && associatedNode->IsA("vtkMRMLTransformNode"))
     {
     return 0.5; // There are other plugins that can handle special transform nodes better, thus the relatively low value
@@ -158,18 +242,24 @@ const QString qSlicerSubjectHierarchyTransformsPlugin::roleForPlugin()const
 }
 
 //-----------------------------------------------------------------------------
-QString qSlicerSubjectHierarchyTransformsPlugin::tooltip(vtkMRMLSubjectHierarchyNode* node)const
+QString qSlicerSubjectHierarchyTransformsPlugin::tooltip(vtkIdType itemID)const
 {
-  if (!node)
+  if (itemID == vtkMRMLSubjectHierarchyNode::INVALID_ITEM_ID)
     {
-    qCritical() << "qSlicerSubjectHierarchyTransformsPlugin::tooltip: Subject hierarchy node is NULL!";
+    qCritical() << Q_FUNC_INFO << ": Invalid input item";
     return QString("Invalid!");
+    }
+  vtkMRMLSubjectHierarchyNode* shNode = qSlicerSubjectHierarchyPluginHandler::instance()->subjectHierarchyNode();
+  if (!shNode)
+    {
+    qCritical() << Q_FUNC_INFO << ": Failed to access subject hierarchy node";
+    return QString("Error!");
     }
 
   // Get basic tooltip from abstract plugin
-  QString tooltipString = Superclass::tooltip(node);
+  QString tooltipString = Superclass::tooltip(itemID);
 
-  vtkMRMLTransformNode* transformNode = vtkMRMLTransformNode::SafeDownCast(node->GetAssociatedNode());
+  vtkMRMLTransformNode* transformNode = vtkMRMLTransformNode::SafeDownCast(shNode->GetItemDataNode(itemID));
   if (transformNode)
     {
     QString transformInfo = QString("\nTransform to parent:\n%1\nTransform from parent:\n%2").arg(
@@ -181,22 +271,23 @@ QString qSlicerSubjectHierarchyTransformsPlugin::tooltip(vtkMRMLSubjectHierarchy
 }
 
 //---------------------------------------------------------------------------
-QIcon qSlicerSubjectHierarchyTransformsPlugin::icon(vtkMRMLSubjectHierarchyNode* node)
+QIcon qSlicerSubjectHierarchyTransformsPlugin::icon(vtkIdType itemID)
 {
   Q_D(qSlicerSubjectHierarchyTransformsPlugin);
 
-  if (!node)
+  if (itemID == vtkMRMLSubjectHierarchyNode::INVALID_ITEM_ID)
     {
-    qCritical() << "qSlicerSubjectHierarchyTransformsPlugin::icon: NULL node given!";
+    qCritical() << Q_FUNC_INFO << ": Invalid input item";
     return QIcon();
     }
 
-  if (this->canOwnSubjectHierarchyNode(node))
+  // Transform
+  if (this->canOwnSubjectHierarchyItem(itemID))
     {
     return d->TransformIcon;
     }
 
-  // Node unknown by plugin
+  // Item unknown by plugin
   return QIcon();
 }
 
@@ -208,7 +299,7 @@ QIcon qSlicerSubjectHierarchyTransformsPlugin::visibilityIcon(int visible)
 }
 
 //---------------------------------------------------------------------------
-QList<QAction*> qSlicerSubjectHierarchyTransformsPlugin::nodeContextMenuActions()const
+QList<QAction*> qSlicerSubjectHierarchyTransformsPlugin::itemContextMenuActions()const
 {
   Q_D(const qSlicerSubjectHierarchyTransformsPlugin);
 
@@ -218,21 +309,26 @@ QList<QAction*> qSlicerSubjectHierarchyTransformsPlugin::nodeContextMenuActions(
 }
 
 //---------------------------------------------------------------------------
-void qSlicerSubjectHierarchyTransformsPlugin::showContextMenuActionsForNode(vtkMRMLSubjectHierarchyNode* node)
+void qSlicerSubjectHierarchyTransformsPlugin::showContextMenuActionsForItem(vtkIdType itemID)
 {
   Q_D(qSlicerSubjectHierarchyTransformsPlugin);
-  this->hideAllContextMenuActions();
 
-  if (!node)
+  if (itemID == vtkMRMLSubjectHierarchyNode::INVALID_ITEM_ID)
     {
     // There are no scene actions in this plugin
     return;
     }
+  vtkMRMLSubjectHierarchyNode* shNode = qSlicerSubjectHierarchyPluginHandler::instance()->subjectHierarchyNode();
+  if (!shNode)
+    {
+    qCritical() << Q_FUNC_INFO << ": Failed to access subject hierarchy node";
+    return;
+    }
 
-  if (this->canOwnSubjectHierarchyNode(node))
+  if (this->canOwnSubjectHierarchyItem(itemID))
     {
     d->InvertAction->setVisible(true);
-    vtkMRMLTransformNode* tnode = vtkMRMLTransformNode::SafeDownCast(node->GetAssociatedNode());
+    vtkMRMLTransformNode* tnode = vtkMRMLTransformNode::SafeDownCast(shNode->GetItemDataNode(itemID));
     if (tnode && tnode->IsLinear())
       {
       d->IdentityAction->setVisible(true);
@@ -241,28 +337,23 @@ void qSlicerSubjectHierarchyTransformsPlugin::showContextMenuActionsForNode(vtkM
 }
 
 //---------------------------------------------------------------------------
-void qSlicerSubjectHierarchyTransformsPlugin::editProperties(vtkMRMLSubjectHierarchyNode* node)
-{
-  // Switch to transforms module and select transform
-  qSlicerAbstractModuleWidget* moduleWidget = qSlicerSubjectHierarchyAbstractPlugin::switchToModule("Transforms");
-  if (moduleWidget)
-    {
-    // Get node selector combobox
-    qMRMLNodeComboBox* nodeSelector = moduleWidget->findChild<qMRMLNodeComboBox*>("TransformNodeSelector");
-
-    // Choose current data node
-    if (nodeSelector)
-      {
-      nodeSelector->setCurrentNode(node->GetAssociatedNode());
-      }
-    }
-}
-
-//---------------------------------------------------------------------------
 void qSlicerSubjectHierarchyTransformsPlugin::invert()
 {
-  vtkMRMLSubjectHierarchyNode* currentNode = qSlicerSubjectHierarchyPluginHandler::instance()->currentNode();
-  vtkMRMLTransformNode* transformNode = vtkMRMLTransformNode::SafeDownCast(currentNode->GetAssociatedNode());
+  vtkMRMLSubjectHierarchyNode* shNode = qSlicerSubjectHierarchyPluginHandler::instance()->subjectHierarchyNode();
+  if (!shNode)
+    {
+    qCritical() << Q_FUNC_INFO << ": Failed to access subject hierarchy node";
+    return;
+    }
+  vtkIdType currentItemID = qSlicerSubjectHierarchyPluginHandler::instance()->currentItem();
+  if (currentItemID == vtkMRMLSubjectHierarchyNode::INVALID_ITEM_ID)
+    {
+    qCritical() << Q_FUNC_INFO << ": Invalid current item!";
+    return;
+    }
+
+  vtkMRMLTransformNode* transformNode = vtkMRMLTransformNode::SafeDownCast(
+    shNode->GetItemDataNode(currentItemID) );
   if (transformNode)
     {
     transformNode->Inverse();
@@ -272,8 +363,21 @@ void qSlicerSubjectHierarchyTransformsPlugin::invert()
 //---------------------------------------------------------------------------
 void qSlicerSubjectHierarchyTransformsPlugin::identity()
 {
-  vtkMRMLSubjectHierarchyNode* currentNode = qSlicerSubjectHierarchyPluginHandler::instance()->currentNode();
-  vtkMRMLTransformNode* transformNode = vtkMRMLTransformNode::SafeDownCast(currentNode->GetAssociatedNode());
+  vtkMRMLSubjectHierarchyNode* shNode = qSlicerSubjectHierarchyPluginHandler::instance()->subjectHierarchyNode();
+  if (!shNode)
+    {
+    qCritical() << Q_FUNC_INFO << ": Failed to access subject hierarchy node";
+    return;
+    }
+  vtkIdType currentItemID = qSlicerSubjectHierarchyPluginHandler::instance()->currentItem();
+  if (currentItemID == vtkMRMLSubjectHierarchyNode::INVALID_ITEM_ID)
+    {
+    qCritical() << Q_FUNC_INFO << ": Invalid current item!";
+    return;
+    }
+
+  vtkMRMLTransformNode* transformNode = vtkMRMLTransformNode::SafeDownCast(
+    shNode->GetItemDataNode(currentItemID) );
   if (transformNode && transformNode->IsLinear())
     {
     vtkNew<vtkMatrix4x4> matrix; // initialized to identity by default

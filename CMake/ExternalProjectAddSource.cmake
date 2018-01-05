@@ -166,23 +166,38 @@ macro(Slicer_Remote_Add projectname)
 
   if(_ep_OPTION_NAME AND NOT ${_ep_OPTION_DEFAULT} MATCHES ".+")
     set(_ep_OPTION_DEFAULT ON)
-    #message("[${projectname}] Setting default value for OPTION_DEFAULT:${_ep_OPTION_DEFAULT}")
+    #message("[${projectname}] Setting default value for ${_ep_OPTION_NAME} OPTION_DEFAULT to ${_ep_OPTION_DEFAULT}")
   endif()
 
   if(_ep_OPTION_NAME AND NOT ${_ep_OPTION_FORCE} MATCHES ".+")
     set(_ep_OPTION_FORCE OFF)
-    #message("[${projectname}] Setting default value for OPTION_FORCE:${_ep_OPTION_FORCE}")
+    #message("[${projectname}] Setting default value for ${_ep_OPTION_NAME} OPTION_FORCE to ${_ep_OPTION_FORCE}")
   endif()
 
   set(_add_source 1)
   if(_ep_OPTION_NAME)
     #message("[${projectname}] Adding option ${_ep_OPTION_NAME}")
+
+    # If it applies, also account for dependent options.
+    foreach(_option IN LISTS _ep_OPTION_DEPENDS)
+      set(_prop_name "SLICER_REMOTE_${_option}_OPTION_DEPENDS")
+      get_property(_option_depends GLOBAL PROPERTY ${_prop_name})
+      if(NOT "${_option_depends}" STREQUAL "")
+        list(APPEND _ep_OPTION_DEPENDS ${_option_depends})
+      endif()
+    endforeach()
+
     cmake_dependent_option(
       ${_ep_OPTION_NAME} "Download and integrate ${projectname} sources." ${_ep_OPTION_DEFAULT}
       "${_ep_OPTION_DEPENDS}" ${_ep_OPTION_FORCE})
     mark_as_advanced(${_ep_OPTION_NAME})
     mark_as_superbuild(${_ep_OPTION_NAME})
     set(_add_source ${${_ep_OPTION_NAME}})
+
+    # Keep track of dependent options so that options depending on *this* option
+    # can expand their own list of dependent options.
+    set_property(GLOBAL PROPERTY "SLICER_REMOTE_${_ep_OPTION_NAME}_OPTION_DEPENDS" ${_ep_OPTION_DEPENDS})
+
   else()
     foreach(_arg_name OPTION_DEFAULT OPTION_FORCE OPTION_DEPENDS)
       if(_ep_${_arg_name})
@@ -205,6 +220,13 @@ macro(Slicer_Remote_Add projectname)
     ExternalProject_Add_Source(${projectname}
       ${_ep_args_to_pass}
       SOURCE_DIR_VAR ${_ep_SOURCE_DIR_VAR}
+      )
+  elseif(_ep_LABELS)
+    if(NOT _ep_PROJECTS)
+      set(_ep_PROJECTS "")
+    endif()
+    ExternalProject_DeclareLabels(
+      LABELS ${_ep_LABELS} PROJECTS ${_ep_PROJECTS}
       )
   endif()
 

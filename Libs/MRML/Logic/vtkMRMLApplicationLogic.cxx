@@ -25,19 +25,20 @@
 #include "vtkMRMLApplicationLogic.h"
 #include "vtkMRMLColorLogic.h"
 #include "vtkMRMLSliceLogic.h"
-#include <vtkMRMLSliceLinkLogic.h>
-#include <vtkMRMLModelHierarchyLogic.h>
+#include "vtkMRMLSliceLinkLogic.h"
+#include "vtkMRMLModelHierarchyLogic.h"
 
 // MRML includes
-#include <vtkMRMLInteractionNode.h>
-#include <vtkMRMLScene.h>
-#include <vtkMRMLSelectionNode.h>
-#include <vtkMRMLSliceCompositeNode.h>
-#include <vtkMRMLSliceNode.h>
-#include <vtkMRMLStorableNode.h>
-#include <vtkMRMLStorageNode.h>
-#include <vtkMRMLSceneViewNode.h>
-#include <vtkMRMLTableViewNode.h>
+#include "vtkMRMLInteractionNode.h"
+#include "vtkMRMLPlotViewNode.h"
+#include "vtkMRMLScene.h"
+#include "vtkMRMLSelectionNode.h"
+#include "vtkMRMLSliceCompositeNode.h"
+#include "vtkMRMLSliceNode.h"
+#include "vtkMRMLStorableNode.h"
+#include "vtkMRMLStorageNode.h"
+#include "vtkMRMLSceneViewNode.h"
+#include "vtkMRMLTableViewNode.h"
 
 // VTK includes
 #include <vtkCollection.h>
@@ -206,7 +207,12 @@ vtkCollection* vtkMRMLApplicationLogic::GetSliceLogics()const
 //----------------------------------------------------------------------------
 void vtkMRMLApplicationLogic::SetSliceLogics(vtkCollection* sliceLogics)
 {
+  if (sliceLogics == this->Internal->SliceLogics)
+    {
+    return;
+    }
   this->Internal->SliceLogics = sliceLogics;
+  this->Modified();
 }
 
 //---------------------------------------------------------------------------
@@ -256,14 +262,37 @@ GetSliceLogicByLayoutName(const char* layoutName) const
       {
       if ( !strcmp( logic->GetSliceNode()->GetLayoutName(), layoutName) )
         {
-        break;
+        return logic;
         }
       }
-
-    logic = 0;
     }
 
-  return logic;
+  return 0;
+}
+
+//---------------------------------------------------------------------------
+vtkMRMLSliceLogic* vtkMRMLApplicationLogic::
+GetSliceLogicByModelDisplayNode(vtkMRMLModelDisplayNode* displayNode) const
+{
+  if (!displayNode || !this->Internal->SliceLogics)
+    {
+    return 0;
+    }
+
+  vtkMRMLSliceLogic* logic = 0;
+  vtkCollectionSimpleIterator it;
+  vtkCollection* logics = this->Internal->SliceLogics;
+
+  for (logics->InitTraversal(it);
+    (logic = vtkMRMLSliceLogic::SafeDownCast(logics->GetNextItemAsObject(it)));)
+    {
+    if (logic->GetSliceModelDisplayNode() == displayNode)
+      {
+      return logic;
+      }
+    }
+
+  return 0;
 }
 
 //---------------------------------------------------------------------------
@@ -273,7 +302,7 @@ void vtkMRMLApplicationLogic::SetMRMLSceneInternal(vtkMRMLScene *newScene)
   if (newScene)
     {
     // Selection Node
-    selectionNode = newScene->GetNthNodeByClass(0, "vtkMRMLSelectionNode");
+    selectionNode = newScene->GetNodeByID("vtkMRMLSelectionNodeSingleton");
     if (!selectionNode)
       {
       selectionNode = newScene->AddNode(vtkNew<vtkMRMLSelectionNode>().GetPointer());
@@ -286,7 +315,7 @@ void vtkMRMLApplicationLogic::SetMRMLSceneInternal(vtkMRMLScene *newScene)
   if (newScene)
     {
     // Interaction Node
-    interactionNode = newScene->GetNthNodeByClass(0, "vtkMRMLInteractionNode");
+    interactionNode = newScene->GetNodeByID("vtkMRMLInteractionNodeSingleton");
     if (!interactionNode)
       {
       interactionNode = newScene->AddNode(vtkNew<vtkMRMLInteractionNode>().GetPointer());
@@ -294,6 +323,9 @@ void vtkMRMLApplicationLogic::SetMRMLSceneInternal(vtkMRMLScene *newScene)
     assert(vtkMRMLInteractionNode::SafeDownCast(interactionNode));
     }
   this->SetInteractionNode(vtkMRMLInteractionNode::SafeDownCast(interactionNode));
+
+  // Add default slice orientation presets
+  vtkMRMLSliceNode::AddDefaultSliceOrientationPresets(newScene);
 
   this->Superclass::SetMRMLSceneInternal(newScene);
 
@@ -374,9 +406,31 @@ void vtkMRMLApplicationLogic::PropagateTableSelection()
       continue;
       }
     tnode->SetTableNodeID( tableId );
-    }
+  }
 }
 
+//----------------------------------------------------------------------------
+void vtkMRMLApplicationLogic::PropagatePlotChartSelection()
+{
+  if ( !this->Internal->SelectionNode || !this->GetMRMLScene() )
+    {
+    return;
+    }
+
+  char *PlotChartId = this->Internal->SelectionNode->GetActivePlotChartID();
+
+  const int nnodes = this->GetMRMLScene()->GetNumberOfNodesByClass("vtkMRMLPlotViewNode");
+  for (int i = 0; i < nnodes; i++)
+    {
+    vtkMRMLPlotViewNode* pnode = vtkMRMLPlotViewNode::SafeDownCast (
+      this->GetMRMLScene()->GetNthNodeByClass( i, "vtkMRMLPlotViewNode" ) );
+    if(!pnode->GetDoPropagatePlotChartSelection())
+      {
+      continue;
+      }
+    pnode->SetPlotChartNodeID(PlotChartId);
+  }
+}
 
 //----------------------------------------------------------------------------
 void vtkMRMLApplicationLogic::FitSliceToAll(bool onlyIfPropagateVolumeSelectionAllowed /* =false */)
@@ -672,13 +726,13 @@ bool vtkMRMLApplicationLogic::SaveSceneToSlicerDataBundleDirectory(const char *s
   //
   // create a scene view, using the snapshot passed in if any
   //
-  vtkMRMLSceneViewNode * newSceneViewNode = vtkMRMLSceneViewNode::New();
+  vtkNew<vtkMRMLSceneViewNode> newSceneViewNode;
   newSceneViewNode->SetScene(this->GetMRMLScene());
   newSceneViewNode->SetName(this->GetMRMLScene()->GetUniqueNameByString("Slicer Data Bundle Scene View"));
   newSceneViewNode->SetSceneViewDescription("Scene at MRML file save point");
   // save the scene view
   newSceneViewNode->StoreScene();
-  this->GetMRMLScene()->AddNode(newSceneViewNode);
+  this->GetMRMLScene()->AddNode(newSceneViewNode.GetPointer());
 
   vtkSmartPointer<vtkMRMLStorageNode> newSceneViewStorageNode;
   if (screenShot)
@@ -686,16 +740,14 @@ bool vtkMRMLApplicationLogic::SaveSceneToSlicerDataBundleDirectory(const char *s
     // assumes has been passed a screen shot of the full layout
     newSceneViewNode->SetScreenShotType(4);
     newSceneViewNode->SetScreenShot(screenShot);
-    // create a storage node
-    newSceneViewStorageNode.TakeReference(newSceneViewNode->CreateDefaultStorageNode());
     // set the file name from the node name, using a relative path, it will go
     // at the same level as the  .mrml file
     std::string sceneViewFileName = std::string(newSceneViewNode->GetName()) + std::string(".png");
-    newSceneViewStorageNode->SetFileName(sceneViewFileName.c_str());
-    this->GetMRMLScene()->AddNode(newSceneViewStorageNode);
-    newSceneViewNode->SetAndObserveStorageNodeID(newSceneViewStorageNode->GetID());
+    // create a storage node
+    newSceneViewNode->AddDefaultStorageNode(sceneViewFileName.c_str());
+    newSceneViewStorageNode = newSceneViewNode->GetStorageNode();
     // force a write
-    newSceneViewStorageNode->WriteData(newSceneViewNode);
+    newSceneViewStorageNode->WriteData(newSceneViewNode.GetPointer());
     }
 
   // write the scene to disk, changes paths to relative
@@ -710,8 +762,7 @@ bool vtkMRMLApplicationLogic::SaveSceneToSlicerDataBundleDirectory(const char *s
   this->GetMRMLScene()->SetRootDirectory(origRootDirectory.c_str());
 
   // clean up scene views
-  this->GetMRMLScene()->RemoveNode(newSceneViewNode);
-  newSceneViewNode->Delete();
+  this->GetMRMLScene()->RemoveNode(newSceneViewNode.GetPointer());
   if (newSceneViewStorageNode)
     {
     this->GetMRMLScene()->RemoveNode(newSceneViewStorageNode);
@@ -812,16 +863,13 @@ void vtkMRMLApplicationLogic::SaveStorableNodeToSlicerDataBundleDirectory(vtkMRM
   if (!storageNode)
     {
     vtkDebugMacro("creating a new storage node for " << storableNode->GetID());
-    vtkSmartPointer<vtkMRMLStorageNode> newStorageNode = vtkSmartPointer<vtkMRMLStorageNode>::Take(storableNode->CreateDefaultStorageNode());
-    if (newStorageNode==NULL)
+    storableNode->AddDefaultStorageNode();
+    storageNode = storableNode->GetStorageNode();
+    if (!storageNode)
       {
       // no need for storage node to store this node
       return;
       }
-    // we have to initialize storaoge node with a valid name in the new directory
-    this->GetMRMLScene()->AddNode(newStorageNode);
-    storableNode->SetAndObserveStorageNodeID(newStorageNode->GetID());
-    storageNode = storableNode->GetStorageNode();
     }
 
   // save the old values for the storage nodes
@@ -857,20 +905,11 @@ void vtkMRMLApplicationLogic::SaveStorableNodeToSlicerDataBundleDirectory(vtkMRM
     std::string defaultWriteExtension = std::string(".")
       + vtksys::SystemTools::LowerCase(storageNode->GetDefaultWriteFileExtension());
     std::string uniqueFileName = fileBaseName;
-    std::string extension = vtkMRMLStorageNode::GetLowercaseExtensionFromFileName(fileBaseName);
+    std::string extension = storageNode->GetSupportedFileExtension(fileBaseName.c_str());
     if (defaultWriteExtension != extension)
       {
       // for saving to MRB all nodes will be written in their default format
-      if (extension.find(".gz") != std::string::npos)
-        {
-        // there's a double extension
-        uniqueFileName = vtksys::SystemTools::GetFilenameWithoutLastExtension(vtksys::SystemTools::GetFilenameWithoutLastExtension(fileBaseName)) +
-                         defaultWriteExtension;
-        }
-      else
-        {
-        uniqueFileName = vtksys::SystemTools::GetFilenameWithoutLastExtension(fileBaseName) + defaultWriteExtension;
-        }
+      uniqueFileName = storageNode->GetFileNameWithoutExtension(fileBaseName.c_str()) + defaultWriteExtension;
       }
     storageNode->SetFileName(uniqueFileName.c_str());
     }

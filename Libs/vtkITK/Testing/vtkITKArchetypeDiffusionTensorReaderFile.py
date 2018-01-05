@@ -2,6 +2,7 @@
 import unittest
 import slicer
 import vtkITK
+import teem
 from vtk.util import numpy_support as ns
 import numpy
 
@@ -28,7 +29,7 @@ class vtkITKReaderAgainstNRRDReader(unittest.TestCase):
         self.ritk.SetArchetype(self.file_name)
         self.ritk.Update()
 
-        self.rnrrd = slicer.vtkNRRDReader()
+        self.rnrrd = teem.vtkNRRDReader()
         self.rnrrd.SetFileName(self.file_name)
         self.rnrrd.Update()
 
@@ -70,7 +71,7 @@ class vtkITKReaderAgainstNRRDReader(unittest.TestCase):
 def compare_vtk_matrix(m1, m2, n=4):
     for i in xrange(0,n):
         for j in xrange(0,n):
-            assert(m1.GetElement(i,j) == m2.GetElement(i,j))
+            assert m1.GetElement(i,j) == m2.GetElement(i,j)
     return True
 
 

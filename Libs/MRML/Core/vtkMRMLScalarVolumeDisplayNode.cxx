@@ -50,16 +50,17 @@ vtkMRMLScalarVolumeDisplayNode::vtkMRMLScalarVolumeDisplayNode()
 {
   // Strings
   this->Interpolate = 1;
+  this->WindowLevelLocked = false;
   this->AutoWindowLevel = 1;
   this->AutoThreshold = 0;
   this->ApplyThreshold = 0;
   //this->LowerThreshold = VTK_SHORT_MIN;
   //this->UpperThreshold = VTK_SHORT_MAX;
 
-  // try setting a default greyscale color map
+  // try setting a default grayscale color map
   //this->SetDefaultColorMap(0);
 
-  // create and set visulaization pipeline
+  // create and set visualization pipeline
   this->AlphaLogic = vtkImageLogic::New();
   this->MapToColors = vtkImageMapToColors::New();
   this->Threshold = vtkImageThreshold::New();
@@ -104,7 +105,6 @@ vtkMRMLScalarVolumeDisplayNode::vtkMRMLScalarVolumeDisplayNode()
   this->AppendComponents->AddInputConnection(0, this->ExtractRGB->GetOutputPort() );
   this->AppendComponents->AddInputConnection(0, this->AlphaLogic->GetOutputPort() );
 
-
   this->Bimodal = NULL;
   this->Accumulate = NULL;
   this->IsInCalculateAutoLevels = false;
@@ -126,7 +126,6 @@ vtkMRMLScalarVolumeDisplayNode::~vtkMRMLScalarVolumeDisplayNode()
   this->ExtractRGB->Delete();
   this->ExtractAlpha->Delete();
   this->MultiplyAlpha->Delete();
-
 
   if (this->Bimodal)
     {
@@ -215,47 +214,46 @@ void vtkMRMLScalarVolumeDisplayNode::WriteXML(ostream& of, int nIndent)
 {
   Superclass::WriteXML(of, nIndent);
 
-  vtkIndent indent(nIndent);
-
   {
   std::stringstream ss;
   ss << this->GetWindow();
-  of << indent << " window=\"" << ss.str() << "\"";
+  of << " window=\"" << ss.str() << "\"";
   }
   {
   std::stringstream ss;
   ss << this->GetLevel();
-  of << indent << " level=\"" << ss.str() << "\"";
+  of << " level=\"" << ss.str() << "\"";
   }
   {
   std::stringstream ss;
   ss << this->GetUpperThreshold();
-  of << indent << " upperThreshold=\"" << ss.str() << "\"";
+  of << " upperThreshold=\"" << ss.str() << "\"";
   }
   {
   std::stringstream ss;
   ss << this->GetLowerThreshold();
-  of << indent << " lowerThreshold=\"" << ss.str() << "\"";
+  of << " lowerThreshold=\"" << ss.str() << "\"";
   }
   {
   std::stringstream ss;
   ss << this->Interpolate;
-  of << indent << " interpolate=\"" << ss.str() << "\"";
+  of << " interpolate=\"" << ss.str() << "\"";
   }
+  of << " windowLevelLocked=\"" << (this->GetWindowLevelLocked() ? "true" : "false") << "\"";
   {
   std::stringstream ss;
   ss << this->AutoWindowLevel;
-  of << indent << " autoWindowLevel=\"" << ss.str() << "\"";
+  of << " autoWindowLevel=\"" << ss.str() << "\"";
   }
   {
   std::stringstream ss;
   ss << this->ApplyThreshold;
-  of << indent << " applyThreshold=\"" << ss.str() << "\"";
+  of << " applyThreshold=\"" << ss.str() << "\"";
   }
   {
   std::stringstream ss;
   ss << this->AutoThreshold;
-  of << indent << " autoThreshold=\"" << ss.str() << "\"";
+  of << " autoThreshold=\"" << ss.str() << "\"";
   }
   if (this->WindowLevelPresets.size() > 0)
     {
@@ -265,7 +263,7 @@ void vtkMRMLScalarVolumeDisplayNode::WriteXML(ostream& of, int nIndent)
       ss << this->WindowLevelPresets[p].Window;
       ss << "|";
       ss << this->WindowLevelPresets[p].Level;
-      of << indent << " windowLevelPreset" << p << "=\"" << ss.str() << "\"";
+      of << " windowLevelPreset" << p << "=\"" << ss.str() << "\"";
       }
     }
 }
@@ -321,6 +319,10 @@ void vtkMRMLScalarVolumeDisplayNode::ReadXMLAttributes(const char** atts)
       ss << attValue;
       ss >> this->Interpolate;
       }
+    else if (!strcmp(attName, "windowLevelLocked"))
+      {
+      this->SetWindowLevelLocked(strcmp(attValue, "true") == 0);
+      }
     else if (!strcmp(attName, "autoWindowLevel"))
       {
       std::stringstream ss;
@@ -358,6 +360,7 @@ void vtkMRMLScalarVolumeDisplayNode::Copy(vtkMRMLNode *anode)
   Superclass::Copy(anode);
   vtkMRMLScalarVolumeDisplayNode *node = (vtkMRMLScalarVolumeDisplayNode *) anode;
 
+  this->SetWindowLevelLocked(node->GetWindowLevelLocked());
   this->SetAutoWindowLevel( node->GetAutoWindowLevel() );
   this->SetWindowLevel(node->GetWindow(), node->GetLevel());
   this->SetAutoThreshold( node->GetAutoThreshold() ); // don't want to run CalculateAutoLevel
@@ -379,6 +382,7 @@ void vtkMRMLScalarVolumeDisplayNode::PrintSelf(ostream& os, vtkIndent indent)
 
   Superclass::PrintSelf(os,indent);
 
+  os << indent << "WindowLevelLocked:   " << (this->WindowLevelLocked ? "true" : "false") << "\n";
   os << indent << "AutoWindowLevel:   " << this->AutoWindowLevel << "\n";
   os << indent << "Window:            " << this->GetWindow() << "\n";
   os << indent << "Level:             " << this->GetLevel() << "\n";
@@ -733,10 +737,19 @@ void vtkMRMLScalarVolumeDisplayNode::CalculateAutoLevels()
     return;
     }
 
-  double window = 0;
-  double level = 0;
-  double lower = 0;
-  double upper = 0;
+  if (this->Bimodal == NULL)
+    {
+    this->Bimodal = vtkImageBimodalAnalysis::New();
+    }
+  if (this->Accumulate == NULL)
+    {
+    this->Accumulate = vtkImageAccumulate::New();
+    }
+
+  double window = 0.0;
+  double level = 0.0;
+  double lower = 0.0;
+  double upper = 0.0;
 
   int needAdHoc = 0;
   int scalarType = imageDataScalar->GetScalarType();
@@ -745,29 +758,16 @@ void vtkMRMLScalarVolumeDisplayNode::CalculateAutoLevels()
     {
     needAdHoc = 1;
     }
-  else if (scalarType != VTK_INT &&
-           scalarType != VTK_SHORT &&
-           scalarType != VTK_CHAR &&
-           scalarType != VTK_SIGNED_CHAR &&
-           scalarType != VTK_UNSIGNED_CHAR &&
-           scalarType != VTK_UNSIGNED_SHORT &&
-           scalarType != VTK_UNSIGNED_INT)
+  else if (scalarType == VTK_INT ||
+           scalarType == VTK_SHORT ||
+           scalarType == VTK_CHAR ||
+           scalarType == VTK_SIGNED_CHAR ||
+           scalarType == VTK_UNSIGNED_CHAR ||
+           scalarType == VTK_UNSIGNED_SHORT ||
+           scalarType == VTK_UNSIGNED_INT)
     {
-    // if not an integer type, estimate with ad hoc method
-    needAdHoc = 1;
-    }
-  else
-    {
-    // data type is VTK_INT or similar, so calculate window/level
+    // Data type is VTK_INT or similar, so calculate window/level
     // check the scalar type, bimodal analysis only works on int
-    if (this->Bimodal == NULL)
-      {
-      this->Bimodal = vtkImageBimodalAnalysis::New();
-      }
-    if (this->Accumulate == NULL)
-      {
-      this->Accumulate = vtkImageAccumulate::New();
-      }
 
     // Setup filter to work with signed 16-bit integer.
     int extent[6] = {0, 65535, 0, 0, 0, 0};
@@ -784,9 +784,51 @@ void vtkMRMLScalarVolumeDisplayNode::CalculateAutoLevels()
       {
       needAdHoc = 1;
       }
+    else
+      {
+      window = this->Bimodal->GetWindow();
+      level = this->Bimodal->GetLevel();
+      lower = this->Bimodal->GetThreshold();
+      upper = this->Bimodal->GetMax();
+      }
+    }
+  else if (scalarType == VTK_FLOAT ||
+           scalarType == VTK_DOUBLE ||
+           scalarType == VTK_LONG ||
+           scalarType == VTK_UNSIGNED_LONG)
+    {
+    // If scalar range is expected to be less conventional, then scale the bins
+    // the image accumulate algorithm
+    double range[2];
+    this->GetDisplayScalarRange(range);
+    long minInt = trunc(range[0]) - 1;
+    long maxInt = trunc(range[1]) + 1;
+
+    this->Accumulate->SetInputData(imageDataScalar);
+    int extent[6] = {0, 999, 0, 0, 0, 0};
+    this->Accumulate->SetComponentExtent(extent);
+    double origin[3] = {static_cast<double>(minInt), 0.0, 0.0};
+    this->Accumulate->SetComponentOrigin(origin);
+    double spacing[3] = {(maxInt-minInt)/1000.0, 1.0, 1.0};
+    this->Accumulate->SetComponentSpacing(spacing);
+
+    this->Bimodal->SetInputConnection(this->Accumulate->GetOutputPort());
+    this->Bimodal->Update();
+
+    // The bimodal analysis assumes that the bin indices correspond directly to
+    // voxel intensity values, need to convert back to intensity space
+    window = this->Bimodal->GetWindow() * spacing[0];
+    level = minInt + (this->Bimodal->GetLevel() - minInt) * spacing[0];
+    lower = minInt + (this->Bimodal->GetThreshold() - minInt) * spacing[0];
+    upper = minInt + (this->Bimodal->GetMax() - minInt) * spacing[0];
+    }
+  else
+    {
+    // If unhandled type, estimate with ad hoc method
+    needAdHoc = 1;
     }
 
-  if ( needAdHoc )
+  if (needAdHoc)
     {
     vtkDebugMacro("CalculateScalarAutoLevels: image data scalar type is not integer,"
                   " doing ad hoc calc of window/level.");
@@ -798,15 +840,8 @@ void vtkMRMLScalarVolumeDisplayNode::CalculateAutoLevels()
 
     window = max-min;
     level = 0.5*(max+min);
-    lower = this->GetLevel();
+    lower = level;
     upper = range[1];
-    }
-  else
-    {
-    window = this->Bimodal->GetWindow();
-    level = this->Bimodal->GetLevel();
-    lower = this->Bimodal->GetThreshold();
-    upper = this->Bimodal->GetMax();
     }
 
   this->IsInCalculateAutoLevels = true;

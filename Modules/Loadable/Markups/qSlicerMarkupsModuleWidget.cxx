@@ -511,6 +511,15 @@ void qSlicerMarkupsModuleWidget::enter()
   //d->activeMarkupMRMLNodeComboBox->setEnabled(true);
   d->activeMarkupMRMLNodeComboBox->blockSignals(false);
 
+  // check to see if we need to make a previously loaded list active
+  int nodeCount = d->activeMarkupMRMLNodeComboBox->nodeCount();
+  if (nodeCount > 0 &&
+      d->activeMarkupMRMLNodeComboBox->currentNodeID() == "")
+    {
+    // select the last list
+    d->activeMarkupMRMLNodeComboBox->setCurrentNodeIndex(nodeCount - 1);
+    }
+
   // install some shortcuts for use while in this module
   this->installShortcuts();
 
@@ -1790,6 +1799,9 @@ void qSlicerMarkupsModuleWidget::onDeleteMarkupPushButtonClicked()
   deleteAllMsgBox.exec();
   if (deleteAllMsgBox.clickedButton() == deleteButton)
     {
+    // do the deletion in batch process mode
+    int wasModifying = listNode->StartModify();
+
     // delete from the end
     for (int i = rows.size() - 1; i >= 0; --i)
       {
@@ -1798,6 +1810,7 @@ void qSlicerMarkupsModuleWidget::onDeleteMarkupPushButtonClicked()
       // remove the markup at that row
       listNode->RemoveMarkup(index);
       }
+    listNode->EndModify(wasModifying);
     }
 
   // clear the selection on the table
@@ -2293,7 +2306,6 @@ void qSlicerMarkupsModuleWidget::onRightClickActiveMarkupTableWidget(QPoint pos)
   // qDebug() << "onRightClickActiveMarkupTableWidget: pos = " << pos;
 
   QMenu menu;
-  this->addSelectedCoordinatesToMenu(&menu);
 
   // Delete
   QAction *deleteFiducialAction =
@@ -2333,6 +2345,9 @@ void qSlicerMarkupsModuleWidget::onRightClickActiveMarkupTableWidget(QPoint pos)
     QObject::connect(moveToOtherListAction, SIGNAL(triggered()),
                      this, SLOT(onMoveToOtherListActionTriggered()));
     }
+
+  this->addSelectedCoordinatesToMenu(&menu);
+
   menu.exec(QCursor::pos());
 }
 
@@ -2383,17 +2398,28 @@ void qSlicerMarkupsModuleWidget::addSelectedCoordinatesToMenu(QMenu *menu)
   double distance = 0.0;
   double lastPoint[3] = {0.0, 0.0, 0.0};
 
+  menu->addSeparator();
+
   // loop over the selected rows
   for (int i = 0; i < rows.size() ; i++)
     {
     int row = rows.at(i);
     int numPoints = markupsNode->GetNumberOfPointsInNthMarkup(row);
     // label this selected markup if more than one
+    QString indexString;
     if (rows.size() > 1)
       {
-      QString indexString =  QString(markupsNode->GetNthMarkupLabel(row).c_str()) +
-        QString(":");
-      menu->addAction(indexString);
+      // if there's a label use it
+      if (!(markupsNode->GetNthMarkupLabel(row).empty()))
+        {
+        indexString =  QString(markupsNode->GetNthMarkupLabel(row).c_str());
+        }
+      else
+        {
+        // use the row number as an index (row starts at 0, but GUI starts at 1)
+        indexString = QString::number(row+1);
+        }
+      indexString +=  QString(" : ");
       }
     for (int p = 0; p < numPoints; ++p)
       {
@@ -2416,7 +2442,8 @@ void qSlicerMarkupsModuleWidget::addSelectedCoordinatesToMenu(QMenu *menu)
         QString::number(point[0]) + QString(",") +
         QString::number(point[1]) + QString(",") +
         QString::number(point[2]);
-      menu->addAction(coordinate);
+      QString menuString = indexString + coordinate;
+      menu->addAction(menuString);
 
       // calculate the point to point accumulated distance for fiducials
       if (numPoints == 1 && rows.size() > 1)
@@ -2440,7 +2467,6 @@ void qSlicerMarkupsModuleWidget::addSelectedCoordinatesToMenu(QMenu *menu)
     {
     menu->addAction(QString("Summed linear distance: %1").arg(distance));
     }
-  menu->addSeparator();
 }
 
 //-----------------------------------------------------------------------------
@@ -2798,7 +2824,7 @@ void qSlicerMarkupsModuleWidget::observeMarkupsNode(vtkMRMLNode *markupsNode)
         this->qvtkDisconnect(node, vtkMRMLMarkupsNode::NthMarkupModifiedEvent,
                              this, SLOT(onActiveMarkupsNodeNthMarkupModifiedEvent(vtkObject*,vtkObject*)));
         this->qvtkDisconnect(node, vtkMRMLMarkupsNode::MarkupAddedEvent,
-                             this, SLOT(onActiveMarkupsNodeMarkupAddedEvent()));
+                             this, SLOT(onActiveMarkupsNodeMarkupAddedEvent(vtkObject*,vtkObject*)));
         this->qvtkDisconnect(node, vtkMRMLMarkupsNode::MarkupRemovedEvent,
                              this, SLOT(onActiveMarkupsNodeMarkupRemovedEvent()));
 
@@ -2850,7 +2876,7 @@ void qSlicerMarkupsModuleWidget::observeMarkupsNode(vtkMRMLNode *markupsNode)
       this->qvtkConnect(markupsNode, vtkMRMLMarkupsNode::NthMarkupModifiedEvent,
                         this, SLOT(onActiveMarkupsNodeNthMarkupModifiedEvent(vtkObject*,vtkObject*)));
       this->qvtkConnect(markupsNode, vtkMRMLMarkupsNode::MarkupAddedEvent,
-                        this, SLOT(onActiveMarkupsNodeMarkupAddedEvent()));
+                        this, SLOT(onActiveMarkupsNodeMarkupAddedEvent(vtkObject*,vtkObject*)));
       this->qvtkConnect(markupsNode, vtkMRMLMarkupsNode::MarkupRemovedEvent,
                         this, SLOT(onActiveMarkupsNodeMarkupRemovedEvent()));
       // qDebug() << "\tconnected markups node " << markupsNode->GetID();
@@ -2980,20 +3006,21 @@ void qSlicerMarkupsModuleWidget::onActiveMarkupsNodePointModifiedEvent(vtkObject
 }
 
 //-----------------------------------------------------------------------------
-void qSlicerMarkupsModuleWidget::onActiveMarkupsNodeMarkupAddedEvent()//vtkMRMLNode *markupsNode)
+void qSlicerMarkupsModuleWidget::onActiveMarkupsNodeMarkupAddedEvent(vtkObject * vtkNotUsed(caller), vtkObject *callData)
 {
   Q_D(qSlicerMarkupsModuleWidget);
 
-  //qDebug() << "onActiveMarkupsNodeMarkupAddedEvent";
+  if (callData == NULL)
+    {
+    // batch update
+    this->updateWidgetFromMRML();
+    return;
+    }
 
   QString activeMarkupsNodeID = d->activeMarkupMRMLNodeComboBox->currentNodeID();
 
-  //qDebug() << QString("active markups node id from combo box = ") + activeMarkupsNodeID;
-
   int newRow = d->activeMarkupTableWidget->rowCount();
-  //qDebug() << QString("\tnew row / row count = ") + QString::number(newRow);
   d->activeMarkupTableWidget->insertRow(newRow);
-  //qDebug() << QString("\t after inserting a row, row count = ") + QString::number(d->activeMarkupTableWidget->rowCount());
 
   this->updateRow(newRow);
 
@@ -3230,4 +3257,52 @@ void qSlicerMarkupsModuleWidget::onTransformedCoordinatesToggled(bool checked)
   // update the GUI
   // tbd: only update the coordinates
   this->updateWidgetFromMRML();
+}
+
+//-----------------------------------------------------------
+bool qSlicerMarkupsModuleWidget::setEditedNode(vtkMRMLNode* node,
+                                               QString role /* = QString()*/,
+                                               QString context /* = QString()*/)
+{
+  Q_D(qSlicerMarkupsModuleWidget);
+  Q_UNUSED(role);
+  Q_UNUSED(context);
+  if (vtkMRMLMarkupsFiducialNode::SafeDownCast(node))
+    {
+    d->activeMarkupMRMLNodeComboBox->setCurrentNode(node);
+    return true;
+    }
+
+  if (vtkMRMLMarkupsDisplayNode::SafeDownCast(node))
+    {
+    vtkMRMLMarkupsDisplayNode* displayNode = vtkMRMLMarkupsDisplayNode::SafeDownCast(node);
+    vtkMRMLMarkupsFiducialNode* displayableNode = vtkMRMLMarkupsFiducialNode::SafeDownCast(displayNode->GetDisplayableNode());
+    if (!displayableNode)
+      {
+      return false;
+      }
+    d->activeMarkupMRMLNodeComboBox->setCurrentNode(displayableNode);
+    return true;
+    }
+
+  return false;
+}
+
+//-----------------------------------------------------------
+double qSlicerMarkupsModuleWidget::nodeEditable(vtkMRMLNode* node)
+{
+  if (vtkMRMLMarkupsFiducialNode::SafeDownCast(node)
+    || vtkMRMLMarkupsDisplayNode::SafeDownCast(node))
+    {
+    return 0.5;
+    }
+  else if (node->IsA("vtkMRMLAnnotationFiducialNode"))
+    {
+    // The module cannot directly edit this type of node but can convert it
+    return 0.1;
+    }
+  else
+    {
+    return 0.0;
+    }
 }

@@ -13,6 +13,7 @@ def quit():
 
 def exit(status=EXIT_SUCCESS):
   from slicer import app
+  app.commandOptions().runPythonAndExit = False
   app.exit(status)
 
 def restart():
@@ -48,51 +49,98 @@ def sourceDir():
   """
   return _readCMakeCache('Slicer_SOURCE_DIR')
 
+def startupEnvironment():
+  """Returns the environment without the Slicer specific values.
+
+  Path environment variables like `PATH`, `LD_LIBRARY_PATH` or `PYTHONPATH`
+  will not contain values found in the launcher settings.
+
+  Similarly `key=value` environment variables also found in the launcher
+  settings are excluded. Note that if a value was associated with a key prior
+  starting Slicer, it will not be set in the environment returned by this
+  function.
+
+  The function excludes both the Slicer launcher settings and the revision
+  specific launcher settings.
+  """
+  import slicer
+  startupEnv = slicer.app.startupEnvironment()
+  return {varname: startupEnv.value(varname) for varname in startupEnv.keys()}
+
 #
 # Custom Import
 #
 
 def importVTKClassesFromDirectory(directory, dest_module_name, filematch = '*'):
-  importClassesFromDirectory(directory, dest_module_name, 'vtkclass', filematch)
+  from vtk import vtkObjectBase
+  importClassesFromDirectory(directory, dest_module_name, vtkObjectBase, filematch)
 
 def importQtClassesFromDirectory(directory, dest_module_name, filematch = '*'):
   importClassesFromDirectory(directory, dest_module_name, 'PythonQtClassWrapper', filematch)
 
-def importClassesFromDirectory(directory, dest_module_name, type_name, filematch = '*'):
+# To avoid globbing multiple times the same directory, successful
+# call to ``importClassesFromDirectory()`` will be indicated by
+# adding an entry to the ``__import_classes_cache`` set.
+#
+# Each entry is a tuple of form (directory, dest_module_name, type_info, filematch)
+__import_classes_cache = set()
+
+def importClassesFromDirectory(directory, dest_module_name, type_info, filematch = '*'):
+  # Create entry for __import_classes_cache
+  cache_key = ",".join([str(arg) for arg in [directory, dest_module_name, type_info, filematch]])
+  # Check if function has already been called with this set of parameters
+  if cache_key in __import_classes_cache:
+    return
+
   import glob, os, re, fnmatch
+  re_filematch = re.compile(fnmatch.translate(filematch))
   for fname in glob.glob(os.path.join(directory, filematch)):
-    if not re.compile(fnmatch.translate(filematch)).match(os.path.basename(fname)):
+    if not re_filematch.match(os.path.basename(fname)):
       continue
     try:
       from_module_name = os.path.splitext(os.path.basename(fname))[0]
-      importModuleObjects(from_module_name, dest_module_name, type_name)
+      importModuleObjects(from_module_name, dest_module_name, type_info)
     except ImportError as detail:
       import sys
       print(detail, file=sys.stderr)
 
-def importModuleObjects(from_module_name, dest_module_name, type_name):
-  """Import object of type 'type_name' from module identified
+  __import_classes_cache.add(cache_key)
+
+def importModuleObjects(from_module_name, dest_module_name, type_info):
+  """Import object of type 'type_info' (str or type) from module identified
   by 'from_module_name' into the module identified by 'dest_module_name'."""
 
   # Obtain a reference to the module identifed by 'dest_module_name'
   import sys
   dest_module = sys.modules[dest_module_name]
 
-  exec "import %s" % (from_module_name)
+  # Skip if module has already been loaded
+  if from_module_name in sys.modules:
+    return
 
-  # Obtain a reference to the associated VTK module
-  module = eval(from_module_name)
+  # Obtain a reference to the module identified by 'from_module_name'
+  import imp
+  fp, pathname, description = imp.find_module(from_module_name)
+  module = imp.load_module(from_module_name, fp, pathname, description)
 
-  # Loop over content of the python module associated with the given VTK python library
+  # Loop over content of the python module associated with the given python library
   for item_name in dir(module):
 
     # Obtain a reference associated with the current object
-    item = eval("%s.%s" % (from_module_name, item_name))
+    item = getattr(module, item_name)
 
-    # Add the object to dest_module_globals_dict if any
-    if type(item).__name__ == type_name:
-      exec("from %s import %s" % (from_module_name, item_name))
-      exec("dest_module.%s = %s"%(item_name, item_name))
+    # Check type match by type or type name
+    match = False
+    if isinstance(type_info, type):
+      try:
+        match = issubclass(item, type_info)
+      except TypeError as e:
+        pass
+    else:
+      match = type(item).__name__ == type_info
+
+    if match:
+      setattr(dest_module, item_name, item)
 
 #
 # UI
@@ -114,12 +162,18 @@ def mainWindow(verbose = True):
   return lookupTopLevelWidget('qSlicerAppMainWindow', verbose)
 
 def pythonShell(verbose = True):
-  return lookupTopLevelWidget('pythonConsole', verbose)
+  from slicer import app
+  console = app.pythonConsole()
+  if not console and verbose:
+    print("Failed to obtain reference to python shell", file=sys.stderr)
+  return console
 
 def showStatusMessage(message, duration = 0):
   mw = mainWindow(verbose=False)
-  if mw:
-    mw.statusBar().showMessage(message, duration)
+  if not mw or not mw.statusBar:
+    return False
+  mw.statusBar().showMessage(message, duration)
+  return True
 
 def findChildren(widget=None, name="", text="", title="", className=""):
   """ Return a list of child widgets that meet all the given criteria.
@@ -155,11 +209,85 @@ def findChildren(widget=None, name="", text="", title="", className=""):
     parents += p.children()
     matched_filter_criteria = 0
     for attribute in expected_matches:
-      if hasattr(p, attribute) and fnmatch.fnmatchcase(getattr(p, attribute), kwargs[attribute]):
-        matched_filter_criteria = matched_filter_criteria + 1
+      if hasattr(p, attribute):
+        attr_name = getattr(p, attribute)
+        if attribute == 'className':
+          # className is a method, not a direct attribute. Invoke the method
+          attr_name = attr_name()
+        # Objects may have text attributes with non-string value (for example,
+        # QUndoStack objects have text attribute of 'builtin_qt_slot' type.
+        # We only consider string type attributes.
+        if isinstance(attr_name, basestring):
+          if fnmatch.fnmatchcase(attr_name, kwargs[attribute]):
+            matched_filter_criteria = matched_filter_criteria + 1
     if matched_filter_criteria == len(expected_matches):
       children.append(p)
   return children
+
+def findChild(widget, name):
+  """
+  Convenience method to access a widget by its ``name``.
+  A ``RuntimeError`` exception is raised if the widget with the
+  given ``name`` does not exist.
+  """
+  errorMessage = "Widget named " + str(name) + " does not exists."
+  child = None
+  try:
+    child = findChildren(widget, name=name)[0]
+    if not child:
+      raise RuntimeError(errorMessage)
+  except IndexError:
+    raise RuntimeError(errorMessage)
+  return child
+
+def loadUI(path):
+  """ Load UI file ``path`` and return the corresponding widget.
+  Raises a ``RuntimeError`` exception if the UI file is not found or if no
+  widget was instantiated.
+  """
+  import qt
+  qfile = qt.QFile(path)
+  if not qfile.exists():
+    errorMessage = "Could not load UI file: file not found " + str(path) + "\n\n"
+    raise RuntimeError(errorMessage)
+  qfile.open(qt.QFile.ReadOnly)
+  loader = qt.QUiLoader()
+  widget = loader.load(qfile)
+  if not widget:
+    errorMessage = "Could not load UI file: " + str(path) + "\n\n"
+    raise RuntimeError(errorMessage)
+  return widget
+
+def setSliceViewerLayers(background='keep-current', foreground='keep-current', label='keep-current',
+                         foregroundOpacity=None, labelOpacity=None):
+  """ Set the slice views with the given nodes.
+  If node ID is not specified (or value is 'keep-current') then the layer will not be modified.
+  :param background: node or node ID to be used for the background layer
+  :param foreground: node or node ID to be used for the foreground layer
+  :param label: node or node ID to be used for the label layer
+  :param foregroundOpacity: opacity of the foreground layer
+  :param labelOpacity: opacity of the label layer
+  """
+  import slicer
+  def _nodeID(nodeOrID):
+    nodeID = nodeOrID
+    if isinstance(nodeOrID, slicer.vtkMRMLNode):
+      nodeID = nodeOrID.GetID()
+    return nodeID
+
+  num = slicer.mrmlScene.GetNumberOfNodesByClass('vtkMRMLSliceCompositeNode')
+  for i in range(num):
+      sliceViewer = slicer.mrmlScene.GetNthNodeByClass(i, 'vtkMRMLSliceCompositeNode')
+      if background != 'keep-current':
+          sliceViewer.SetBackgroundVolumeID(_nodeID(background))
+      if foreground != 'keep-current':
+          sliceViewer.SetForegroundVolumeID(_nodeID(foreground))
+      if foregroundOpacity is not None:
+          sliceViewer.SetForegroundOpacity(foregroundOpacity)
+      if label != 'keep-current':
+          sliceViewer.SetLabelVolumeID(_nodeID(label))
+      if labelOpacity is not None:
+          sliceViewer.SetLabelOpacity(labelOpacity)
 
 #
 # IO
@@ -196,6 +324,18 @@ def loadAnnotationFiducial(filename, returnNode=False):
   properties['fiducial'] = 1
   return loadNodeFromFile(filename, filetype, properties, returnNode)
 
+def loadAnnotationRuler(filename, returnNode=False):
+  filetype = 'AnnotationFile'
+  properties = {}
+  properties['ruler'] = 1
+  return loadNodeFromFile(filename, filetype, properties, returnNode)
+
+def loadAnnotationROI(filename, returnNode=False):
+  filetype = 'AnnotationFile'
+  properties = {}
+  properties['roi'] = 1
+  return loadNodeFromFile(filename, filetype, properties, returnNode)
+
 def loadMarkupsFiducialList(filename, returnNode=False):
   filetype = 'MarkupsFiducials'
   properties = {}
@@ -209,6 +349,10 @@ def loadScalarOverlay(filename, returnNode=False):
   filetype = 'ScalarOverlayFile'
   return loadNodeFromFile(filename, filetype, {}, returnNode)
 
+def loadSegmentation(filename, returnNode=False):
+  filetype = 'SegmentationFile'
+  return loadNodeFromFile(filename, filetype, {}, returnNode)
+
 def loadTransform(filename, returnNode=False):
   filetype = 'TransformFile'
   return loadNodeFromFile(filename, filetype, {}, returnNode)
@@ -219,6 +363,16 @@ def loadLabelVolume(filename, properties={}, returnNode=False):
   return loadNodeFromFile(filename, filetype, properties, returnNode)
 
 def loadVolume(filename, properties={}, returnNode=False):
+  """Properties:
+  - name: this name will be used as node name for the loaded volume
+  - labelmap: interpret volume as labelmap
+  - singleFile: ignore all other files in the directory
+  - center: ignore image position
+  - discardOrientation: ignore image axis directions
+  - autoWindowLevel: compute window/level automatically
+  - show: display volume in slice viewers after loading is completed
+  - fileNames: list of filenames to load the volume from
+  """
   filetype = 'VolumeFile'
   return loadNodeFromFile(filename, filetype, properties, returnNode)
 
@@ -241,6 +395,10 @@ def openAddModelDialog():
 def openAddScalarOverlayDialog():
   from slicer import app
   return app.coreIOManager().openAddScalarOverlayDialog()
+
+def openAddSegmentationDialog():
+  from slicer import app, qSlicerFileDialog
+  return app.coreIOManager().openDialog('SegmentationFile', qSlicerFileDialog.Read)
 
 def openAddTransformDialog():
   from slicer import app
@@ -402,8 +560,7 @@ def reloadScriptedModule(moduleName):
   # delete the old widget instance
   if hasattr(slicer.modules, widgetName):
     w = getattr(slicer.modules, widgetName)
-    if hasattr(w, 'cleanup'):
-      w.cleanup()
+    w.cleanup()
 
   # create new widget inside existing parent
   widget = eval('reloaded_module.%s(parent)' % widgetName)
@@ -432,38 +589,64 @@ def resetSliceViews():
 # MRML
 #
 
-def getNodes(pattern = "", scene=None):
-    """Return a dictionary of nodes where the name or id matches the 'pattern'.
-    Providing an empty 'pattern' string will return all nodes.
-    """
-    import slicer, fnmatch
-    nodes = {}
-    if scene is None:
-      scene = slicer.mrmlScene
-    count = scene.GetNumberOfNodes()
-    for idx in range(count):
-      node = scene.GetNthNode(idx)
-      name = node.GetName()
-      id = node.GetID()
-      if fnmatch.fnmatchcase(name, pattern) or fnmatch.fnmatchcase(id, pattern):
+def getNodes(pattern="*", scene=None, useLists=False):
+  """Return a dictionary of nodes where the name or id matches the ``pattern``.
+  By default, ``pattern`` is a wildcard and it returns all nodes associated
+  with ``slicer.mrmlScene``.
+  If multiple node share the same name, using ``useLists=False`` (default behavior)
+  returns only the last node with that name. If ``useLists=True``, it returns
+  a dictionary of lists of nodes.
+  """
+  import slicer, collections, fnmatch
+  nodes = collections.OrderedDict()
+  if scene is None:
+    scene = slicer.mrmlScene
+  count = scene.GetNumberOfNodes()
+  for idx in range(count):
+    node = scene.GetNthNode(idx)
+    name = node.GetName()
+    id = node.GetID()
+    if (fnmatch.fnmatchcase(name, pattern) or
+        fnmatch.fnmatchcase(id, pattern)):
+      if useLists:
+        nodes.setdefault(node.GetName(), []).append(node)
+      else:
         nodes[node.GetName()] = node
-    return nodes
+  return nodes
 
-def getNode(pattern = "", index = 0, scene=None):
-    """Return the indexth node where name or id matches 'pattern'.
-    Providing an empty 'pattern' string will return all nodes.
-    """
-    nodes = getNodes(pattern, scene)
-    try:
-      if nodes.keys():
-        return nodes.values()[index]
-    except IndexError:
-      return None
+def getNode(pattern="*", index=0, scene=None):
+  """Return the indexth node where name or id matches ``pattern``.
+  By default, ``pattern`` is a wildcard and it returns the first node
+  associated with ``slicer.mrmlScene``.
+  """
+  nodes = getNodes(pattern, scene)
+  try:
+    return nodes.values()[index]
+  except IndexError:
+    return None
 
-def getFirstNodeByClassByName(className, name, scene=None):
+def getNodesByClass(className, scene=None):
+  """Return all nodes in the scene of the specified class.
+  """
   import slicer
   if scene is None:
-      scene = slicer.mrmlScene
+    scene = slicer.mrmlScene
+  nodes = slicer.mrmlScene.GetNodesByClass(className)
+  nodes.UnRegister(slicer.mrmlScene)
+  nodeList = []
+  nodes.InitTraversal()
+  node = nodes.GetNextItemAsObject()
+  while node:
+    nodeList.append(node)
+    node = nodes.GetNextItemAsObject()
+  return nodeList
+
+def getFirstNodeByClassByName(className, name, scene=None):
+  """Return the frist node in the scene that matches the specified node name and node class.
+  """
+  import slicer
+  if scene is None:
+    scene = slicer.mrmlScene
   nodes = scene.GetNodesByClassByName(className, name)
   nodes.UnRegister(nodes)
   if nodes.GetNumberOfItems() > 0:
@@ -475,14 +658,9 @@ def getFirstNodeByName(name, className=None):
   - use a regular expression to match names post-pended with addition characters
   - optionally specify a classname that must match
   """
-  nodes = getNodes(name+'*')
-  for nodeName in nodes.keys():
-    if not className:
-      return (nodes[nodeName]) # return the first one
-    else:
-      if nodes[nodeName].IsA(className):
-        return (nodes[nodeName])
-  return None
+  import slicer
+  scene = slicer.mrmlScene
+  return scene.GetFirstNode(name, className, None, False)
 
 class NodeModify:
   """Context manager to conveniently compress mrml node modified event.
@@ -505,39 +683,150 @@ def array(pattern = "", index = 0):
   console for quick debugging/testing.  More specific API should be
   used in scripts to be sure you get exactly what you want.
   """
-  scalarTypes = ('vtkMRMLScalarVolumeNode', 'vtkMRMLLabelMapVolumeNode')
-  vectorTypes = ('vtkMRMLVectorVolumeNode', 'vtkMRMLMultiVolumeNode')
-  tensorTypes = ('vtkMRMLDiffusionTensorVolumeNode',)
-  pointTypes = ('vtkMRMLModelNode',)
-  import vtk.util.numpy_support
-  n = getNode(pattern=pattern, index=index)
-  if n.GetClassName() in scalarTypes:
-    i = n.GetImageData()
-    shape = list(n.GetImageData().GetDimensions())
-    shape.reverse()
-    a = vtk.util.numpy_support.vtk_to_numpy(i.GetPointData().GetScalars()).reshape(shape)
-    return a
-  elif n.GetClassName() in vectorTypes:
-    i = n.GetImageData()
-    shape = list(n.GetImageData().GetDimensions())
-    shape.reverse()
-    components = i.GetNumberOfScalarComponents()
-    if components > 1:
-      shape.append(components)
-    a = vtk.util.numpy_support.vtk_to_numpy(i.GetPointData().GetScalars()).reshape(shape)
-    return a
-  elif n.GetClassName() in tensorTypes:
-    i = n.GetImageData()
-    shape = list(n.GetImageData().GetDimensions())
-    shape.reverse()
-    a = vtk.util.numpy_support.vtk_to_numpy(i.GetPointData().GetTensors()).reshape(shape+[3,3])
-    return a
-  elif n.GetClassName() in pointTypes:
-    p = n.GetPolyData().GetPoints().GetData()
-    a = vtk.util.numpy_support.vtk_to_numpy(p)
-    return a
-  # TODO: accessors for other node types: polydata (verts, polys...), colors
+  node = getNode(pattern=pattern, index=index)
+  import slicer
+  if isinstance(node, slicer.vtkMRMLVolumeNode):
+    return arrayFromVolume(node)
+  elif isinstance(node, slicer.vtkMRMLModelNode):
+    return arrayFromModelPoints(node)
+  elif isinstance(node, slicer.vtkMRMLGridTransformNode):
+    return arrayFromGridTransform(node)
 
+  # TODO: accessors for other node types: polydata (verts, polys...), colors
+  return None
+
+def arrayFromVolume(volumeNode):
+  """Return voxel array from volume node as numpy array.
+  Voxels values are not copied. Voxel values in the volume node can be modified
+  by changing values in the numpy array.
+  After all modifications has been completed, call volumeNode.Modified().
+  """
+  scalarTypes = ['vtkMRMLScalarVolumeNode', 'vtkMRMLLabelMapVolumeNode']
+  vectorTypes = ['vtkMRMLVectorVolumeNode', 'vtkMRMLMultiVolumeNode']
+  tensorTypes = ['vtkMRMLDiffusionTensorVolumeNode']
+  vimage = volumeNode.GetImageData()
+  nshape = tuple(reversed(volumeNode.GetImageData().GetDimensions()))
+  import vtk.util.numpy_support
+  narray = None
+  if volumeNode.GetClassName() in scalarTypes:
+    narray = vtk.util.numpy_support.vtk_to_numpy(vimage.GetPointData().GetScalars()).reshape(nshape)
+  elif volumeNode.GetClassName() in vectorTypes:
+    components = vimage.GetNumberOfScalarComponents()
+    if components > 1:
+      nshape = nshape + (components,)
+    narray = vtk.util.numpy_support.vtk_to_numpy(vimage.GetPointData().GetScalars()).reshape(nshape)
+  elif volumeNode.GetClassName() in tensorTypes:
+    narray = vtk.util.numpy_support.vtk_to_numpy(vimage.GetPointData().GetTensors()).reshape(nshape+(3,3))
+  else:
+    raise RuntimeError("Unsupported volume type: "+volumeNode.GetClassName())
+  return narray
+
+def arrayFromModelPoints(modelNode):
+  """Return point positions of a model node as numpy array.
+  Voxels values in the volume node can be modified by modfying the numpy array.
+  After all modifications has been completed, call modelNode.Modified().
+  """
+  import vtk.util.numpy_support
+  pointData = modelNode.GetPolyData().GetPoints().GetData()
+  narray = vtk.util.numpy_support.vtk_to_numpy(pointData)
+  return narray
+
+def arrayFromGridTransform(gridTransformNode):
+  """Return voxel array from transform node as numpy array.
+  Vector values are not copied. Values in the transform node can be modified
+  by changing values in the numpy array.
+  After all modifications has been completed, call gridTransformNode.Modified().
+  """
+  transformGrid = gridTransformNode.GetTransformFromParent()
+  displacementGrid = transformGrid.GetDisplacementGrid()
+  nshape = tuple(reversed(displacementGrid.GetDimensions()))
+  import vtk.util.numpy_support
+  nshape = nshape + (3,)
+  narray = vtk.util.numpy_support.vtk_to_numpy(displacementGrid.GetPointData().GetScalars()).reshape(nshape)
+  return narray
+
+def arrayFromSegment(segmentationNode, segmentId):
+  """Return voxel array of a segment's binary labelmap representation as numpy array.
+  Voxels values are not copied.
+  If binary labelmap is the master representation then voxel values in the volume node can be modified
+  by changing values in the numpy array. After all modifications has been completed, call:
+  segmentationNode.GetSegmentation().GetSegment(segmentID).Modified()
+  """
+  vimage = segmentationNode.GetBinaryLabelmapRepresentation(segmentId)
+  nshape = tuple(reversed(vimage.GetDimensions()))
+  import vtk.util.numpy_support
+  narray = vtk.util.numpy_support.vtk_to_numpy(vimage.GetPointData().GetScalars()).reshape(nshape)
+  return narray
+
+def updateVolumeFromArray(volumeNode, narray):
+  """Sets voxels of a volume node from a numpy array.
+  Voxels values are copied, therefore if the numpy array
+  is modified after calling this method, voxel values in the volume node will not change.
+  """
+
+  vshape = tuple(reversed(narray.shape))
+  if len(vshape) == 3:
+    # Scalar volume
+    vcomponents = 1
+  elif len(vshape) == 4:
+    # Vector volume
+    vcomponents = vshape[0]
+    vshape = vshape[1:4]
+  else:
+    # TODO: add support for tensor volumes
+    raise RuntimeError("Unsupported numpy array shape: "+str(narray.shape))
+
+  vimage = volumeNode.GetImageData()
+  if not vimage:
+    import vtk
+    vimage = vtk.vtkImageData()
+    volumeNode.SetAndObserveImageData(vimage)
+  import vtk.util.numpy_support
+  vtype = vtk.util.numpy_support.get_vtk_array_type(narray.dtype)
+  vimage.SetDimensions(vshape)
+  vimage.AllocateScalars(vtype, vcomponents)
+
+  narrayTarget = arrayFromVolume(volumeNode)
+  narrayTarget[:] = narray
+
+  # Notify the application that image data is changed
+  # (same notifications as in vtkMRMLVolumeNode.SetImageDataConnection)
+  import slicer
+  volumeNode.StorableModified()
+  volumeNode.Modified()
+  volumeNode.InvokeEvent(slicer.vtkMRMLVolumeNode.ImageDataModifiedEvent, volumeNode)
+
+def updateTableFromArray(tableNode, narrays):
+  """Sets values in a table node from a numpy array.
+  Values are copied, therefore if the numpy array
+  is modified after calling this method, values in the table node will not change.
+
+  Example:
+
+      import numpy as np
+      histogram = np.histogram(arrayFromVolume(getNode('MRHead')))
+      tableNode = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLTableNode")
+      updateTableFromArray(tableNode, histogram)
+
+  """
+  import numpy as np
+  import vtk.util.numpy_support
+
+  if tableNode is None:
+    tableNode = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLTableNode")
+  if type(narrays) == np.ndarray and len(narrays.shape) == 1:
+    ncolumns = [narrays]
+  elif type(narrays) == np.ndarray and len(narrays.shape) == 2:
+    ncolumns = narrays.T
+  elif type(narrays) == tuple or type(narrays) == list:
+    ncolumns = narrays
+  else:
+    raise ValueError('Expected narrays is a numpy ndarray, or tuple or list of numpy ndarrays, got %s instead.' % (str(type(narrays))))
+  tableNode.RemoveAllColumns()
+  for ncolumn in ncolumns:
+    vcolumn = vtk.util.numpy_support.numpy_to_vtk(num_array=ncolumn.ravel(),deep=True,array_type=vtk.VTK_FLOAT)
+    tableNode.AddColumn(vcolumn)
+  return tableNode
 
 #
 # VTK
@@ -643,66 +932,83 @@ def delayDisplay(message,autoCloseMsec=1000):
     okButton.connect('clicked()', messagePopup.close)
   messagePopup.exec_()
 
-def infoDisplay(text, windowTitle="Slicer information", parent=None, standardButtons=None, **kwargs):
+def infoDisplay(text, windowTitle=None, parent=None, standardButtons=None, **kwargs):
   """Display popup with a info message.
   """
-  import qt
+  import qt, slicer
   import logging
+  if not windowTitle:
+    windowTitle = slicer.app.applicationName + " information"
   logging.info(text)
   if mainWindow(verbose=False):
     standardButtons = standardButtons if standardButtons else qt.QMessageBox.Ok
     messageBox(text, parent, windowTitle=windowTitle, icon=qt.QMessageBox.Information, standardButtons=standardButtons,
                **kwargs)
 
-def warningDisplay(text, windowTitle="Slicer warning", parent=None, standardButtons=None, **kwargs):
+def warningDisplay(text, windowTitle=None, parent=None, standardButtons=None, **kwargs):
   """Display popup with a warning message.
   """
-  import qt
+  import qt, slicer
   import logging
+  if not windowTitle:
+    windowTitle = slicer.app.applicationName + " warning"
   logging.warning(text)
   if mainWindow(verbose=False):
     standardButtons = standardButtons if standardButtons else qt.QMessageBox.Ok
     messageBox(text, parent, windowTitle=windowTitle, icon=qt.QMessageBox.Warning, standardButtons=standardButtons,
                **kwargs)
 
-def errorDisplay(text, windowTitle="Slicer error", parent=None, standardButtons=None, **kwargs):
+def errorDisplay(text, windowTitle=None, parent=None, standardButtons=None, **kwargs):
   """Display an error popup.
   """
-  import qt
+  import qt, slicer
   import logging
+  if not windowTitle:
+    windowTitle = slicer.app.applicationName + " error"
   logging.error(text)
   if mainWindow(verbose=False):
     standardButtons = standardButtons if standardButtons else qt.QMessageBox.Ok
     messageBox(text, parent, windowTitle=windowTitle, icon=qt.QMessageBox.Critical, standardButtons=standardButtons,
                **kwargs)
 
-def confirmOkCancelDisplay(text, windowTitle="Slicer confirmation", parent=None, **kwargs):
+def confirmOkCancelDisplay(text, windowTitle=None, parent=None, **kwargs):
   """Display an confirmation popup. Return if confirmed with OK.
   """
-  import qt
+  import qt, slicer
+  if not windowTitle:
+    windowTitle = slicer.app.applicationName + " confirmation"
   result = messageBox(text, parent=parent, windowTitle=windowTitle, icon=qt.QMessageBox.Question,
                        standardButtons=qt.QMessageBox.Ok | qt.QMessageBox.Cancel, **kwargs)
   return result == qt.QMessageBox.Ok
 
-def confirmYesNoDisplay(text, windowTitle="Slicer confirmation", parent=None, **kwargs):
+def confirmYesNoDisplay(text, windowTitle=None, parent=None, **kwargs):
   """Display an confirmation popup. Return if confirmed with Yes.
   """
-  import qt
+  import qt, slicer
+  if not windowTitle:
+    windowTitle = slicer.app.applicationName + " confirmation"
   result = messageBox(text, parent=parent, windowTitle=windowTitle, icon=qt.QMessageBox.Question,
                        standardButtons=qt.QMessageBox.Yes | qt.QMessageBox.No, **kwargs)
   return result == qt.QMessageBox.Yes
 
-def confirmRetryCloseDisplay(text, windowTitle="Slicer error", parent=None, **kwargs):
+def confirmRetryCloseDisplay(text, windowTitle=None, parent=None, **kwargs):
   """Display an confirmation popup. Return if confirmed with Retry.
   """
-  import qt
+  import qt, slicer
+  if not windowTitle:
+    windowTitle = slicer.app.applicationName + " error"
   result = messageBox(text, parent=parent, windowTitle=windowTitle, icon=qt.QMessageBox.Critical,
                        standardButtons=qt.QMessageBox.Retry | qt.QMessageBox.Close, **kwargs)
   return result == qt.QMessageBox.Retry
 
 def messageBox(text, parent=None, **kwargs):
+  """Displays a messagebox.
+  ctkMessageBox is used instead of a default qMessageBox to provide "Don't show again" checkbox.
+  For example: slicer.util.messageBox("Some message", dontShowAgainSettingsKey = "MainWindow/DontShowSomeMessage")
+  """
   import qt
-  mbox = qt.QMessageBox(parent if parent else mainWindow())
+  import ctk
+  mbox = ctk.ctkMessageBox(parent if parent else mainWindow())
   mbox.text = text
   for key, value in kwargs.iteritems():
     if hasattr(mbox, key):
@@ -759,3 +1065,162 @@ def settingsValue(key, default, converter=lambda v: v, settings=None):
   import qt
   settings = qt.QSettings() if settings is None else settings
   return converter(settings.value(key)) if settings.contains(key) else default
+
+def clickAndDrag(widget,button='Left',start=(10,10),end=(10,40),steps=20,modifiers=[]):
+  """
+  Send synthetic mouse events to the specified widget (qMRMLSliceWidget or qMRMLThreeDView)
+  button : "Left", "Middle", "Right", or "None"
+  start, end : window coordinates for action
+  steps : number of steps to move in, if <2 then mouse jumps to the end position
+  modifiers : list containing zero or more of "Shift" or "Control"
+
+  Hint: for generating test data you can use this snippet of code:
+
+layoutManager = slicer.app.layoutManager()
+threeDView = layoutManager.threeDWidget(0).threeDView()
+style = threeDView.interactorStyle()
+interactor = style.GetInteractor()
+def onClick(caller,event):
+    print(interactor.GetEventPosition())
+
+interactor.AddObserver(vtk.vtkCommand.LeftButtonPressEvent, onClick)
+
+  """
+  style = widget.interactorStyle()
+  interactor = style.GetInteractor()
+  if button == 'Left':
+    down = interactor.LeftButtonPressEvent
+    up = interactor.LeftButtonReleaseEvent
+  elif button == 'Right':
+    down = interactor.RightButtonPressEvent
+    up = interactor.RightButtonReleaseEvent
+  elif button == 'Middle':
+    down = interactor.MiddleButtonPressEvent
+    up = interactor.MiddleButtonReleaseEvent
+  elif button == 'None' or not button:
+    down = lambda : None
+    up = lambda : None
+  else:
+    raise Exception("Bad button - should be Left or Right, not %s" % button)
+  if 'Shift' in modifiers:
+    interactor.SetShiftKey(1)
+  if 'Control' in modifiers:
+    interactor.SetControlKey(1)
+  interactor.SetEventPosition(*start)
+  down()
+  if (steps<2):
+    interactor.SetEventPosition(end[0], end[1])
+    interactor.MouseMoveEvent()
+  else:
+    for step in xrange(steps):
+      frac = float(step)/(steps-1)
+      x = int(start[0] + frac*(end[0]-start[0]))
+      y = int(start[1] + frac*(end[1]-start[1]))
+      interactor.SetEventPosition(x,y)
+      interactor.MouseMoveEvent()
+  up()
+  interactor.SetShiftKey(0)
+  interactor.SetControlKey(0)
+
+def downloadFile(url, targetFilePath):
+  """ Download ``url`` to local storage as ``targetFilePath``
+
+  Target file path needs to indicate the file name and extension as well
+  """
+  import os
+  import logging
+  if not os.path.exists(targetFilePath) or os.stat(targetFilePath).st_size == 0:
+    logging.info('Downloading from\n  %s\nas file\n  %s\nIt may take a few minutes...' % (url,targetFilePath))
+    try:
+      import urllib
+      urllib.urlretrieve(url, targetFilePath)
+    except Exception, e:
+      import traceback
+      traceback.print_exc()
+      logging.error('Failed to download file from ' + url)
+      return False
+  else:
+    logging.info('Requested file has been found: ' + targetFilePath)
+  return True
+
+def extractArchive(archiveFilePath, outputDir, expectedNumberOfExtractedFiles=None):
+  """ Extract file ``archiveFilePath`` into folder ``outputDir``.
+
+  Number of expected files unzipped may be specified in ``expectedNumberOfExtractedFiles``.
+  If folder contains the same number of files as expected (if specified), then it will be
+  assumed that unzipping has been successfully done earlier.
+  """
+  import os
+  import logging
+  from slicer import app
+  if not os.path.exists(archiveFilePath):
+    logging.error('Specified file %s does not exist' % (archiveFilePath))
+    return False
+  fileName, fileExtension = os.path.splitext(archiveFilePath)
+  if fileExtension.lower() != '.zip':
+    #TODO: Support other archive types
+    logging.error('Only zip archives are supported now, got ' + fileExtension)
+    return False
+
+  numOfFilesInOutputDir = len(getFilesInDirectory(outputDir, False))
+  if expectedNumberOfExtractedFiles is not None \
+      and numOfFilesInOutputDir == expectedNumberOfExtractedFiles:
+    logging.info('File %s already unzipped into %s' % (archiveFilePath, outputDir))
+    return True
+
+  extractSuccessful = app.applicationLogic().Unzip(archiveFilePath, outputDir)
+  numOfFilesInOutputDirTest = len(getFilesInDirectory(outputDir, False))
+  if extractSuccessful is False or (expectedNumberOfExtractedFiles is not None \
+      and numOfFilesInOutputDirTest != expectedNumberOfExtractedFiles):
+    logging.error('Unzipping %s into %s failed' % (archiveFilePath, outputDir))
+    return False
+  logging.info('Unzipping %s into %s successful' % (archiveFilePath, outputDir))
+  return True
+
+def downloadAndExtractArchive(url, archiveFilePath, outputDir, \
+                              expectedNumberOfExtractedFiles=None, numberOfTrials=3):
+  """ Downloads an archive from ``url`` as ``archiveFilePath``, and extracts it to ``outputDir``.
+
+  This combined function tests the success of the download by the extraction step,
+  and re-downloads if extraction failed.
+  """
+  import os
+  import shutil
+  import logging
+
+  maxNumberOfTrials = numberOfTrials
+
+  def _cleanup():
+    # If there was a failure, delete downloaded file and empty output folder
+    logging.warning('Download and extract failed, removing archive and destination folder and retrying. Attempt #%d...' % (maxNumberOfTrials - numberOfTrials))
+    os.remove(archiveFilePath)
+    shutil.rmtree(outputDir)
+    os.mkdir(outputDir)
+
+  while numberOfTrials:
+    if not downloadFile(url, archiveFilePath):
+      numberOfTrials -= 1
+      _cleanup()
+      continue
+    if not extractArchive(archiveFilePath, outputDir, expectedNumberOfExtractedFiles):
+      numberOfTrials -= 1
+      _cleanup()
+      continue
+    return True
+
+  _cleanup()
+  return False
+
+def getFilesInDirectory(directory, absolutePath=True):
+  """ Collect all files in a directory and its subdirectories in a list
+  """
+  import os
+  allFiles=[]
+  for root, subdirs, files in os.walk(directory):
+    for fileName in files:
+      if absolutePath:
+        fileAbsolutePath = os.path.abspath(os.path.join(root, fileName)).replace('\\','/')
+        allFiles.append(fileAbsolutePath)
+      else:
+        allFiles.append(fileName)
+  return allFiles

@@ -18,9 +18,6 @@
 
 ==============================================================================*/
 
-// Qt includes
-#include <QtPlugin>
-
 // SlicerQt includes
 #include "qSlicerApplication.h"
 #include "qSlicerCoreIOManager.h"
@@ -34,8 +31,6 @@
 #include "qSlicerTransformsModule.h"
 #include "qSlicerTransformsModuleWidget.h"
 #include "qSlicerTransformsReader.h"
-#include "vtkMRMLTransformsDisplayableManager2D.h"
-#include "vtkMRMLTransformsDisplayableManager3D.h"
 
 // VTK includes
 #include "vtkSmartPointer.h"
@@ -44,8 +39,15 @@
 #include "qSlicerSubjectHierarchyPluginHandler.h"
 #include "qSlicerSubjectHierarchyTransformsPlugin.h"
 
+// DisplayableManager initialization
+#include <vtkAutoInit.h>
+VTK_MODULE_INIT(vtkSlicerTransformsModuleMRMLDisplayableManager)
+
 //-----------------------------------------------------------------------------
+#if (QT_VERSION < QT_VERSION_CHECK(5, 0, 0))
+#include <QtPlugin>
 Q_EXPORT_PLUGIN2(qSlicerTransformsModule, qSlicerTransformsModule);
+#endif
 
 
 //-----------------------------------------------------------------------------
@@ -148,14 +150,19 @@ void qSlicerTransformsModule::setup()
     "Transforms", QString("TransformFile"),
     QStringList() << "vtkMRMLTransformNode", true, this));
 
-  // Use the displayable manager class to make sure the the containing library is loaded
-  vtkSmartPointer<vtkMRMLTransformsDisplayableManager2D> dm2d=vtkSmartPointer<vtkMRMLTransformsDisplayableManager2D>::New();
-  vtkSmartPointer<vtkMRMLTransformsDisplayableManager3D> dm3d=vtkSmartPointer<vtkMRMLTransformsDisplayableManager3D>::New();
-
   // Register displayable managers
   vtkMRMLSliceViewDisplayableManagerFactory::GetInstance()->RegisterDisplayableManager("vtkMRMLTransformsDisplayableManager2D");
   vtkMRMLThreeDViewDisplayableManagerFactory::GetInstance()->RegisterDisplayableManager("vtkMRMLTransformsDisplayableManager3D");
+  vtkMRMLThreeDViewDisplayableManagerFactory::GetInstance()->RegisterDisplayableManager("vtkMRMLLinearTransformsDisplayableManager3D");
 
   // Register Subject Hierarchy core plugins
   qSlicerSubjectHierarchyPluginHandler::instance()->registerPlugin(new qSlicerSubjectHierarchyTransformsPlugin());
+}
+
+//-----------------------------------------------------------------------------
+QStringList qSlicerTransformsModule::associatedNodeTypes() const
+{
+  return QStringList()
+    << "vtkMRMLTransformNode"
+    << "vtkMRMLTransformDisplayNode";
 }

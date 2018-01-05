@@ -2,15 +2,9 @@
 include(@CMAKE_SOURCE_DIR@/CMake/BundleUtilitiesWithRPath.cmake)
 #include(BundleUtilities)
 
-#
-# Avoid following symlinks encountered during FILE GLOB_RECURSE calls:
-#
-if(COMMAND CMAKE_POLICY)
-  cmake_policy(SET CMP0009 NEW)
-  if(POLICY CMP0011)
-    cmake_policy(SET CMP0011 NEW)
-  endif()
-endif()
+#-----------------------------------------------------------------------------
+set(PYTHON_STDLIB_SUBDIR "@PYTHON_STDLIB_SUBDIR@")
+set(PYTHON_SITE_PACKAGES_SUBDIR "@PYTHON_SITE_PACKAGES_SUBDIR@")
 
 #-----------------------------------------------------------------------------
 # gp_log_message - Convenient function allowing to both display and log a message.
@@ -64,7 +58,7 @@ function(gp_item_default_embedded_path_override item default_embedded_path_var)
     endif()
     # Python extensions
     if(item MATCHES "lib-dynload/[^/]+\\.so$")
-      set(path "@fixup_path@/lib/Python/lib/python2.7/lib-dynload")
+      set(path "@fixup_path@/lib/Python/${PYTHON_STDLIB_SUBDIR}/lib-dynload")
     endif()
   endif()
 
@@ -84,7 +78,7 @@ function(gp_item_default_embedded_path_override item default_embedded_path_var)
   if(Slicer_USE_SimpleITK)
     if (item MATCHES  "site-packages/(SimpleITK.*)/_SimpleITK\\.so" )
       # CMAKE_MATCH_1 is the over complicated egg path
-      set(python_sys_site_path "@fixup_path@/lib/Python/lib/python2.7/site-packages")
+      set(python_sys_site_path "@fixup_path@/lib/Python/${PYTHON_SITE_PACKAGES_SUBDIR}")
       set(path "${python_sys_site_path}/${CMAKE_MATCH_1}/")
     endif()
   endif()
@@ -145,7 +139,7 @@ function(fixup_bundle_with_plugins app)
     endif()
   endforeach()
 
-  set(candiates_pattern
+  set(candidates_pattern
     "${app_dir}/Contents/@Slicer_ITKFACTORIES_DIR@/*Plugin.dylib"
     "${app_dir}/Contents/@Slicer_QtPlugins_DIR@/designer/*Plugins.so"
     "${app_dir}/Contents/@Slicer_QtPlugins_DIR@/designer/*.dylib"
@@ -153,6 +147,7 @@ function(fixup_bundle_with_plugins app)
     "${app_dir}/Contents/@Slicer_QtPlugins_DIR@/styles/*Plugins.so"
     "${app_dir}/Contents/@Slicer_QtPlugins_DIR@/imageformats/*${suffix}"
     "${app_dir}/Contents/@Slicer_QtPlugins_DIR@/sqldrivers/*${suffix}"
+    "${app_dir}/Contents/@Slicer_QtPlugins_DIR@/platforms/*${suffix}"
     )
 
   set(Slicer_BUILD_CLI_SUPPORT "@Slicer_BUILD_CLI_SUPPORT@")
@@ -161,53 +156,53 @@ function(fixup_bundle_with_plugins app)
 
   set(Slicer_BUILD_QTLOADABLEMODULES "@Slicer_BUILD_QTLOADABLEMODULES@")
   if(Slicer_BUILD_QTLOADABLEMODULES)
-    list(APPEND candiates_pattern
+    list(APPEND candidates_pattern
       "${app_dir}/Contents/@Slicer_QTLOADABLEMODULES_LIB_DIR@/libq*Module${suffix}"
       "${app_dir}/Contents/@Slicer_QTLOADABLEMODULES_LIB_DIR@/*Python.so"
       )
     if(Slicer_USE_PYTHONQT)
-      list(APPEND candiates_pattern
+      list(APPEND candidates_pattern
         "${app_dir}/Contents/@Slicer_QTLOADABLEMODULES_LIB_DIR@/qSlicer*PythonQt.so"
         )
     endif()
   endif()
 
   if(Slicer_USE_PYTHONQT)
-    list(APPEND candiates_pattern
+    list(APPEND candidates_pattern
       "${app_dir}/Contents/@Slicer_LIB_DIR@/*Python.so"
       "${app_dir}/Contents/@Slicer_LIB_DIR@/*PythonQt.so"
       # Since both core python and numpy module have no dependency beside of
       # system library, there is no need to fix them.
-      # "${app_dir}/Contents/lib/Python/lib/python2.7/site-packages/*.so"
-      #"${app_dir}/Contents/lib/Python/lib/python2.7/lib-dynload/*.so"
+      # "${app_dir}/Contents/lib/Python/${PYTHON_SITE_PACKAGES_SUBDIR}/*.so"
+      #"${app_dir}/Contents/lib/Python/${PYTHON_STDLIB_SUBDIR}/lib-dynload/*.so"
       )
   endif()
 
   set(Slicer_USE_PYTHONQT_WITH_OPENSSL "@Slicer_USE_PYTHONQT_WITH_OPENSSL@")
   if(Slicer_USE_PYTHONQT_WITH_OPENSSL)
-    list(APPEND candiates_pattern
-      "${app_dir}/Contents/lib/Python/lib/python2.7/lib-dynload/_hashlib.so"
-      "${app_dir}/Contents/lib/Python/lib/python2.7/lib-dynload/_ssl.so"
+    list(APPEND candidates_pattern
+      "${app_dir}/Contents/lib/Python/${PYTHON_STDLIB_SUBDIR}/lib-dynload/_hashlib.so"
+      "${app_dir}/Contents/lib/Python/${PYTHON_STDLIB_SUBDIR}/lib-dynload/_ssl.so"
       )
   endif()
 
   set(Slicer_USE_PYTHONQT_WITH_TCL "@Slicer_USE_PYTHONQT_WITH_TCL@")
   if(Slicer_USE_PYTHONQT_WITH_TCL)
-    list(APPEND candiates_pattern
-      "${app_dir}/Contents/lib/Python/lib/python2.7/lib-dynload/_tkinter.so"
+    list(APPEND candidates_pattern
+      "${app_dir}/Contents/lib/Python/${PYTHON_STDLIB_SUBDIR}/lib-dynload/_tkinter.so"
       "${app_dir}/Contents/lib/TclTk/lib/lib*${suffix}"
       )
   endif()
 
   set(Slicer_USE_SimpleITK "@Slicer_USE_SimpleITK@")
   if(Slicer_USE_SimpleITK)
-    list(APPEND candiates_pattern
-      "${app_dir}/Contents/lib/Python/lib/python2.7/site-packages/SimpleITK*/_SimpleITK.so"
+    list(APPEND candidates_pattern
+      "${app_dir}/Contents/lib/Python/${PYTHON_SITE_PACKAGES_SUBDIR}/SimpleITK*/_SimpleITK.so"
       )
   endif()
 
   set(libs "")
-  file(GLOB_RECURSE candidates ${candiates_pattern})
+  file(GLOB_RECURSE candidates ${candidates_pattern})
   foreach(lib ${candidates})
     if(NOT lib MATCHES "(_debug|d[0-9])${suffix}$")
       set(libs ${libs} "${lib}")
@@ -228,6 +223,11 @@ function(fixup_bundle_with_plugins app)
   foreach(dir "@CTK_LIBRARY_DIRS@")
     _fixup_paths_append(libs_path ${dir})
   endforeach()
+  if(Slicer_BUILD_PARAMETERSERIALIZER_SUPPORT)
+    foreach(dir "@JsonCpp_LIBRARY_DIRS@")
+      _fixup_paths_append(libs_path ${dir})
+    endforeach()
+  endif()
   if(Slicer_BUILD_CLI_SUPPORT)
     foreach(dir "@SlicerExecutionModel_LIBRARY_DIRS@")
       _fixup_paths_append(libs_path ${dir})
@@ -271,6 +271,7 @@ function(fixup_bundle_with_plugins app)
   _fixup_paths_append(libs_path "${Slicer_BUILD_DIR}/@Slicer_BIN_DIR@/styles")
   #_fixup_paths_append(libs_path "${Slicer_BUILD_DIR}/@Slicer_BIN_DIR@/imageformats")
   #_fixup_paths_append(libs_path "${Slicer_BUILD_DIR}/@Slicer_BIN_DIR@/sqldrivers")
+  #_fixup_paths_append(libs_path "${Slicer_BUILD_DIR}/@Slicer_BIN_DIR@/platforms")
   if (Slicer_ADDITIONAL_PROJECTS)
     foreach(additional_project ${Slicer_ADDITIONAL_PROJECTS})
       find_package(${additional_project})
@@ -323,5 +324,5 @@ function(fixup_bundle_with_plugins app)
     )
 endfunction()
 
-fixup_bundle_with_plugins("@Slicer_MAIN_PROJECT_APPLICATION_NAME@.app")
-#verify_app("/Users/partyd/Kitware/Slicer4-trunk/build/Slicer-build/_CPack_Packages/Darwin/DragNDrop/Slicer-4.0.gamma-2011-05-10-Darwin/@Slicer_MAIN_PROJECT_APPLICATION_NAME@.app")
+set(app_name "@Slicer_MAIN_PROJECT_APPLICATION_NAME@.app")
+fixup_bundle_with_plugins(${app_name})

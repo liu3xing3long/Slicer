@@ -20,6 +20,7 @@ Version:   $Revision: 1.11 $
 #include <vtkCallbackCommand.h>
 #include <vtkNew.h>
 #include <vtkObjectFactory.h>
+#include <vtkStringArray.h>
 
 // VTKSYS includes
 #include <vtksys/SystemTools.hxx>
@@ -33,9 +34,6 @@ Version:   $Revision: 1.11 $
 vtkMRMLNode::vtkMRMLNode()
 {
   this->ID = NULL;
-
-  // By default nodes have no effect on indentation
-  this->Indent = 0;
 
   // Strings
   this->Description = NULL;
@@ -167,15 +165,87 @@ void vtkMRMLNode::Copy(vtkMRMLNode *node)
   this->EndModify(disabledModify);
 }
 
+bool ArraysEqual(vtkIntArray* array1, vtkIntArray* array2)
+{
+  if (array1 == NULL && array2 == NULL)
+    {
+    return true;
+    }
+  if (array1 == NULL || array2 == NULL)
+    {
+    return false;
+    }
+  if (array1->GetNumberOfTuples() != array2->GetNumberOfTuples())
+    {
+    return false;
+    }
+  int arraySize = array1->GetNumberOfTuples();
+  for (int i = 0; i<arraySize; i++)
+    {
+    if (array1->GetValue(i) != array2->GetValue(i))
+      {
+      return false;
+      }
+    }
+  return true;
+}
+
 //----------------------------------------------------------------------------
 void vtkMRMLNode::CopyReferences(vtkMRMLNode* node)
 {
-  // Remove references if not existing in the node to copy
+  this->NodeReferenceMRMLAttributeNames = node->NodeReferenceMRMLAttributeNames;
+  this->NodeReferenceEvents = node->NodeReferenceEvents;
+
+  // Only update references is they are different (to avoid unnecessary event invocations)
+  std::vector<std::string> referenceRoles;
+  this->GetNodeReferenceRoles(referenceRoles);
+  std::vector<std::string> referenceRolesInSource;
+  node->GetNodeReferenceRoles(referenceRolesInSource);
+  bool referencesAreEqual = false;
+  if (referenceRoles == referenceRolesInSource)
+    {
+    referencesAreEqual = true;
+    for (NodeReferencesType::iterator sourceNodeReferencesIt = node->NodeReferences.begin();
+      sourceNodeReferencesIt != node->NodeReferences.end() && referencesAreEqual; sourceNodeReferencesIt++)
+      {
+      std::string referenceRole = sourceNodeReferencesIt->first;
+      NodeReferencesType::iterator targetNodeReferencesIt = this->NodeReferences.find(referenceRole);
+      if (sourceNodeReferencesIt->second.size() != targetNodeReferencesIt->second.size())
+        {
+        referencesAreEqual = false;
+        break;
+        }
+      int numberOfNodeReferences = sourceNodeReferencesIt->second.size();
+      for (int i = 0; i < numberOfNodeReferences; i++)
+        {
+        vtkMRMLNodeReference* sourceReference = sourceNodeReferencesIt->second[i];
+        vtkMRMLNodeReference* targetReference = targetNodeReferencesIt->second[i];
+        if (!sourceReference || !targetReference)
+          {
+          vtkErrorMacro(<< "CopyReferences: invalid reference found.");
+          referencesAreEqual = false;
+          break;
+          }
+        if (strcmp(sourceReference->GetReferencedNodeID(), targetReference->GetReferencedNodeID()) != 0
+          || !ArraysEqual(sourceReference->GetEvents(), targetReference->GetEvents()))
+          {
+          referencesAreEqual = false;
+          break;
+          }
+        }
+      }
+    }
+
+  if (referencesAreEqual)
+    {
+    // no need to copy, they are already the same
+    return;
+    }
+
+  // Remove all existing references
   this->RemoveNodeReferenceIDs(NULL);
 
-  this->NodeReferenceMRMLAttributeNames = node->NodeReferenceMRMLAttributeNames;
-
-  // Add or replace node references
+  // Add node references
   for (NodeReferencesType::iterator it = node->NodeReferences.begin(); it != node->NodeReferences.end(); it++)
     {
     std::string referenceRole = it->first;
@@ -194,6 +264,7 @@ void vtkMRMLNode::CopyReferences(vtkMRMLNode* node)
       copiedReference->SetReferenceRole(referenceRole.c_str());
       copiedReference->SetReferencedNodeID(reference->GetReferencedNodeID());
       copiedReference->SetReferencingNode(this);
+      copiedReference->SetEvents(reference->GetEvents());
       this->NodeReferences[std::string(referenceRole)].push_back(copiedReference.GetPointer());
       }
     }
@@ -232,6 +303,8 @@ void vtkMRMLNode::PrintSelf(ostream& os, vtkIndent indent)
 {
   os << indent << "ID: " <<
     (this->ID ? this->ID : "(none)") << "\n";
+  os << indent << "Class: " <<
+    (this->GetClassName() ? this->GetClassName() : "(none)") << "\n";
 
   // vtkObject's PrintSelf prints a long list of registered events, which
   // is too long and not useful, therefore we don't call vtkObject::PrintSelf
@@ -252,7 +325,6 @@ void vtkMRMLNode::PrintSelf(ostream& os, vtkIndent indent)
 
   os << indent << "Selectable: " << this->Selectable << "\n";
   os << indent << "Selected: " << this->Selected << "\n";
-  os << indent << "Indent:      " << this->Indent << "\n";
 
   if (!this->Attributes.empty())
     {
@@ -445,31 +517,32 @@ void vtkMRMLNode::ParseReferencesAttribute(const char *attValue,
 void vtkMRMLNode::WriteXML(ostream& of, int nIndent)
 {
   vtkIndent indent(nIndent);
+  of << indent;
   if (this->ID != NULL)
     {
-    of << indent << " id=\"" << this->ID << "\"";
+    of << " id=\"" << this->ID << "\"";
     }
   if (this->Name != NULL)
     {
-    of << indent << " name=\"" << this->Name << "\"";
+    of << " name=\"" << this->Name << "\"";
     }
   if (this->Description != NULL)
     {
-    of << indent << " description=\"" << this->Description << "\"";
+    of << " description=\"" << this->Description << "\"";
     }
-  of << indent << " hideFromEditors=\"" << (this->HideFromEditors ? "true" : "false") << "\"";
+  of << " hideFromEditors=\"" << (this->HideFromEditors ? "true" : "false") << "\"";
 
-  of << indent << " selectable=\"" << (this->Selectable ? "true" : "false") << "\"";
-  of << indent << " selected=\"" << (this->Selected ? "true" : "false") << "\"";
+  of << " selectable=\"" << (this->Selectable ? "true" : "false") << "\"";
+  of << " selected=\"" << (this->Selected ? "true" : "false") << "\"";
 
   if (this->SingletonTag)
     {
-    of << indent << " singletonTag=\"" << this->SingletonTag << "\"";
+    of << " singletonTag=\"" << this->SingletonTag << "\"";
     }
 
   if (this->Attributes.size())
     {
-    of << indent << " attributes=\"";
+    of << " attributes=\"";
     AttributesType::const_iterator it;
     AttributesType::const_iterator begin = this->Attributes.begin();
     AttributesType::const_iterator end = this->Attributes.end();
@@ -522,15 +595,15 @@ void vtkMRMLNode::WriteXML(ostream& of, int nIndent)
       {
       if (referenceMRMLAttributeName.length() > 0)
         {
-        of << indent << " " << referenceMRMLAttributeName << "=\"" << ss.str().c_str() << "\"";
+        of << " " << referenceMRMLAttributeName << "=\"" << ss.str().c_str() << "\"";
         }
       ssRef << ";";
       }
-    }//for (it = this->NodeReferences.begin(); it != this->NodeReferences.end(); it++)
+    }
 
     if (!(ssRef.str().empty()))
       {
-      of << indent << " " << "references=\"" << ssRef.str().c_str() << "\"";
+      of << " " << "references=\"" << ssRef.str().c_str() << "\"";
       }
 }
 
@@ -842,6 +915,21 @@ std::vector< std::string > vtkMRMLNode::GetAttributeNames()
 }
 
 //----------------------------------------------------------------------------
+void vtkMRMLNode::GetAttributeNames(vtkStringArray* attributeNames)
+{
+  if (attributeNames == NULL)
+    {
+    vtkErrorMacro("vtkMRMLNode::GetAttributeNames: attributeNames is invalid");
+    return;
+    }
+  attributeNames->Reset();
+  for (AttributesType::iterator iter = this->Attributes.begin(); iter != this->Attributes.end(); ++iter)
+    {
+    attributeNames->InsertNextValue(iter->first);
+    }
+}
+
+//----------------------------------------------------------------------------
 // Description:
 // the MRMLCallback is a static function to relay modified events from the
 // observed mrml node back into the gui layer for further processing
@@ -1035,6 +1123,35 @@ void vtkMRMLNode::RemoveNodeReferenceIDs(const char* referenceRole)
     this->RemoveNthNodeReferenceID(referenceRole, 0);
     }
   this->EndModify(wasModifying);
+}
+
+//----------------------------------------------------------------------------
+void vtkMRMLNode::GetNodeReferenceRoles(std::vector<std::string> &roles)
+{
+  roles.clear();
+  for (NodeReferencesType::iterator roleIt = this->NodeReferences.begin(); roleIt != this->NodeReferences.end(); roleIt++)
+    {
+    roles.push_back(roleIt->first);
+    }
+}
+
+//----------------------------------------------------------------------------
+int vtkMRMLNode::GetNumberOfNodeReferenceRoles()
+{
+  return this->NodeReferences.size();
+}
+
+//----------------------------------------------------------------------------
+const char* vtkMRMLNode::GetNthNodeReferenceRole(int n)
+{
+  if (n < 0 || n >= static_cast<int>(this->NodeReferences.size()))
+    {
+    vtkErrorMacro("vtkMRMLNode::GetNthNodeReferenceRole failed: n=" << n << " is out of range");
+    return NULL;
+    }
+  NodeReferencesType::iterator roleIt( this->NodeReferences.begin() );
+  std::advance( roleIt, n );
+  return roleIt->first.c_str();
 }
 
 //----------------------------------------------------------------------------
@@ -1599,7 +1716,12 @@ vtkMRMLNode::vtkMRMLNodeReference* vtkMRMLNode::vtkMRMLNodeReference::New()
     {
     return static_cast<vtkMRMLNode::vtkMRMLNodeReference*>(ret);
     }
-  return new vtkMRMLNode::vtkMRMLNodeReference;
+
+  vtkMRMLNode::vtkMRMLNodeReference* result = new vtkMRMLNode::vtkMRMLNodeReference;
+#ifdef VTK_HAS_INITIALIZE_OBJECT_BASE
+  result->InitializeObjectBase();
+#endif
+  return result;
 }
 
 //----------------------------------------------------------------------------

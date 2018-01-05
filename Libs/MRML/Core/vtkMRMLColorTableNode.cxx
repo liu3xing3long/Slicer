@@ -18,13 +18,13 @@ Version:   $Revision: 1.0 $
 #include "vtkMRMLScene.h"
 
 // VTK includes
+#include <vtkCommand.h>
 #include <vtkLookupTable.h>
+#include <vtkNew.h>
 #include <vtkObjectFactory.h>
 
 // STD includes
 #include <sstream>
-
-vtkCxxSetObjectMacro(vtkMRMLColorTableNode, LookupTable, vtkLookupTable);
 
 //------------------------------------------------------------------------------
 vtkMRMLNodeNewMacro(vtkMRMLColorTableNode);
@@ -41,10 +41,7 @@ vtkMRMLColorTableNode::vtkMRMLColorTableNode()
 //----------------------------------------------------------------------------
 vtkMRMLColorTableNode::~vtkMRMLColorTableNode()
 {
-  if (this->LookupTable)
-    {
-    this->LookupTable->Delete();
-    }
+  this->SetAndObserveLookupTable(NULL);
 }
 
 //----------------------------------------------------------------------------
@@ -53,8 +50,6 @@ void vtkMRMLColorTableNode::WriteXML(ostream& of, int nIndent)
   // Write all attributes not equal to their FullRainbows
 
   Superclass::WriteXML(of, nIndent);
-
-  vtkIndent indent(nIndent);
 
   // only print out the look up table size so that the table can be
   // initialized properly
@@ -178,10 +173,25 @@ void vtkMRMLColorTableNode::Copy(vtkMRMLNode *anode)
 
   Superclass::Copy(anode);
   vtkMRMLColorTableNode *node = (vtkMRMLColorTableNode *) anode;
-  if (node->LookupTable)
+
+  // Deep copy LookupTable
+  if (node->GetLookupTable() != NULL)
     {
-    this->SetLookupTable(node->LookupTable);
+    if (this->LookupTable == NULL)
+      {
+      vtkNew<vtkLookupTable> lut;
+      this->SetAndObserveLookupTable(lut.GetPointer());
+      }
+    if (this->LookupTable != node->GetLookupTable())
+      {
+      this->LookupTable->DeepCopy(node->GetLookupTable());
+      }
     }
+  else
+    {
+    this->SetAndObserveLookupTable(NULL);
+    }
+
   this->EndModify(disabledModify);
 
 }
@@ -577,14 +587,13 @@ void vtkMRMLColorTableNode::ProcessMRMLEvents ( vtkObject *caller,
                                            void *callData )
 {
   Superclass::ProcessMRMLEvents(caller, event, callData);
-/*
-  vtkMRMLColorTableDisplayNode *dnode = this->GetDisplayNode();
-  if (dnode != NULL && dnode == vtkMRMLColorTableDisplayNode::SafeDownCast(caller) &&
-      event ==  vtkCommand::ModifiedEvent)
+
+  // Emit a node modified event if the lookup table object is modified
+  if (caller != NULL && caller == this->LookupTable && event == vtkCommand::ModifiedEvent)
     {
-        this->InvokeEvent(vtkMRMLColorTableNode::DisplayModifiedEvent, NULL);
+    Modified();
     }
-*/
+
   return;
 }
 
@@ -1418,24 +1427,18 @@ void vtkMRMLColorTableNode::Reset(vtkMRMLNode* defaultNode)
 }
 
 //---------------------------------------------------------------------------
-int vtkMRMLColorTableNode::GetColorIndexByName(const char *name)
-{
-  if (this->GetNamesInitialised() && name != NULL)
-    {
-    std::string strName = name;
-    for (unsigned int i = 0; i < this->Names.size(); i++)
-      {
-      if (strName.compare(this->GetColorName(i)) == 0)
-        {
-        return i;
-        }
-      }
-    }
-    return -1;
-}
-
-//---------------------------------------------------------------------------
 vtkMRMLStorageNode* vtkMRMLColorTableNode::CreateDefaultStorageNode()
 {
   return vtkMRMLColorTableStorageNode::New();
 };
+
+//----------------------------------------------------------------------------
+void vtkMRMLColorTableNode::SetAndObserveLookupTable(vtkLookupTable *lut)
+{
+  if (lut == this->LookupTable)
+    {
+    return;
+    }
+  vtkSetAndObserveMRMLObjectMacro(this->LookupTable, lut);
+  this->Modified();
+}

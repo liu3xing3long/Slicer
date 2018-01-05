@@ -64,10 +64,8 @@ void vtkMRMLMarkupsNode::WriteXML(ostream& of, int nIndent)
 {
   Superclass::WriteXML(of,nIndent);
 
-  vtkIndent indent(nIndent);
-
-  of << indent << " locked=\"" << this->Locked << "\"";
-  of << indent << " markupLabelFormat=\"" << this->MarkupLabelFormat.c_str() << "\"";
+  of << " locked=\"" << this->Locked << "\"";
+  of << " markupLabelFormat=\"" << this->MarkupLabelFormat.c_str() << "\"";
 
   int textLength = this->TextList->GetNumberOfValues();
 
@@ -314,12 +312,12 @@ int  vtkMRMLMarkupsNode::DeleteText(int id)
   int n = this->GetNumberOfTexts();
   if (id < 0 || id >= n)
     {
-      return -1;
+    return -1;
     }
 
-  for (int i = id; id < n-1; i++ )
+  for (int i = id; i < n-1; i++ )
     {
-      this->TextList->SetValue(i,this->GetText(i+1));
+    this->TextList->SetValue(i, this->GetText(i+1));
     }
 
   this->TextList->Resize(n-1);
@@ -1100,92 +1098,6 @@ void vtkMRMLMarkupsNode::SetNthMarkupDescription(int n, std::string description)
         }
       }
     }
-}
-
-//---------------------------------------------------------------------------
-std::string vtkMRMLMarkupsNode::GetNthMarkupLabelForStorage(int n)
-{
-  std::string label = this->GetNthMarkupLabel(n);
-  vtkMRMLMarkupsStorageNode *markupsStorageNode = NULL;
-  vtkMRMLStorageNode *mrmlNode = this->GetStorageNode();
-  if (mrmlNode)
-    {
-    markupsStorageNode = vtkMRMLMarkupsStorageNode::SafeDownCast(mrmlNode);
-    }
-  if (markupsStorageNode)
-    {
-    return markupsStorageNode->ConvertStringToStorageFormat(label);
-    }
-  else
-    {
-    vtkWarningMacro("GetNthMarkupLabelForStorage: no storage node to do the conversion!");
-    return label;
-    }
-}
-
-//---------------------------------------------------------------------------
-void vtkMRMLMarkupsNode::SetNthMarkupLabelFromStorage(int n, std::string label)
-{
-  std::string str;
-  vtkMRMLMarkupsStorageNode *markupsStorageNode = NULL;
-  vtkMRMLStorageNode *mrmlNode = this->GetStorageNode();
-  if (mrmlNode)
-    {
-    markupsStorageNode = vtkMRMLMarkupsStorageNode::SafeDownCast(mrmlNode);
-    }
-  if (markupsStorageNode)
-    {
-    str = markupsStorageNode->ConvertStringFromStorageFormat(label);
-    }
-  else
-    {
-    vtkWarningMacro("SetNthMarkupLabelFromStorage: no storage node to do the conversion!");
-    str = label;
-    }
-  this->SetNthMarkupLabel(n, str);
-}
-
-//---------------------------------------------------------------------------
-std::string vtkMRMLMarkupsNode::GetNthMarkupDescriptionForStorage(int n)
-{
-  std::string description = this->GetNthMarkupDescription(n);
-  vtkMRMLMarkupsStorageNode *markupsStorageNode = NULL;
-  vtkMRMLStorageNode *mrmlNode = this->GetStorageNode();
-  if (mrmlNode)
-    {
-    markupsStorageNode = vtkMRMLMarkupsStorageNode::SafeDownCast(mrmlNode);
-    }
-  if (markupsStorageNode)
-    {
-    return markupsStorageNode->ConvertStringToStorageFormat(description);
-    }
-  else
-    {
-    vtkWarningMacro("GetNthMarkupDescriptionForStorage: no storage node to do the conversion!");
-    return description;
-    }
-}
-
-//---------------------------------------------------------------------------
-void vtkMRMLMarkupsNode::SetNthMarkupDescriptionFromStorage(int n, std::string description)
-{
-  std::string str;
-  vtkMRMLMarkupsStorageNode *markupsStorageNode = NULL;
-  vtkMRMLStorageNode *mrmlNode = this->GetStorageNode();
-  if (mrmlNode)
-    {
-    markupsStorageNode = vtkMRMLMarkupsStorageNode::SafeDownCast(mrmlNode);
-    }
-  if (markupsStorageNode)
-    {
-    str = markupsStorageNode->ConvertStringFromStorageFormat(description);
-    }
-  else
-    {
-    vtkWarningMacro("SetNthMarkupDescriptionFromStorage: no storage node to do the conversion!");
-    str = description;
-    }
-  this->SetNthMarkupDescription(n, str);
 }
 
 //---------------------------------------------------------------------------

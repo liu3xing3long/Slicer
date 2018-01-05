@@ -21,8 +21,14 @@
 #ifndef __qMRMLWidgetsPlugin_h
 #define __qMRMLWidgetsPlugin_h
 
+#include "qMRMLWidgetsConfigure.h" // For MRML_WIDGETS_HAVE_QT5
+
 // Qt includes
+#ifdef MRML_WIDGETS_HAVE_QT5
+#include <QtUiPlugin/QDesignerCustomWidgetCollectionInterface>
+#else
 #include <QDesignerCustomWidgetCollectionInterface>
+#endif
 
 // MRMLWidgets includes
 #include "qMRMLCheckableNodeComboBoxPlugin.h"
@@ -46,6 +52,9 @@
 #include "qMRMLNodeAttributeTableViewPlugin.h"
 #include "qMRMLNodeAttributeTableWidgetPlugin.h"
 #include "qMRMLNodeComboBoxPlugin.h"
+#include "qMRMLPlotWidgetPlugin.h"
+#include "qMRMLPlotViewInformationWidgetPlugin.h"
+#include "qMRMLPlotViewControllerWidgetPlugin.h"
 #include "qMRMLRangeWidgetPlugin.h"
 #include "qMRMLROIWidgetPlugin.h"
 #include "qMRMLScalarInvariantComboBoxPlugin.h"
@@ -54,6 +63,7 @@
 #include "qMRMLSliceWidgetPlugin.h"
 #include "qMRMLSliderWidgetPlugin.h"
 #include "qMRMLSpinBoxPlugin.h"
+#include "qMRMLThreeDViewInformationWidgetPlugin.h"
 #include "qMRMLThreeDViewPlugin.h"
 #include "qMRMLTransformSlidersPlugin.h"
 #include "qMRMLTreeViewPlugin.h"
@@ -62,6 +72,7 @@
 #include "qMRMLWidgetPlugin.h"
 #include "qMRMLWindowLevelWidgetPlugin.h"
 #include "qMRMLSceneFactoryWidgetPlugin.h"
+#include "qMRMLTableViewPlugin.h"
 
 // \class Group the plugins in one library
 class QMRML_WIDGETS_PLUGINS_EXPORT qMRMLWidgetsPlugin
@@ -69,6 +80,9 @@ class QMRML_WIDGETS_PLUGINS_EXPORT qMRMLWidgetsPlugin
   , public QDesignerCustomWidgetCollectionInterface
 {
   Q_OBJECT
+#ifdef MRML_WIDGETS_HAVE_QT5
+  Q_PLUGIN_METADATA(IID "org.qt-project.Qt.QDesignerCustomWidgetCollectionInterface")
+#endif
   Q_INTERFACES(QDesignerCustomWidgetCollectionInterface);
 
 public:
@@ -97,6 +111,9 @@ public:
             << new qMRMLNodeAttributeTableViewPlugin
             << new qMRMLNodeAttributeTableWidgetPlugin
             << new qMRMLNodeComboBoxPlugin
+            << new qMRMLPlotWidgetPlugin
+            << new qMRMLPlotViewInformationWidgetPlugin
+            << new qMRMLPlotViewControllerWidgetPlugin
             << new qMRMLRangeWidgetPlugin
             << new qMRMLROIWidgetPlugin
             << new qMRMLScalarInvariantComboBoxPlugin
@@ -106,6 +123,8 @@ public:
             << new qMRMLSliceWidgetPlugin
             << new qMRMLSliderWidgetPlugin
             << new qMRMLSpinBoxPlugin
+            << new qMRMLTableViewPlugin
+            << new qMRMLThreeDViewInformationWidgetPlugin
             << new qMRMLThreeDViewPlugin
             << new qMRMLTransformSlidersPlugin
             << new qMRMLTreeViewPlugin

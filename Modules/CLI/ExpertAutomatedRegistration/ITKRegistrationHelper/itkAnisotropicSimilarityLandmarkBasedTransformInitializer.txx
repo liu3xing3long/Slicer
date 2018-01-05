@@ -15,8 +15,8 @@
 
 =========================================================================*/
 
-#ifndef __itkAnisotropicSimilarityLandmarkBasedTransformInitializer_txx
-#define __itkAnisotropicSimilarityLandmarkBasedTransformInitializer_txx
+#ifndef itkAnisotropicSimilarityLandmarkBasedTransformInitializer_txx
+#define itkAnisotropicSimilarityLandmarkBasedTransformInitializer_txx
 
 #include "itkAnisotropicSimilarityLandmarkBasedTransformInitializer.h"
 #include "itkMatrix.h"
@@ -514,9 +514,9 @@ AnisotropicSimilarityLandmarkBasedTransformInitializer<TTransform, TFixedImage, 
           }
 
         itkDebugMacro(<< "Dot Product of landmarks: " << s_dot << " Cross Product: " << s_cross);
-        if( vcl_fabs(s_dot) > 0.00005 )
+        if( std::fabs(s_dot) > 0.00005 )
           {
-          rotationAngle = vcl_atan2(s_cross, s_dot);
+          rotationAngle = std::atan2(s_cross, s_dot);
           }
         else
           {
@@ -613,4 +613,4 @@ AnisotropicSimilarityLandmarkBasedTransformInitializer<TTransform, TFixedImage, 
 
 }  // namespace itk
 
-#endif /* __itkAnisotropicSimilarityLandmarkBasedTransformInitializer_txx */
+#endif /* itkAnisotropicSimilarityLandmarkBasedTransformInitializer_txx */

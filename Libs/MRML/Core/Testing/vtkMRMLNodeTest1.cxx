@@ -27,6 +27,7 @@
 // STD includes
 #include <sstream>
 
+using namespace vtkAddonTestingUtilities;
 using namespace vtkMRMLCoreTestingUtilities;
 
 //---------------------------------------------------------------------------
@@ -43,11 +44,11 @@ public:
     return this->NodeReferences;
     }
 
-  virtual vtkMRMLNode* CreateNodeInstance()
+  virtual vtkMRMLNode* CreateNodeInstance() VTK_OVERRIDE
     {
     return vtkMRMLNodeTestHelper1::New();
     }
-  virtual const char* GetNodeTagName()
+  virtual const char* GetNodeTagName() VTK_OVERRIDE
     {
     return "vtkMRMLNodeTestHelper1";
     }
@@ -59,7 +60,7 @@ public:
       }
     return this->NodeReferences[std::string(refrole)].size();
     }
-  virtual void ProcessMRMLEvents( vtkObject *caller, unsigned long event, void *callData )
+  virtual void ProcessMRMLEvents( vtkObject *caller, unsigned long event, void *callData ) VTK_OVERRIDE
     {
     Superclass::ProcessMRMLEvents(caller, event, callData);
     this->LastMRMLEventCaller = caller;
@@ -69,10 +70,10 @@ public:
   void SetOtherNodeID(const char* id);
   vtkGetStringMacro(OtherNodeID);
 
-  virtual void SetSceneReferences();
-  virtual void UpdateReferenceID(const char *oldID, const char *newID);
-  virtual void WriteXML(ostream& of, int nIndent);
-  virtual void ReadXMLAttributes(const char** atts);
+  virtual void SetSceneReferences() VTK_OVERRIDE;
+  virtual void UpdateReferenceID(const char *oldID, const char *newID) VTK_OVERRIDE;
+  virtual void WriteXML(ostream& of, int nIndent) VTK_OVERRIDE;
+  virtual void ReadXMLAttributes(const char** atts) VTK_OVERRIDE;
 
   char *OtherNodeID;
 
@@ -103,11 +104,11 @@ public:
 
   vtkTypeMacro(vtkMRMLStorageNodeTestHelper,vtkMRMLStorageNode);
 
-  virtual vtkMRMLNode* CreateNodeInstance()
+  virtual vtkMRMLNode* CreateNodeInstance() VTK_OVERRIDE
     {
     return vtkMRMLStorageNodeTestHelper::New();
     }
-  virtual const char* GetNodeTagName()
+  virtual const char* GetNodeTagName() VTK_OVERRIDE
     {
     return "vtkMRMLStorageNodeTestHelper";
     }
@@ -115,29 +116,25 @@ public:
   void SetOtherNodeID(const char* id);
   vtkGetStringMacro(OtherNodeID);
 
-  virtual void SetSceneReferences();
-  virtual void UpdateReferenceID(const char *oldID, const char *newID);
-  virtual void WriteXML(ostream& of, int nIndent);
-  virtual void ReadXMLAttributes(const char** atts);
+  virtual void SetSceneReferences() VTK_OVERRIDE;
+  virtual void UpdateReferenceID(const char *oldID, const char *newID) VTK_OVERRIDE;
+  virtual void WriteXML(ostream& of, int nIndent) VTK_OVERRIDE;
+  virtual void ReadXMLAttributes(const char** atts) VTK_OVERRIDE;
 
   // Implemented to satisfy the storage node interface
-  virtual const char* GetDefaultWriteFileExtension()
-    {
-    return "noop";
-    }
-  virtual bool CanReadInReferenceNode(vtkMRMLNode* refNode)
+  virtual bool CanReadInReferenceNode(vtkMRMLNode* refNode) VTK_OVERRIDE
     {
     return refNode->IsA("vtkMRMLNodeTestHelper1");
     }
-  virtual bool CanWriteFromReferenceNode(vtkMRMLNode* refNode)
+  virtual bool CanWriteFromReferenceNode(vtkMRMLNode* refNode) VTK_OVERRIDE
     {
     return refNode->IsA("vtkMRMLNodeTestHelper1");
     }
-  virtual void InitializeSupportedWriteFileTypes()
+  virtual void InitializeSupportedWriteFileTypes() VTK_OVERRIDE
     {
     this->SupportedWriteFileTypes->InsertNextValue(".noop");
     }
-  virtual int ReadDataInternal(vtkMRMLNode *refNode)
+  virtual int ReadDataInternal(vtkMRMLNode *refNode) VTK_OVERRIDE
     {
     vtkMRMLNodeTestHelper1 * node = vtkMRMLNodeTestHelper1::SafeDownCast(refNode);
     if(!node)
@@ -147,7 +144,7 @@ public:
       }
     return 1;
     }
-  virtual int WriteDataInternal(vtkMRMLNode *refNode)
+  virtual int WriteDataInternal(vtkMRMLNode *refNode) VTK_OVERRIDE
     {
     vtkMRMLNodeTestHelper1 * node = vtkMRMLNodeTestHelper1::SafeDownCast(refNode);
     if(!node)
@@ -164,6 +161,7 @@ private:
   vtkMRMLStorageNodeTestHelper()
     {
     this->OtherNodeID = NULL;
+    this->DefaultWriteFileExtension = "noop";
     }
   ~vtkMRMLStorageNodeTestHelper()
     {
@@ -248,7 +246,7 @@ void vtkMRMLNodeTestHelper1::WriteXML(ostream& of, int nIndent)
   vtkIndent indent(nIndent);
   if (this->OtherNodeID != NULL)
     {
-    of << indent << " OtherNodeRef=\"" << this->OtherNodeID << "\"";
+    of << " OtherNodeRef=\"" << this->OtherNodeID << "\"";
     }
 }
 
@@ -292,10 +290,9 @@ void vtkMRMLStorageNodeTestHelper::SetSceneReferences()
 void vtkMRMLStorageNodeTestHelper::WriteXML(ostream& of, int nIndent)
 {
   Superclass::WriteXML(of, nIndent);
-  vtkIndent indent(nIndent);
   if (this->OtherNodeID != NULL)
     {
-    of << indent << " OtherNodeRef=\"" << this->OtherNodeID << "\"";
+    of << " OtherNodeRef=\"" << this->OtherNodeID << "\"";
     }
 }
 
@@ -2906,6 +2903,7 @@ void DisplaySceneNodeReferences(
 //----------------------------------------------------------------------------
 bool TestImportSceneReferenceValidDuringImport()
 {
+  (void)(DisplaySceneNodeReferences); // Avoid unused-function warning
 
   //
   // Create scene and register node

@@ -11,16 +11,16 @@ class SurfaceToolbox(ScriptedLoadableModule):
     self.parent.categories = ["Surface Models"]
     self.parent.dependencies = []
     self.parent.contributors = ["Luca Antiga (Orobix), Ron Kikinis (Brigham and Women's Hospital)"] # replace with "Firstname Lastname (Org)"
-    self.parent.helpText = string.Template("""
-    This module supports various cleanup and optimization processes on surface models.
-    Select the input and output models, and then enable the stages of the pipeline by selecting the buttons.
-    Stages that include parameters will open up when they are enabled.
-    Click apply to activate the pipeline and then click the Toggle button to compare the model before and after the operation.
-    See <a href=\"$a/Documentation/$b.$c/Modules/SurfaceToolbox\">$a/Documentation/$b.$c/Modules/SurfaceToolbox</a> for more information.
-    """).substitute({ 'a':parent.slicerWikiUrl, 'b':slicer.app.majorVersion, 'c':slicer.app.minorVersion })
+    self.parent.helpText = """
+This module supports various cleanup and optimization processes on surface models.
+Select the input and output models, and then enable the stages of the pipeline by selecting the buttons.
+Stages that include parameters will open up when they are enabled.
+Click apply to activate the pipeline and then click the Toggle button to compare the model before and after the operation.
+"""
+    self.parent.helpText += self.getDefaultModuleDocumentationLink()
     self.parent.acknowledgementText = """
-    This module was developed by Luca Antiga, Orobix Srl, with a little help from Steve Pieper, Isomics, Inc.
-    """
+This module was developed by Luca Antiga, Orobix Srl, with a little help from Steve Pieper, Isomics, Inc.
+"""
 
 def numericInputFrame(parent, label, tooltip, minimum, maximum, step, decimals):
   inputFrame = qt.QFrame(parent)
@@ -122,20 +122,27 @@ class SurfaceToolboxWidget(ScriptedLoadableModuleWidget):
     smoothingFormLayout.addWidget(laplaceMethodFrame)
     laplaceMethodFormLayout = qt.QFormLayout(laplaceMethodFrame)
 
-    laplaceIterationsFrame, laplaceIterationsSlider, laplaceIterationsSpinBox = numericInputFrame(self.parent,"Iterations:","Tooltip",0.0,500.0,1.0,0)
+    laplaceIterationsFrame, laplaceIterationsSlider, laplaceIterationsSpinBox = numericInputFrame(self.parent,"Iterations:",
+      "Determines the maximum number of smoothing iterations. Higher value allows more smoothing."
+      +" In general, small relaxation factors and large numbers of iterations are more stable than"
+      +" larger relaxation factors and smaller numbers of iterations. ",0.0,500.0,1.0,0)
     laplaceMethodFormLayout.addWidget(laplaceIterationsFrame)
 
-    laplaceRelaxationFrame, laplaceRelaxationSlider, laplaceRelaxationSpinBox = numericInputFrame(self.parent,"Relaxation:","Tooltip",0.0,1.0,0.1,1)
+    laplaceRelaxationFrame, laplaceRelaxationSlider, laplaceRelaxationSpinBox = numericInputFrame(self.parent,"Relaxation:",
+      "Specifies how much points may be displaced during each iteration. Higher value results in more smoothing.",0.0,1.0,0.1,1)
     laplaceMethodFormLayout.addWidget(laplaceRelaxationFrame)
 
     taubinMethodFrame = qt.QFrame(self.parent)
     smoothingFormLayout.addWidget(taubinMethodFrame)
     taubinMethodFormLayout = qt.QFormLayout(taubinMethodFrame)
 
-    taubinIterationsFrame, taubinIterationsSlider, taubinIterationsSpinBox = numericInputFrame(self.parent,"Iterations:","Tooltip",0.0,100.0,1.0,0)
+    taubinIterationsFrame, taubinIterationsSlider, taubinIterationsSpinBox = numericInputFrame(self.parent,"Iterations:",
+      "Determines the maximum number of smoothing iterations. Higher value allows more accurate smoothing."
+      +" Typically 10-20 iterations are enough.",0.0,100.0,1.0,0)
     taubinMethodFormLayout.addWidget(taubinIterationsFrame)
 
-    taubinPassBandFrame, taubinPassBandSlider, taubinPassBandSpinBox = numericInputFrame(self.parent,"Pass Band:","Tooltip",0.0,1.0,0.01,2)
+    taubinPassBandFrame, taubinPassBandSlider, taubinPassBandSpinBox = numericInputFrame(self.parent,"Pass Band:",
+      "Number between 0 and 2. Lower values produce more smoothing.",0.0,2.0,0.0001,4)
     taubinMethodFormLayout.addWidget(taubinPassBandFrame)
 
     boundarySmoothingCheckBox = qt.QCheckBox("Boundary Smoothing")
@@ -148,7 +155,12 @@ class SurfaceToolboxWidget(ScriptedLoadableModuleWidget):
     self.layout.addWidget(normalsFrame)
     normalsFormLayout = qt.QFormLayout(normalsFrame)
 
+    autoOrientNormalsCheckBox = qt.QCheckBox("Auto-orient Normals")
+    autoOrientNormalsCheckBox.setToolTip("Orient the normals outwards from closed surface")
+    normalsFormLayout.addWidget(autoOrientNormalsCheckBox)
+
     flipNormalsCheckBox = qt.QCheckBox("Flip Normals")
+    flipNormalsCheckBox.setToolTip("Flip normal direction from its current or auto-oriented state")
     normalsFormLayout.addWidget(flipNormalsCheckBox)
 
     splittingCheckBox = qt.QCheckBox("Splitting")
@@ -156,6 +168,25 @@ class SurfaceToolboxWidget(ScriptedLoadableModuleWidget):
 
     featureAngleFrame, featureAngleSlider, featureAngleSpinBox = numericInputFrame(self.parent,"Feature Angle:","Tooltip",0.0,180.0,1.0,0)
     normalsFormLayout.addWidget(featureAngleFrame)
+
+    mirrorButton = qt.QPushButton("Mirror")
+    mirrorButton.checkable = True
+    self.layout.addWidget(mirrorButton)
+    mirrorFrame = qt.QFrame(self.parent)
+    self.layout.addWidget(mirrorFrame)
+    mirrorFormLayout = qt.QFormLayout(mirrorFrame)
+
+    mirrorXCheckBox = qt.QCheckBox("X-axis")
+    mirrorXCheckBox.setToolTip("Flip model along its X axis")
+    mirrorFormLayout.addWidget(mirrorXCheckBox)
+
+    mirrorYCheckBox = qt.QCheckBox("Y-axis")
+    mirrorYCheckBox.setToolTip("Flip model along its Y axis")
+    mirrorFormLayout.addWidget(mirrorYCheckBox)
+
+    mirrorZCheckBox = qt.QCheckBox("Z-axis")
+    mirrorZCheckBox.setToolTip("Flip model along its Z axis")
+    mirrorFormLayout.addWidget(mirrorZCheckBox)
 
     cleanerButton = qt.QPushButton("Cleaner")
     cleanerButton.checkable = True
@@ -203,6 +234,11 @@ class SurfaceToolboxWidget(ScriptedLoadableModuleWidget):
       boundarySmoothing = True
       normals = False
       flipNormals = False
+      autoOrientNormals = False
+      mirror = False
+      mirrorX = False
+      mirrorY = False
+      mirrorZ = False
       splitting = False
       featureAngle = 30.0
       cleaner = False
@@ -248,11 +284,18 @@ class SurfaceToolboxWidget(ScriptedLoadableModuleWidget):
 
       normalsButton.checked = state.normals
       normalsFrame.visible = state.normals
+      autoOrientNormalsCheckBox.checked = state.autoOrientNormals
       flipNormalsCheckBox.checked = state.flipNormals
       splittingCheckBox.checked = state.splitting
       featureAngleFrame.visible = state.splitting
       featureAngleSlider.value = state.featureAngle
       featureAngleSpinBox.value = state.featureAngle
+
+      mirrorButton.checked = state.mirror
+      mirrorFrame.visible = state.mirror
+      mirrorXCheckBox.checked = state.mirrorX
+      mirrorYCheckBox.checked = state.mirrorY
+      mirrorZCheckBox.checked = state.mirrorZ
 
       cleanerButton.checked = state.cleaner
 
@@ -298,11 +341,16 @@ class SurfaceToolboxWidget(ScriptedLoadableModuleWidget):
     connect(boundarySmoothingCheckBox, 'stateChanged(int)', 'state.boundarySmoothing = bool(args[0])')
 
     connect(normalsButton, 'clicked(bool)', 'state.normals = args[0]')
-
-    connect(flipNormalsCheckBox, 'stateChanged(int)', 'state.flipNormals = bool(args[0])')
+    connect(autoOrientNormalsCheckBox, 'toggled(bool)', 'state.autoOrientNormals = bool(args[0])')
+    connect(flipNormalsCheckBox, 'toggled(bool)', 'state.flipNormals = bool(args[0])')
     connect(splittingCheckBox, 'stateChanged(int)', 'state.splitting = bool(args[0])')
     connect(featureAngleSlider, 'valueChanged(double)', 'state.featureAngle = args[0]')
     connect(featureAngleSpinBox, 'valueChanged(double)', 'state.featureAngle = args[0]')
+
+    connect(mirrorButton, 'clicked(bool)', 'state.mirror = args[0]')
+    connect(mirrorXCheckBox, 'toggled(bool)', 'state.mirrorX = bool(args[0])')
+    connect(mirrorYCheckBox, 'toggled(bool)', 'state.mirrorY = bool(args[0])')
+    connect(mirrorZCheckBox, 'toggled(bool)', 'state.mirrorZ = bool(args[0])')
 
     connect(cleanerButton, 'clicked(bool)', 'state.cleaner = args[0]')
     connect(connectivityButton, 'clicked(bool)', 'state.connectivity = args[0]')
@@ -379,13 +427,29 @@ class SurfaceToolboxLogic(ScriptedLoadableModuleLogic):
 
     if state.normals:
       normals = vtk.vtkPolyDataNormals()
-      normals.AutoOrientNormalsOn()
+      normals.SetAutoOrientNormals(state.autoOrientNormals)
       normals.SetFlipNormals(state.flipNormals)
       normals.SetSplitting(state.splitting)
       normals.SetFeatureAngle(state.featureAngle)
       normals.ConsistencyOn()
       normals.SetInputConnection(surface)
       surface = normals.GetOutputPort()
+
+    if state.mirror:
+      mirrorTransformMatrix = vtk.vtkMatrix4x4()
+      mirrorTransformMatrix.SetElement(0, 0, -1 if state.mirrorX else 1)
+      mirrorTransformMatrix.SetElement(1, 1, -1 if state.mirrorY else 1)
+      mirrorTransformMatrix.SetElement(2, 2, -1 if state.mirrorZ else 1)
+      mirrorTransform = vtk.vtkTransform()
+      mirrorTransform.SetMatrix(mirrorTransformMatrix)
+      transformFilter = vtk.vtkTransformPolyDataFilter()
+      transformFilter.SetInputConnection(surface)
+      transformFilter.SetTransform(mirrorTransform)
+      surface = transformFilter.GetOutputPort()
+      if mirrorTransformMatrix.Determinant()<0:
+        reverse = vtk.vtkReverseSense()
+        reverse.SetInputConnection(surface)
+        surface = reverse.GetOutputPort()
 
     if state.cleaner:
       cleaner = vtk.vtkCleanPolyData()

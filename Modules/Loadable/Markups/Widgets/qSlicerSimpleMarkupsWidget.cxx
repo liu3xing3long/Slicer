@@ -36,7 +36,9 @@
 #include <vtkMRMLMarkupsFiducialNode.h>
 
 // Qt includes
-#include <QtGui>
+#include <QAction>
+#include <QMenu>
+#include <QTableWidgetItem>
 
 int FIDUCIAL_LABEL_COLUMN = 0;
 int FIDUCIAL_X_COLUMN = 1;
@@ -62,6 +64,7 @@ public:
 public:
   bool EnterPlaceModeOnNodeChange;
   bool JumpToSliceEnabled;
+  int ViewGroup;
 
   vtkWeakPointer<vtkSlicerMarkupsLogic> MarkupsLogic;
   vtkWeakPointer<vtkMRMLMarkupsNode> CurrentMarkupsNode;
@@ -72,6 +75,7 @@ qSlicerSimpleMarkupsWidgetPrivate::qSlicerSimpleMarkupsWidgetPrivate( qSlicerSim
   : q_ptr(&object)
   , EnterPlaceModeOnNodeChange(true)
   , JumpToSliceEnabled(false)
+  , ViewGroup(-1)
 {
 }
 
@@ -93,7 +97,6 @@ void qSlicerSimpleMarkupsWidgetPrivate::setupUi(qSlicerSimpleMarkupsWidget* widg
 //-----------------------------------------------------------------------------
 qSlicerSimpleMarkupsWidget::qSlicerSimpleMarkupsWidget(QWidget* parentWidget) : Superclass( parentWidget ) , d_ptr( new qSlicerSimpleMarkupsWidgetPrivate(*this) )
 {
-  Q_D(qSlicerSimpleMarkupsWidget);
   this->setup();
 }
 
@@ -130,7 +133,11 @@ void qSlicerSimpleMarkupsWidget::setup()
 
   d->MarkupsFiducialTableWidget->setColumnCount( FIDUCIAL_COLUMNS );
   d->MarkupsFiducialTableWidget->setHorizontalHeaderLabels( QStringList() << "Label" << "X" << "Y" << "Z" );
+#if (QT_VERSION < QT_VERSION_CHECK(5, 0, 0))
   d->MarkupsFiducialTableWidget->horizontalHeader()->setResizeMode( QHeaderView::Stretch );
+#else
+  d->MarkupsFiducialTableWidget->horizontalHeader()->setSectionResizeMode( QHeaderView::Stretch );
+#endif
   d->MarkupsFiducialTableWidget->setContextMenuPolicy( Qt::CustomContextMenu );
   d->MarkupsFiducialTableWidget->setSelectionBehavior(QAbstractItemView::SelectRows); // only select rows rather than cells
 
@@ -284,6 +291,20 @@ QColor qSlicerSimpleMarkupsWidget::nodeColor() const
 }
 
 //-----------------------------------------------------------------------------
+void qSlicerSimpleMarkupsWidget::setViewGroup(int newViewGroup)
+{
+  Q_D(qSlicerSimpleMarkupsWidget);
+  d->ViewGroup = newViewGroup;
+}
+
+//-----------------------------------------------------------------------------
+int qSlicerSimpleMarkupsWidget::viewGroup() const
+{
+  Q_D(const qSlicerSimpleMarkupsWidget);
+  return d->ViewGroup;
+}
+
+//-----------------------------------------------------------------------------
 void qSlicerSimpleMarkupsWidget::highlightNthFiducial(int n)
 {
   Q_D(qSlicerSimpleMarkupsWidget);
@@ -395,11 +416,14 @@ void qSlicerSimpleMarkupsWidget::onMarkupsFiducialTableContextMenu(const QPoint&
         deleteFiducials.push_back( i );
         }
       }
+    // Do this in batch mode
+    int wasModifying = currentNode->StartModify();
     //Traversing this way should be more efficient and correct
     for ( int i = deleteFiducials.size() - 1; i >= 0; i-- )
       {
       currentNode->RemoveMarkup( deleteFiducials.at( i ) );
       }
+    currentNode->EndModify(wasModifying);
     }
 
 
@@ -421,7 +445,7 @@ void qSlicerSimpleMarkupsWidget::onMarkupsFiducialTableContextMenu(const QPoint&
 
   if ( selectedAction == jumpAction )
     {
-    d->MarkupsLogic->JumpSlicesToNthPointInMarkup( this->currentNode()->GetID(), currentFiducial, true /* centered */ );
+    d->MarkupsLogic->JumpSlicesToNthPointInMarkup(this->currentNode()->GetID(), currentFiducial, true /* centered */, d->ViewGroup);
     }
 
   this->updateWidget();
@@ -445,7 +469,7 @@ void qSlicerSimpleMarkupsWidget::onMarkupsFiducialSelected(int row, int column)
       qCritical("qSlicerSimpleMarkupsWidget::onMarkupsFiducialSelected failed: Cannot jump, markups module logic is invalid");
       return;
       }
-    d->MarkupsLogic->JumpSlicesToNthPointInMarkup(currentMarkupsFiducialNode->GetID(), row, true /* centered */);
+    d->MarkupsLogic->JumpSlicesToNthPointInMarkup(currentMarkupsFiducialNode->GetID(), row, true /* centered */, d->ViewGroup);
     }
 
   emit currentMarkupsFiducialSelectionChanged(row);
@@ -574,8 +598,7 @@ void qSlicerSimpleMarkupsWidget::updateWidget()
 //------------------------------------------------------------------------------
 void qSlicerSimpleMarkupsWidget::setMRMLScene(vtkMRMLScene* scene)
 {
-  Q_D(qSlicerSimpleMarkupsWidget);
-  Superclass::setMRMLScene(scene);
+  this->Superclass::setMRMLScene(scene);
   this->updateWidget();
 }
 
@@ -584,4 +607,11 @@ qSlicerMarkupsPlaceWidget* qSlicerSimpleMarkupsWidget::markupsPlaceWidget() cons
 {
   Q_D(const qSlicerSimpleMarkupsWidget);
   return d->MarkupsPlaceWidget;
+}
+
+//-----------------------------------------------------------------------------
+qMRMLNodeComboBox* qSlicerSimpleMarkupsWidget::markupsSelectorComboBox() const
+{
+  Q_D(const qSlicerSimpleMarkupsWidget);
+  return d->MarkupsFiducialNodeComboBox;
 }

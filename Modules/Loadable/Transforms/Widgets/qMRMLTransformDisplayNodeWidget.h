@@ -69,6 +69,7 @@ public slots:
 
   void updateGlyphSourceOptions(int sourceOption);
   void regionNodeChanged(vtkMRMLNode* node);
+  void glyphPointsNodeChanged(vtkMRMLNode* node);
   void setGlyphSpacingMm(double spacing);
   void setGlyphScalePercent(double scale);
   void setGlyphDisplayRangeMm(double min, double max);
@@ -85,6 +86,12 @@ public slots:
   void setContourLevelsMm(QString values_str);
   void setContourResolutionMm(double resolutionMm);
   void setContourOpacityPercent(double opacity);
+
+  void setEditorVisibility(bool enabled);
+  void setEditorTranslationEnabled(bool enabled);
+  void setEditorRotationEnabled(bool enabled);
+  void setEditorScalingEnabled(bool enabled);
+  void updateEditorBounds();
 
   void setColorTableNode(vtkMRMLNode* colorTableNode);
 

@@ -203,8 +203,7 @@ class NeurosurgicalPlanningTutorialMarkupsSelfTestLogic:
       type = slicer.qMRMLScreenShotDialog.FullLayout
 
     # grab and convert to vtk image data
-    qpixMap = qt.QPixmap().grabWidget(widget)
-    qimage = qpixMap.toImage()
+    qimage = ctk.ctkWidgetsUtils.grabWidget(widget)
     imageData = vtk.vtkImageData()
     slicer.qMRMLUtils().qImageToVtkImageData(qimage,imageData)
 
@@ -265,9 +264,6 @@ class NeurosurgicalPlanningTutorialMarkupsSelfTestLogic:
 
     self.delayDisplay("Getting Baseline volume")
     baselineVolume = sampleDataLogic.downloadWhiteMatterExplorationBaselineVolume()
-
-    self.delayDisplay("Getting DTI volume")
-    dtiVolume = sampleDataLogic.downloadWhiteMatterExplorationDTIVolume()
 
     self.takeScreenshot('NeurosurgicalPlanning-Loaded','Data loaded',-1)
 
@@ -486,10 +482,6 @@ class NeurosurgicalPlanningTutorialMarkupsSelfTestLogic:
     self.takeScreenshot('NeurosurgicalPlanning-MergeAndBuild','Merged and built models',-1)
 
     #
-    # Tractography label map seeding
-    #
-
-    #
     # select label volume with label 293, in the second row
     #
     row = 1
@@ -517,95 +509,6 @@ class NeurosurgicalPlanningTutorialMarkupsSelfTestLogic:
       # slicer.modules.EditorWidget.toolsBox.currentTools[0].apply()
       slicer.modules.EditorWidget.toolsBox.currentOption.onApply()
     self.takeScreenshot('NeurosurgicalPlanning-Dilated','Dilated tumor',-1)
-
-    #
-    # Tractography Label Map Seeding module
-    #
-    moduleSelector.selectModule('TractographyLabelMapSeeding')
-    self.takeScreenshot('NeurosurgicalPlanning-LabelMapSeedingModule','Showing Tractography Label Seeding Module',-1)
-    tractographyLabelSeeding = slicer.modules.tractographylabelmapseeding
-    parameters = {}
-    parameters['InputVolume'] = dtiVolume.GetID()
-    baselinelabel293 = slicer.mrmlScene.GetFirstNodeByName("BaselineVolume-region 1-label")
-# VTK6 TODO - set 'InputROIPipelineInfo'
-    parameters['InputROI'] = baselinelabel293.GetID()
-    fibers = slicer.vtkMRMLFiberBundleNode()
-    slicer.mrmlScene.AddNode(fibers)
-    parameters['OutputFibers'] = fibers.GetID()
-    parameters['UseIndexSpace'] = 1
-    parameters['StoppingValue'] = 0.15
-    parameters['ROIlabel'] = 293
-    parameters['StoppingMode'] = 'FractionalAnisotropy'
-    # defaults
-    # parameters['ClTh'] = 0.3
-    # parameters['MinimumLength'] = 20
-    # parameters['MaximumLength'] = 800
-    # parameters['StoppingCurvature'] = 0.7
-    # parameters['IntegrationStepLength'] = 0.5
-    # parameters['SeedSpacing'] = 2
-    # and run it
-    slicer.cli.run(tractographyLabelSeeding, None, parameters)
-    self.takeScreenshot('NeurosurgicalPlanning-LabelMapSeeding','Showing Tractography Label Seeding Results',-1)
-
-    #
-    # tractography fiducial seeding
-    #
-    moduleSelector.selectModule('TractographyInteractiveSeeding')
-    self.takeScreenshot('NeurosurgicalPlanning-TIS','Showing Tractography Interactive Seeding Module',-1)
-
-    # DTI in background
-    sliceLogic.StartSliceCompositeNodeInteraction(1)
-    compositeNode.SetBackgroundVolumeID(dtiVolume.GetID())
-    sliceLogic.EndSliceCompositeNodeInteraction()
-
-    # DTI visible in 3D
-    sliceNode = sliceLogic.GetSliceNode()
-    sliceLogic.StartSliceNodeInteraction(128)
-    sliceNode.SetSliceVisible(1)
-    sliceLogic.EndSliceNodeInteraction()
-
-    self.takeScreenshot('NeurosurgicalPlanning-TIS-DTI','DTI volume with Tractography Interactive Seeding Module',-1)
-
-    # place a fiducial
-    displayNode = slicer.vtkMRMLMarkupsDisplayNode()
-    slicer.mrmlScene.AddNode(displayNode)
-    fidNode = slicer.vtkMRMLMarkupsFiducialNode()
-    fidNode.SetName('F')
-    slicer.mrmlScene.AddNode(fidNode)
-    fidNode.SetAndObserveDisplayNodeID(displayNode.GetID())
-    r = 28.338526
-    a = 34.064367
-    s = sliceOffset
-    fidNode.AddFiducial(r,a,s)
-
-    # make it active
-    selectionNode = slicer.mrmlScene.GetNodeByID("vtkMRMLSelectionNodeSingleton")
-    if (selectionNode is not None):
-      selectionNode.SetReferenceActivePlaceNodeID(fidNode.GetID())
-
-    self.takeScreenshot('NeurosurgicalPlanning-TIS-Fid1','Fiducial in Tractography Interactive Seeding Module',-1)
-
-
-    # set up the arguments
-    wr = slicer.modules.tractographyinteractiveseeding.widgetRepresentation()
-    wr.setDiffusionTensorVolumeNode(dtiVolume)
-    # create a fiber bundle
-    fiducialFibers = slicer.vtkMRMLFiberBundleNode()
-    slicer.mrmlScene.AddNode(fiducialFibers)
-    wr.setFiberBundleNode(fiducialFibers)
-    wr.setSeedingNode(fidNode)
-    wr.setMinimumPath(10)
-    wr.setStoppingValue(0.15)
-
-    self.takeScreenshot('NeurosurgicalPlanning-TIS-Args','Tractography Interactive Seeding arguments',-1)
-
-    self.delayDisplay("Moving the fiducial")
-    for y in range(-20, 100, 5):
-      msg = "Moving the fiducial to y = " + str(y)
-      self.delayDisplay(msg,250)
-      fidNode.SetNthFiducialPosition(0, r, y, s)
-
-    self.takeScreenshot('NeurosurgicalPlanning-TIS-Moved','Moved fiducial and did Tractography Interactive Seeding',-1)
 
     return True
 

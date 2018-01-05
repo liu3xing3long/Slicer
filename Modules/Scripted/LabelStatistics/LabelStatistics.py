@@ -20,12 +20,14 @@ class LabelStatistics(ScriptedLoadableModule):
     self.parent.categories = ["Quantification"]
     self.parent.dependencies = []
     self.parent.contributors = ["Steve Pieper (Isomics), Andras Lasso (PerkLab)"]
-    parent.helpText = string.Template("""
-Use this module to calculate counts and volumes for different labels of a label map plus statistics on the grayscale background volume.  Note: volumes must have same dimensions.  See <a href=\"$a/Documentation/$b.$c/Modules/LabelStatistics\">$a/Documentation/$b.$c/Modules/LabelStatistics</a> for more information.
-    """).substitute({ 'a':parent.slicerWikiUrl, 'b':slicer.app.majorVersion, 'c':slicer.app.minorVersion })
-    parent.acknowledgementText = """
-    Supported by NA-MIC, NAC, BIRN, NCIGT, and the Slicer Community. See http://www.slicer.org for details.  Module implemented by Steve Pieper.
-    """
+    self.parent.helpText = """
+Use this module to calculate counts and volumes for different labels of a label map plus statistics
+on the grayscale background volume.  Note: volumes must have same dimensions.
+"""
+    self.parent.helpText += self.getDefaultModuleDocumentationLink()
+    self.parent.acknowledgementText = """
+Supported by NA-MIC, NAC, BIRN, NCIGT, and the Slicer Community. See http://www.slicer.org for details.  Module implemented by Steve Pieper.
+"""
 
 #
 # LabelStatisticsWidget
@@ -192,7 +194,13 @@ class LabelStatisticsWidget(ScriptedLoadableModuleWidget):
   def onExportToTable(self):
     """write the label statistics to a table node
     """
-    self.logic.exportToTable()
+    table = self.logic.exportToTable()
+
+    # Add table to the scene and show it
+    slicer.mrmlScene.AddNode(table)
+    slicer.app.layoutManager().setLayout(slicer.vtkMRMLLayoutNode.SlicerLayoutFourUpTableView)
+    slicer.app.applicationLogic().GetSelectionNode().SetReferenceActiveTableID(table.GetID())
+    slicer.app.applicationLogic().PropagateTableSelection()
 
   def onSave(self):
     """save the label statistics
@@ -367,16 +375,10 @@ class LabelStatisticsLogic(ScriptedLoadableModuleLogic):
   def createStatsChart(self, labelNode, valueToPlot, ignoreZero=False):
     """Make a MRML chart of the current stats
     """
-    layoutNodes = slicer.mrmlScene.GetNodesByClass('vtkMRMLLayoutNode')
-    layoutNodes.SetReferenceCount(layoutNodes.GetReferenceCount()-1)
-    layoutNodes.InitTraversal()
-    layoutNode = layoutNodes.GetNextItemAsObject()
+    layoutNode = slicer.mrmlScene.GetFirstNodeByClass('vtkMRMLLayoutNode')
     layoutNode.SetViewArrangement(slicer.vtkMRMLLayoutNode.SlicerLayoutConventionalQuantitativeView)
 
-    chartViewNodes = slicer.mrmlScene.GetNodesByClass('vtkMRMLChartViewNode')
-    chartViewNodes.SetReferenceCount(chartViewNodes.GetReferenceCount()-1)
-    chartViewNodes.InitTraversal()
-    chartViewNode = chartViewNodes.GetNextItemAsObject()
+    chartViewNode = slicer.mrmlScene.GetFirstNodeByClass('vtkMRMLChartViewNode')
 
     arrayNode = slicer.mrmlScene.AddNode(slicer.vtkMRMLDoubleArrayNode())
     array = arrayNode.GetArray()
@@ -425,33 +427,28 @@ class LabelStatisticsLogic(ScriptedLoadableModuleLogic):
     table = slicer.vtkMRMLTableNode()
     tableWasModified = table.StartModify()
 
-    table.SetName(slicer.mrmlScene.GenerateUniqueName(self.nodeBaseName+' statistics'))
-    
+    table.SetName(slicer.mrmlScene.GenerateUniqueName(self.nodeBaseName + ' statistics'))
+
     # Define table columns
     if colorNode:
-      col=table.AddColumn()
+      col = table.AddColumn()
       col.SetName("Type")
     for k in self.keys:
-      col=table.AddColumn()
+      col = table.AddColumn()
       col.SetName(k)
     for i in self.labelStats["Labels"]:
       rowIndex = table.AddEmptyRow()
+      columnIndex = 0
       if colorNode:
-        columnIndex = 0
         table.SetCellText(rowIndex, columnIndex, colorNode.GetColorName(i))
         columnIndex += 1
       # Add other values
       for k in self.keys:
-        table.SetCellText(rowIndex, columnIndex, str(self.labelStats[i,k]))
+        table.SetCellText(rowIndex, columnIndex, str(self.labelStats[i, k]))
         columnIndex += 1
 
     table.EndModify(tableWasModified)
-
-    # Add table to the scene and show it
-    slicer.mrmlScene.AddNode(table)
-    slicer.app.layoutManager().setLayout(slicer.vtkMRMLLayoutNode.SlicerLayoutFourUpTableView)
-    slicer.app.applicationLogic().GetSelectionNode().SetReferenceActiveTableID(table.GetID())
-    slicer.app.applicationLogic().PropagateTableSelection()
+    return table
 
   def statsAsCSV(self):
     """

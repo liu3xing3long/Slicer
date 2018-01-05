@@ -524,6 +524,7 @@ int qMRMLSceneModel::nodeIndex(vtkMRMLNode* node)const
     {
     return -1;
     }
+
   const char* nId = 0;
   int index = -1;
   vtkMRMLNode* parent = this->parentNode(node);
@@ -534,7 +535,7 @@ int qMRMLSceneModel::nodeIndex(vtkMRMLNode* node)const
   vtkMRMLNode* n = 0;
   vtkCollectionSimpleIterator it;
   for (nodes->InitTraversal(it);
-       (n = (vtkMRMLNode*)nodes->GetNextItemAsObject(it)) ;)
+       (n = (vtkMRMLNode*)(nodes->GetNextItemAsObject(it))) ;)
     {
     // note: parent can be NULL, it means that the scene is the parent
     if (parent == this->parentNode(n))
@@ -655,7 +656,6 @@ QMimeData* qMRMLSceneModel::mimeData(const QModelIndexList& indexes)const
     {
     return 0;
     }
-  QModelIndex parent = indexes[0].parent();
   QModelIndexList allColumnsIndexes;
   foreach(const QModelIndex& index, indexes)
     {
@@ -675,13 +675,13 @@ QMimeData* qMRMLSceneModel::mimeData(const QModelIndexList& indexes)const
 bool qMRMLSceneModel::dropMimeData(const QMimeData *data, Qt::DropAction action,
                                    int row, int column, const QModelIndex &parent)
 {
-  Q_D(qMRMLSceneModel);
   Q_UNUSED(column);
   // We want to do drag&drop only into the first item of a line (and not on a
-  // randomn column.
+  // random column.
   bool res = this->Superclass::dropMimeData(
     data, action, row, 0, parent.sibling(parent.row(), 0));
-  d->DraggedNodes.clear();
+  // Do not clear d->DraggedNodes yet, as node modification events may come
+  // in before delayedItemChanged() is executed.
   return res;
 }
 
@@ -724,7 +724,7 @@ void qMRMLSceneModel::updateScene()
       sceneOtherColumn->setFlags(0);
       sceneItems << sceneOtherColumn;
       }
-    // We need to set the colum count in case there extra items,
+    // We need to set the column count in case there extra items,
     // they need to know how many columns the scene item has.
     sceneItem->setColumnCount(this->columnCount());
     this->insertRow(preSceneItemCount, sceneItems);
@@ -769,13 +769,15 @@ void qMRMLSceneModel::populateScene()
   Q_D(qMRMLSceneModel);
   Q_ASSERT(d->MRMLScene);
   // Add nodes
+  int index = -1;
   vtkMRMLNode *node = 0;
   vtkCollectionSimpleIterator it;
   d->MisplacedNodes.clear();
   for (d->MRMLScene->GetNodes()->InitTraversal(it);
        (node = (vtkMRMLNode*)d->MRMLScene->GetNodes()->GetNextItemAsObject(it)) ;)
     {
-    this->insertNode(node);
+    index++;
+    d->insertNode(node, index);
     }
   foreach(vtkMRMLNode* misplacedNode, d->MisplacedNodes)
     {
@@ -787,32 +789,39 @@ void qMRMLSceneModel::populateScene()
 QStandardItem* qMRMLSceneModel::insertNode(vtkMRMLNode* node)
 {
   Q_D(qMRMLSceneModel);
-  QStandardItem* nodeItem = this->itemFromNode(node);
+  return d->insertNode(node, this->nodeIndex(node));
+}
+
+//------------------------------------------------------------------------------
+QStandardItem* qMRMLSceneModelPrivate::insertNode(vtkMRMLNode* node, int nodeIndex)
+{
+  Q_Q(qMRMLSceneModel);
+  QStandardItem* nodeItem = q->itemFromNode(node);
   if (nodeItem != 0)
     {
     // It is possible that the node has been already added if it is the parent
     // of a child node already inserted.
     return nodeItem;
     }
-  vtkMRMLNode* parentNode = this->parentNode(node);
+  vtkMRMLNode* parentNode = q->parentNode(node);
   QStandardItem* parentItem =
-    parentNode ? this->itemFromNode(parentNode) : this->mrmlSceneItem();
+    parentNode ? q->itemFromNode(parentNode) : q->mrmlSceneItem();
   if (!parentItem)
     {
     Q_ASSERT(parentNode);
-    parentItem = this->insertNode(parentNode);
+    parentItem = q->insertNode(parentNode);
     Q_ASSERT(parentItem);
     }
-  int min = this->preItems(parentItem).count();
-  int max = parentItem->rowCount() - this->postItems(parentItem).count();
-  int row = min + this->nodeIndex(node);
+  int min = q->preItems(parentItem).count();
+  int max = parentItem->rowCount() - q->postItems(parentItem).count();
+  int row = min + nodeIndex;
   if (row > max)
     {
-    d->MisplacedNodes << node;
+    this->MisplacedNodes << node;
     row = max;
     }
-  nodeItem = this->insertNode(node, parentItem, row);
-  Q_ASSERT(this->itemFromNode(node) == nodeItem);
+  nodeItem = q->insertNode(node, parentItem, row);
+  Q_ASSERT(q->itemFromNode(node) == nodeItem);
   return nodeItem;
 }
 
@@ -882,7 +891,11 @@ void qMRMLSceneModel::updateItemFromNode(QStandardItem* item, vtkMRMLNode* node,
   bool itemChanged = (d->PendingItemModified > 0);
   d->PendingItemModified = -1;
 
-  if (this->canBeAChild(node))
+  // Update parent, but only if the item is not being drag-and-dropped
+  // (drag-and-drop is performed using delayed update, therefore
+  // any node modifications, even those unrelated to changing the parent
+  // would override drag-and-drop result).
+  if (this->canBeAChild(node) && !d->DraggedNodes.contains(node))
     {
     QStandardItem* parentItem = item->parent();
     QStandardItem* newParentItem = this->itemFromNode(this->parentNode(node));
@@ -975,14 +988,9 @@ void qMRMLSceneModel::updateItemDataFromNode(
     else if (displayableNode)
       {
       std::string displayType;
-      std::vector<vtkMRMLNode *> selectionNodes;
-      this->mrmlScene()->GetNodesByClass("vtkMRMLSelectionNode", selectionNodes);
 
-      vtkMRMLSelectionNode* selectionNode = 0;
-      if (selectionNodes.size() > 0)
-        {
-        selectionNode = vtkMRMLSelectionNode::SafeDownCast(selectionNodes[0]);
-        }
+      vtkMRMLSelectionNode* selectionNode = vtkMRMLSelectionNode::SafeDownCast(
+        this->mrmlScene()->GetNodeByID("vtkMRMLSelectionNodeSingleton"));
       if (selectionNode)
         {
         char *displayableType = (char *)node->GetClassName();
@@ -1045,7 +1053,7 @@ void qMRMLSceneModel::updateNodeFromItem(vtkMRMLNode* node, QStandardItem* item)
   // Don't do the following if the row is not complete (reparenting an
   // incomplete row might lead to errors). (if there is no child yet for a given
   // column, it will get there next time updateNodeFromItem is called).
-  // updateNodeFromItem() is called for every item drag&dropped (we insure that
+  // updateNodeFromItem() is called for every item drag&dropped (we ensure that
   // all the indexes of the row are reparented when entering the d&d function
   for (int i = 0; i < columnCount; ++i)
     {
@@ -1120,14 +1128,8 @@ void qMRMLSceneModel::updateNodeFromItemData(vtkMRMLNode* node, QStandardItem* i
     else if (displayableNode)
       {
       std::string displayType;
-      std::vector<vtkMRMLNode *> selectionNodes;
-      this->mrmlScene()->GetNodesByClass("vtkMRMLSelectionNode", selectionNodes);
-
-      vtkMRMLSelectionNode* selectionNode = 0;
-      if (selectionNodes.size() > 0)
-        {
-        selectionNode = vtkMRMLSelectionNode::SafeDownCast(selectionNodes[0]);
-        }
+      vtkMRMLSelectionNode* selectionNode = vtkMRMLSelectionNode::SafeDownCast(
+            this->mrmlScene()->GetNodeByID("vtkMRMLSelectionNodeSingleton"));
       if (selectionNode)
         {
         char *displayableType = (char *)node->GetClassName();
@@ -1407,26 +1409,19 @@ void qMRMLSceneModel::updateNodeItems(vtkMRMLNode* node, const QString& nodeUID)
   for (int i = 0; i < nodeIndexes.size(); ++i)
     {
     QModelIndex index = nodeIndexes[i];
-    // The node has been modified because it's part of a drag&drop action
-    // (reparenting). so it means QStandardItemModel has already reparented
-    // the row, no need to update the items again.
-    //if (d->DraggedNodes.contains(node))
-    //  {
-    //  continue;
-    //  }
     QStandardItem* item = this->itemFromIndex(index);
     int oldRow = item->row();
     QStandardItem* oldParent = item->parent();
 
     this->updateItemFromNode(item, node, item->column());
     // maybe the item has been reparented, then we need to rescan the
-    // indexes again as may are wrong.
+    // indexes again as they may be wrong.
     if (item->row() != oldRow || item->parent() != oldParent)
       {
       int oldSize = nodeIndexes.size();
       nodeIndexes = this->indexes(node);
       int newSize = nodeIndexes.size();
-      //the number of columns shouldn't change
+      // the number of columns shouldn't change
       Q_ASSERT(oldSize == newSize);
       Q_UNUSED(oldSize);
       Q_UNUSED(newSize);
@@ -1483,6 +1478,11 @@ void qMRMLSceneModel::onItemChanged(QStandardItem * item)
 void qMRMLSceneModel::delayedItemChanged()
 {
   Q_D(qMRMLSceneModel);
+  // Clear d->DraggedNodes before calling onItemChanged
+  // to make process item changes immediately (instead of
+  // triggering another delayed update)
+  d->DraggedNodes.clear();
+
   this->onItemChanged(d->DraggedItem);
   d->DraggedItem = 0;
 }

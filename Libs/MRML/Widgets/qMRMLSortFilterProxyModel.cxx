@@ -73,6 +73,8 @@ qMRMLSortFilterProxyModel::qMRMLSortFilterProxyModel(QObject *vparent)
   // correct values (which doesn't call filterAcceptsRow() on the up to date
   // value unless DynamicSortFilter is true).
   this->setDynamicSortFilter(true);
+
+  this->setFilterCaseSensitivity(Qt::CaseInsensitive);
 }
 
 //------------------------------------------------------------------------------
@@ -89,10 +91,7 @@ QStandardItem* qMRMLSortFilterProxyModel::sourceItem(const QModelIndex& sourceIn
     //Q_ASSERT(sceneModel);
     return NULL;
     }
-  else
-    {
   return sourceIndex.isValid() ? sceneModel->itemFromIndex(sourceIndex) : sceneModel->invisibleRootItem();
-    }
 }
 
 //-----------------------------------------------------------------------------
@@ -130,8 +129,8 @@ void qMRMLSortFilterProxyModel::addAttribute(const QString& nodeType,
 {
   Q_D(qMRMLSortFilterProxyModel);
   if (!d->NodeTypes.contains(nodeType) ||
-      (d->Attributes[nodeType].first == attributeName &&
-       d->Attributes[nodeType].second == attributeValue))
+      (d->Attributes.value(nodeType).first == attributeName &&
+       d->Attributes.value(nodeType).second == attributeValue))
     {
     return;
     }
@@ -146,12 +145,21 @@ void qMRMLSortFilterProxyModel::removeAttribute(const QString& nodeType,
 {
   Q_D(qMRMLSortFilterProxyModel);
   if (!d->NodeTypes.contains(nodeType) ||
-      d->Attributes[nodeType].first != attributeName)
+      d->Attributes.value(nodeType).first != attributeName)
     {
     return;
     }
   d->Attributes.remove(nodeType);
   this->invalidateFilter();
+}
+
+//-----------------------------------------------------------------------------
+QVariant qMRMLSortFilterProxyModel::attributeFilter(const QString& nodeType,
+                                                    const QString& attributeName) const
+{
+  Q_UNUSED(attributeName);
+  Q_D(const qMRMLSortFilterProxyModel);
+  return d->Attributes.value(nodeType).second;
 }
 
 //------------------------------------------------------------------------------
@@ -263,7 +271,7 @@ qMRMLSortFilterProxyModel::AcceptType qMRMLSortFilterProxyModel
   foreach(const QString& nodeType, d->NodeTypes)
     {
     // filter by node type
-    if (!node->IsA(nodeType.toAscii().data()))
+    if (!node->IsA(nodeType.toLatin1().data()))
       {
       //std::cout << "Reject node: " << node->GetName() << "(" << node->GetID()
       //          << ") type: " << typeid(*node).name() <<std::endl;
@@ -279,7 +287,7 @@ qMRMLSortFilterProxyModel::AcceptType qMRMLSortFilterProxyModel
       {
       foreach(const QString& hideChildNodeType, d->HideChildNodeTypes)
         {
-        if (node->IsA(hideChildNodeType.toAscii().data()))
+        if (node->IsA(hideChildNodeType.toLatin1().data()))
           {
           return Reject;
           }

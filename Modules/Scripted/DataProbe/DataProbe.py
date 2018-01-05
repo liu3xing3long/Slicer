@@ -2,6 +2,7 @@ import os
 import unittest
 import qt, vtk, ctk
 import slicer
+import teem
 import DataProbeLib
 
 #
@@ -31,7 +32,7 @@ See <a>http://www.slicer.org</a> for details.  Module implemented by Steve Piepe
 
     # Trigger the menu to be added when application has started up
     if not slicer.app.commandOptions().noMainWindow :
-      qt.QTimer.singleShot(0, self.addView);
+      slicer.app.connect("startupCompleted()", self.addView)
 
     # Add this test to the SelfTest module's list for discovery when the module
     # is created.  Since this module may be discovered before SelfTests itself,
@@ -97,7 +98,7 @@ class DataProbeInfoWidget(object):
     self.calculateTensorScalars = CalculateTensorScalars()
 
     # Observe the crosshair node to get the current cursor position
-    self.CrosshairNode = slicer.mrmlScene.GetNthNodeByClass(0, 'vtkMRMLCrosshairNode')
+    self.CrosshairNode = slicer.mrmlScene.GetFirstNodeByClass('vtkMRMLCrosshairNode')
     if self.CrosshairNode:
       self.CrosshairNodeObserverTag = self.CrosshairNode.AddObserver(slicer.vtkMRMLCrosshairNode.CursorPositionModifiedEvent, self.processEvent)
 
@@ -258,6 +259,23 @@ class DataProbeInfoWidget(object):
       self.layerIJKs[layer].setText(self.generateIJKPixelDescription(ijk, layerLogic))
       self.layerValues[layer].setText(self.generateIJKPixelValueDescription(ijk, layerLogic))
 
+    # collect information from displayable managers
+    displayableManagerCollection = vtk.vtkCollection()
+    if sliceNode:
+      sliceView = slicer.app.layoutManager().sliceWidget(sliceNode.GetLayoutName()).sliceView()
+      sliceView.getDisplayableManagers(displayableManagerCollection)
+    aggregatedDisplayableManagerInfo = ''
+    for index in xrange(displayableManagerCollection.GetNumberOfItems()):
+      displayableManager = displayableManagerCollection.GetItemAsObject(index)
+      infoString = displayableManager.GetDataProbeInfoStringForPosition(xyz)
+      if infoString != "":
+        aggregatedDisplayableManagerInfo += infoString + "<br>"
+    if aggregatedDisplayableManagerInfo != '':
+      self.displayableManagerInfo.text = '<html>' + aggregatedDisplayableManagerInfo + '</html>'
+      self.displayableManagerInfo.show()
+    else:
+      self.displayableManagerInfo.hide()
+
     # set image
     if (not slicer.mrmlScene.IsBatchProcessing()) and sliceLogic and hasVolume and self.showImage:
       pixmap = self._createMagnifiedPixmap(
@@ -266,11 +284,12 @@ class DataProbeInfoWidget(object):
         self.imageLabel.setPixmap(pixmap)
         self.onShowImage(self.showImage)
 
-    sceneName = slicer.mrmlScene.GetURL()
-    if sceneName != "":
-      self.frame.parent().text = "Data Probe: %s" % self.fitName(sceneName,nameSize=2*self.nameSize)
-    else:
-      self.frame.parent().text = "Data Probe"
+    if hasattr(self.frame.parent(), 'text'):
+      sceneName = slicer.mrmlScene.GetURL()
+      if sceneName != "":
+        self.frame.parent().text = "Data Probe: %s" % self.fitName(sceneName,nameSize=2*self.nameSize)
+      else:
+        self.frame.parent().text = "Data Probe"
 
   def generateViewDescription(self, xyz, ras, sliceNode, sliceLogic):
 
@@ -288,11 +307,14 @@ class DataProbeInfoWidget(object):
       spacing = "(%s)" % spacing
 
     return \
-      "  {layoutName: <8s}  RAS: ({ras_x:6.1f}, {ras_y:6.1f}, {ras_z:6.1f})  {orient: >8s} Sp: {spacing:s}" \
+      "  {layoutName: <8s}  ({rLabel} {ras_x:3.1f}, {aLabel} {ras_y:3.1f}, {sLabel} {ras_z:3.1f})  {orient: >8s} Sp: {spacing:s}" \
       .format(layoutName=sliceNode.GetLayoutName(),
-              ras_x=ras[0],
-              ras_y=ras[1],
-              ras_z=ras[2],
+              rLabel=sliceNode.GetAxisLabel(1) if ras[0]>=0 else sliceNode.GetAxisLabel(0),
+              aLabel=sliceNode.GetAxisLabel(3) if ras[1]>=0 else sliceNode.GetAxisLabel(2),
+              sLabel=sliceNode.GetAxisLabel(5) if ras[2]>=0 else sliceNode.GetAxisLabel(4),
+              ras_x=abs(ras[0]),
+              ras_y=abs(ras[1]),
+              ras_z=abs(ras[2]),
               orient=sliceNode.GetOrientationString(),
               spacing=spacing
               )
@@ -303,7 +325,7 @@ class DataProbeInfoWidget(object):
 
   def generateIJKPixelDescription(self, ijk, slicerLayerLogic):
     volumeNode = slicerLayerLogic.GetVolumeNode()
-    return "({i:4d}, {j:4d}, {k:4d})".format(i=ijk[0], j=ijk[1], k=ijk[2]) if volumeNode else ""
+    return "({i:3d}, {j:3d}, {k:3d})".format(i=ijk[0], j=ijk[1], k=ijk[2]) if volumeNode else ""
 
   def generateIJKPixelValueDescription(self, ijk, slicerLayerLogic):
     volumeNode = slicerLayerLogic.GetVolumeNode()
@@ -433,6 +455,15 @@ class DataProbeInfoWidget(object):
       _setFixedFontFamily(self.layerIJKs[layer])
       _setFixedFontFamily(self.layerValues[layer])
 
+    # information collected about the current crosshair position
+    # from displayable managers registered to the current view
+    self.displayableManagerInfo = qt.QLabel()
+    self.displayableManagerInfo.indent = 6
+    self.displayableManagerInfo.wordWrap = True
+    self.frame.layout().addWidget(self.displayableManagerInfo)
+    # only show if not empty
+    self.displayableManagerInfo.hide()
+
     # goto module button
     self.goToModule = qt.QPushButton('->', self.frame)
     self.goToModule.setToolTip('Go to the DataProbe module for more information and options')
@@ -530,7 +561,7 @@ class DataProbeWidget:
 
 class CalculateTensorScalars:
     def __init__(self):
-        self.dti_math = slicer.vtkDiffusionTensorMathematics()
+        self.dti_math = teem.vtkDiffusionTensorMathematics()
 
         self.single_pixel_image = vtk.vtkImageData()
         self.single_pixel_image.SetExtent(0, 0, 0, 0, 0, 0)
@@ -546,7 +577,7 @@ class CalculateTensorScalars:
         if len(tensor) != 9:
             raise ValueError("Invalid tensor a 9-array is required")
 
-        self.tensor_data.SetTupleValue(0, tensor)
+        self.tensor_data.SetTuple9(0, *tensor)
         self.tensor_data.Modified()
         self.single_pixel_image.Modified()
 

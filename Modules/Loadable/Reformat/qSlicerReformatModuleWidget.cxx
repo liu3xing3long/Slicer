@@ -23,6 +23,7 @@
 #include <QString>
 
 // SlicerQt includes
+#include "qMRMLSliceControllerWidget_p.h" // For updateSliceOrientationSelector
 #include "vtkMRMLSliceNode.h"
 #include "vtkSlicerReformatLogic.h"
 
@@ -259,11 +260,8 @@ void qSlicerReformatModuleWidgetPrivate::updateOrientationGroupBox()
     return;
     }
 
-  // Update the selector
-  int index = this->SliceOrientationSelector->findText(
-      QString::fromStdString(this->MRMLSliceNode->GetOrientationString()));
-  Q_ASSERT(index>=0 && index <=4);
-  this->SliceOrientationSelector->setCurrentIndex(index);
+  qMRMLSliceControllerWidgetPrivate::updateSliceOrientationSelector(
+        this->MRMLSliceNode, this->SliceOrientationSelector);
 
   // Update the normal spinboxes
   bool wasNormalBlocking = this->NormalCoordinatesWidget->blockSignals(true);
@@ -475,6 +473,11 @@ void qSlicerReformatModuleWidget::onLockReformatWidgetToCamera(bool lock)
     {
     return;
     }
+  if (lock)
+    {
+    // "Lock to slice plane" only works if widget is visible, show it now
+    d->MRMLSliceNode->SetWidgetVisible(true);
+    }
 
   d->MRMLSliceNode->SetWidgetNormalLockedToCamera(lock);
 }
@@ -545,6 +548,8 @@ void qSlicerReformatModuleWidget::setSliceNormal(double x, double y, double z)
 //------------------------------------------------------------------------------
 void qSlicerReformatModuleWidget::setNormalToCamera()
 {
+  Q_D(qSlicerReformatModuleWidget);
+
   vtkSlicerReformatLogic* reformatLogic =
     vtkSlicerReformatLogic::SafeDownCast(this->logic());
 
@@ -556,11 +561,19 @@ void qSlicerReformatModuleWidget::setNormalToCamera()
   // NOTE: We use the first Camera because there is no notion of active scene
   // Code to be changed when methods avaible.
   vtkMRMLCameraNode* cameraNode = vtkMRMLCameraNode::SafeDownCast(
-    reformatLogic->GetMRMLScene()->GetNthNodeByClass(0, "vtkMRMLCameraNode"));
+    reformatLogic->GetMRMLScene()->GetFirstNodeByClass("vtkMRMLCameraNode"));
 
   if (!cameraNode)
     {
     return;
+    }
+
+  // When the user clicks the "Normal to camera button" and the checkbox was checked,
+  // then make sure the checkbox becomes unchecked, too, to make it clear to the user
+  // that the slice view does not follow the camera normal anymore
+  if (d->NormalToCameraCheckablePushButton->checkState() == Qt::Checked)
+    {
+    d->NormalToCameraCheckablePushButton->setCheckState(Qt::Unchecked);
     }
 
   double camNormal[3];
@@ -640,15 +653,7 @@ onSliceOrientationChanged(const QString& orientation)
   d->resetSlider(d->PASlider);
   d->resetSlider(d->ISSlider);
 
-#ifndef QT_NO_DEBUG
-  QStringList expectedOrientation;
-  expectedOrientation << tr("Axial") << tr("Sagittal")
-                      << tr("Coronal") << tr("Reformat");
-  Q_ASSERT(expectedOrientation.contains(orientation));
-#endif
-
   d->MRMLSliceNode->SetOrientation(orientation.toLatin1());
-  d->MRMLSliceNode->SetOrientationString(orientation.toLatin1());
 }
 
 //------------------------------------------------------------------------------
@@ -724,4 +729,34 @@ void qSlicerReformatModuleWidget::centerSliceNode()
 
   // Apply the center
   reformatLogic->SetSliceOrigin(d->MRMLSliceNode, center);
+}
+
+//-----------------------------------------------------------
+bool qSlicerReformatModuleWidget::setEditedNode(vtkMRMLNode* node,
+                                                QString role /* = QString()*/,
+                                                QString context /* = QString()*/)
+{
+  Q_D(qSlicerReformatModuleWidget);
+  Q_UNUSED(role);
+  Q_UNUSED(context);
+
+  if (vtkMRMLSliceNode::SafeDownCast(node))
+    {
+    d->SliceNodeSelector->setCurrentNode(node);
+    return true;
+    }
+
+  if (vtkMRMLSliceCompositeNode::SafeDownCast(node))
+    {
+    vtkMRMLSliceCompositeNode* sliceCompositeNode = vtkMRMLSliceCompositeNode::SafeDownCast(node);
+    vtkMRMLSliceNode* sliceNode = vtkMRMLSliceLogic::GetSliceNode(sliceCompositeNode);
+    if (!sliceNode)
+      {
+      return false;
+      }
+    d->SliceNodeSelector->setCurrentNode(sliceNode);
+    return true;
+    }
+
+  return false;
 }

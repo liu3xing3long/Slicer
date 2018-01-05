@@ -20,6 +20,11 @@
 
 // Qt includes
 #include <QDebug>
+#if (QT_VERSION >= QT_VERSION_CHECK(5, 0, 0))
+#include <QApplication>
+#include <QMainWindow>
+#include <QWindow>
+#endif
 
 // qMRML includes
 #include "qMRMLSliceWidget_p.h"
@@ -62,12 +67,31 @@ void qMRMLSliceWidgetPrivate::init()
     ->SetSliceLogic(this->SliceController->sliceLogic());
 
   connect(this->SliceView, SIGNAL(resized(QSize)),
-          this->SliceController, SLOT(setSliceViewSize(QSize)));
+          this, SLOT(setSliceViewSize(QSize)));
 
   connect(this->SliceController, SIGNAL(imageDataConnectionChanged(vtkAlgorithmOutput*)),
           this, SLOT(setImageDataConnection(vtkAlgorithmOutput*)));
   connect(this->SliceController, SIGNAL(renderRequested()),
           this->SliceView, SLOT(scheduleRender()), Qt::QueuedConnection);
+  connect(this->SliceController, SIGNAL(nodeAboutToBeEdited(vtkMRMLNode*)),
+          q, SIGNAL(nodeAboutToBeEdited(vtkMRMLNode*)));
+}
+
+// --------------------------------------------------------------------------
+void qMRMLSliceWidgetPrivate::setSliceViewSize(const QSize& size)
+{
+#if (QT_VERSION >= QT_VERSION_CHECK(5, 0, 0))
+  const QSize scaledSize = size * this->SliceView->devicePixelRatio();
+  this->SliceController->setSliceViewSize(scaledSize);
+#else
+  this->SliceController->setSliceViewSize(size);
+#endif
+}
+
+// --------------------------------------------------------------------------
+void qMRMLSliceWidgetPrivate::resetSliceViewSize()
+{
+  this->setSliceViewSize(this->SliceView->size());
 }
 
 // --------------------------------------------------------------------------
@@ -75,8 +99,7 @@ void qMRMLSliceWidgetPrivate::endProcessing()
 {
   // When a scene is closed, we need to reconfigure the SliceNode to
   // the size of the widget.
-  QRect rect = this->SliceView->geometry();
-  this->SliceController->setSliceViewSize(QSize(rect.width(), rect.height()));
+  this->setSliceViewSize(this->SliceView->size());
 }
 
 // --------------------------------------------------------------------------
@@ -103,7 +126,6 @@ qMRMLSliceWidget::qMRMLSliceWidget(qMRMLSliceWidgetPrivate* pimpl,
   : Superclass(_parent)
   , d_ptr(pimpl)
 {
-  Q_D(qMRMLSliceWidget);
   // Note: You are responsible to call init() in the constructor of derived class.
 }
 
@@ -273,4 +295,32 @@ void qMRMLSliceWidget::setSliceLogics(vtkCollection* logics)
 {
   Q_D(qMRMLSliceWidget);
   d->SliceController->setSliceLogics(logics);
+}
+
+// --------------------------------------------------------------------------
+void qMRMLSliceWidget::showEvent(QShowEvent* event)
+{
+  Superclass::showEvent(event);
+
+#if (QT_VERSION >= QT_VERSION_CHECK(5, 0, 0))
+  Q_D(qMRMLSliceWidget);
+
+  // Reset slice view size when screen changes to account for a possible change
+  // in the device pixel ratio.
+  QWindow* window = NULL;
+  foreach(QWidget* widget, qApp->topLevelWidgets())
+    {
+    QMainWindow* mainWindow = qobject_cast<QMainWindow*>(widget);
+    if (mainWindow)
+      {
+      window = mainWindow->windowHandle();
+      break;
+      }
+    }
+  if (window)
+    {
+    connect(window, SIGNAL(screenChanged(QScreen*)),
+            d, SLOT(resetSliceViewSize()), Qt::UniqueConnection);
+    }
+#endif
 }

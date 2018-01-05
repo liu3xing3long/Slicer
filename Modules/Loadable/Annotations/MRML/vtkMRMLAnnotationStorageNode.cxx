@@ -15,6 +15,7 @@ vtkMRMLNodeNewMacro(vtkMRMLAnnotationStorageNode);
 vtkMRMLAnnotationStorageNode::vtkMRMLAnnotationStorageNode()
 {
   //this->Debug =1;
+  this->DefaultWriteFileExtension = "acsv";
 }
 
 //----------------------------------------------------------------------------
@@ -208,7 +209,7 @@ int vtkMRMLAnnotationStorageNode::OpenFileToRead(fstream& fstr, vtkMRMLNode *ref
 
   std::string fullName = this->GetFullNameFromFileName();
 
-  if (fullName == std::string(""))
+  if (fullName.empty())
     {
     vtkErrorMacro("vtkMRMLAnnotationStorageNode: File name not specified");
     return 0;
@@ -575,7 +576,7 @@ int vtkMRMLAnnotationStorageNode::OpenFileToWrite(fstream& of)
     }
 
   std::string fullName = this->GetFullNameFromFileName();
-  if (fullName == std::string(""))
+  if (fullName.empty())
     {
     vtkErrorMacro("OpenFileToWrite: File name not specified");
     return 0;
@@ -659,10 +660,4 @@ void vtkMRMLAnnotationStorageNode::InitializeSupportedWriteFileTypes()
 {
   this->SupportedWriteFileTypes->InsertNextValue("Annotation List CSV (.acsv)");
   this->SupportedWriteFileTypes->InsertNextValue("Text (.txt)");
-}
-
-//----------------------------------------------------------------------------
-const char* vtkMRMLAnnotationStorageNode::GetDefaultWriteFileExtension()
-{
-  return "acsv";
 }

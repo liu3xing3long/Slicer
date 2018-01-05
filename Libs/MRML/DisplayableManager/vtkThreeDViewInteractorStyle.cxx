@@ -15,14 +15,19 @@
 #include "vtkThreeDViewInteractorStyle.h"
 
 // MRML includes
+#include "vtkMRMLCrosshairDisplayableManager.h"
+#include "vtkMRMLCrosshairNode.h"
 #include "vtkMRMLModelDisplayableManager.h"
 #include "vtkMRMLScene.h"
+#include "vtkMRMLSliceNode.h"
 
 // VTK includes
 #include <vtkCamera.h>
+#include <vtkCellPicker.h>
 #include <vtkCallbackCommand.h>
 #include <vtkMath.h>
 #include <vtkObjectFactory.h>
+#include <vtkPoints.h>
 #include <vtkRenderWindowInteractor.h>
 #include <vtkRenderer.h>
 #include <vtkMRMLInteractionNode.h>
@@ -33,17 +38,22 @@ vtkStandardNewMacro(vtkThreeDViewInteractorStyle);
 //----------------------------------------------------------------------------
 vtkThreeDViewInteractorStyle::vtkThreeDViewInteractorStyle()
 {
-  this->MotionFactor   = 10.0;
+  this->MotionFactor = 10.0;
+  this->ShiftKeyUsedForPreviousAction = false;
   this->CameraNode = 0;
   this->NumberOfPlaces= 0;
   this->NumberOfTransientPlaces = 1;
+  this->ModelDisplayableManager = 0;
+  this->CellPicker = vtkSmartPointer<vtkCellPicker>::New();
+  this->CellPicker->SetTolerance( .005 );
 }
 
 //----------------------------------------------------------------------------
 vtkThreeDViewInteractorStyle::~vtkThreeDViewInteractorStyle()
 {
   this->SetCameraNode(0);
-  this->NumberOfPlaces= 0;
+  this->SetModelDisplayableManager(0);
+  this->NumberOfPlaces = 0;
 }
 
 //----------------------------------------------------------------------------
@@ -178,6 +188,18 @@ void vtkThreeDViewInteractorStyle::OnKeyPress()
 }
 
 //----------------------------------------------------------------------------
+ void vtkThreeDViewInteractorStyle::OnKeyRelease()
+{
+  std::string key = this->Interactor->GetKeySym();
+
+  if (((key.find("Shift") != std::string::npos)) && this->ShiftKeyUsedForPreviousAction)
+    {
+    this->ShiftKeyUsedForPreviousAction = false;
+    }
+  this->Superclass::OnKeyRelease();
+}
+
+//----------------------------------------------------------------------------
 void vtkThreeDViewInteractorStyle::OnMouseMove()
 {
   int x = this->Interactor->GetEventPosition()[0];
@@ -215,7 +237,47 @@ void vtkThreeDViewInteractorStyle::OnMouseMove()
       this->InvokeEvent(vtkCommand::InteractionEvent, 0);
       break;
     default:
-      this->InvokeEvent(vtkCommand::MouseMoveEvent, 0);
+      if ( (!this->ShiftKeyUsedForPreviousAction) && this->Interactor->GetShiftKey() &&
+           (this->GetCameraNode() != 0) && (this->GetCameraNode()->GetScene() != 0) )
+        {
+        double pickedRAS[3]={0,0,0};
+        bool picked = this->Pick(this->Interactor->GetEventPosition()[0], this->Interactor->GetEventPosition()[1], pickedRAS);
+        if (picked)
+          {
+          vtkMRMLScene* scene = this->GetCameraNode()->GetScene();
+          vtkMRMLCrosshairNode* crosshairNode = vtkMRMLCrosshairDisplayableManager::FindCrosshairNode(scene);
+          if (crosshairNode)
+            {
+            crosshairNode->SetCrosshairRAS(pickedRAS);
+            // Computing pick position in 3D is expensive,
+            // therefore we only update the cursor position if shift key is pressed
+            crosshairNode->SetCursorPositionRAS(pickedRAS);
+            if (crosshairNode->GetCrosshairBehavior() != vtkMRMLCrosshairNode::NoAction)
+              {
+              // Try to get view group of the 3D view and jump only those slices.
+              int viewGroup = -1; // jump all by default
+              if (this->GetCameraNode() && this->GetCameraNode()->GetActiveTag())
+                {
+                vtkMRMLAbstractViewNode* viewNode = vtkMRMLAbstractViewNode::SafeDownCast(scene->GetNodeByID(this->GetCameraNode()->GetActiveTag()));
+                if (viewNode)
+                  {
+                  viewGroup = viewNode->GetViewGroup();
+                  }
+                }
+              int viewJumpSliceMode = vtkMRMLSliceNode::OffsetJumpSlice;
+              if (crosshairNode->GetCrosshairBehavior() == vtkMRMLCrosshairNode::CenteredJumpSlice)
+                {
+                viewJumpSliceMode = vtkMRMLSliceNode::CenteredJumpSlice;
+                }
+              vtkMRMLSliceNode::JumpAllSlices(scene, pickedRAS[0], pickedRAS[1], pickedRAS[2], viewJumpSliceMode, viewGroup);
+              }
+            }
+          }
+        }
+      else
+        {
+        this->InvokeEvent(vtkCommand::MouseMoveEvent, 0);
+        }
       break;
     }
 
@@ -223,6 +285,23 @@ void vtkThreeDViewInteractorStyle::OnMouseMove()
     {
     this->CameraNode->EndModify(disabledModify);
     }
+}
+
+//----------------------------------------------------------------------------
+void vtkThreeDViewInteractorStyle::OnLeave()
+{
+  if (this->GetCameraNode() == NULL || this->GetCameraNode()->GetScene() == NULL)
+    {
+    // interactor is not initialized
+    return;
+    }
+  vtkMRMLScene* scene = this->GetCameraNode()->GetScene();
+  vtkMRMLCrosshairNode* crosshairNode = vtkMRMLCrosshairDisplayableManager::FindCrosshairNode(scene);
+  if (crosshairNode)
+    {
+    crosshairNode->SetCursorPositionInvalid();
+    }
+  this->Superclass::OnLeave();
 }
 
 //----------------------------------------------------------------------------
@@ -247,7 +326,7 @@ void vtkThreeDViewInteractorStyle::OnLeftButtonDown()
        this->GetCameraNode()->GetScene() != 0 )
     {
     interactionNode = vtkMRMLInteractionNode::SafeDownCast(
-        this->GetCameraNode()->GetScene()->GetNthNodeByClass(0,"vtkMRMLInteractionNode"));
+        this->GetCameraNode()->GetScene()->GetNodeByID("vtkMRMLInteractionNodeSingleton"));
 
     if (interactionNode != 0)
       {
@@ -266,6 +345,7 @@ void vtkThreeDViewInteractorStyle::OnLeftButtonDown()
 
   if (this->Interactor->GetShiftKey())
     {
+    this->ShiftKeyUsedForPreviousAction = true;
     if (this->Interactor->GetControlKey())
       {
       this->StartDolly();
@@ -320,7 +400,7 @@ void vtkThreeDViewInteractorStyle::OnLeftButtonUp()
        this->GetCameraNode()->GetScene() != 0 )
     {
     interactionNode = vtkMRMLInteractionNode::SafeDownCast(
-        this->GetCameraNode()->GetScene()->GetNthNodeByClass(0,"vtkMRMLInteractionNode"));
+        this->GetCameraNode()->GetScene()->GetNodeByID("vtkMRMLInteractionNodeSingleton"));
 
     if (interactionNode != 0)
       {
@@ -741,4 +821,43 @@ void vtkThreeDViewInteractorStyle::SetInteractor(vtkRenderWindowInteractor *inte
     interactor->SetDesiredUpdateRate( 30.);
     }
   this->Superclass::SetInteractor(interactor);
+}
+
+//---------------------------------------------------------------------------
+bool vtkThreeDViewInteractorStyle::Pick(int x, int y, double pickPoint[3])
+{
+  this->FindPokedRenderer(x, y);
+  if (this->CurrentRenderer == 0)
+    {
+    vtkDebugMacro("Pick: couldn't find the poked renderer at event position " << x << ", " << y);
+    return false;
+    }
+
+  if (!this->CellPicker->Pick(x, y, 0, this->CurrentRenderer))
+    {
+    return false;
+    }
+
+  vtkPoints* pickPositions = this->CellPicker->GetPickedPositions();
+  int numberOfPickedPositions = pickPositions->GetNumberOfPoints();
+  if (numberOfPickedPositions<1)
+    {
+    return false;
+    }
+
+  // There may be multiple picked positions, choose the one closest to the camera
+  double cameraPosition[3]={0,0,0};
+  this->CurrentRenderer->GetActiveCamera()->GetPosition(cameraPosition);
+  pickPositions->GetPoint(0, pickPoint);
+  double minDist2 = vtkMath::Distance2BetweenPoints(pickPoint, cameraPosition);
+  for (int i=1; i<numberOfPickedPositions; i++)
+  {
+    double currentMinDist2 = vtkMath::Distance2BetweenPoints(pickPositions->GetPoint(i), cameraPosition);
+    if (currentMinDist2<minDist2)
+    {
+      pickPositions->GetPoint(i, pickPoint);
+      minDist2 = currentMinDist2;
+    }
+  }
+  return true;
 }

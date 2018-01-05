@@ -2,7 +2,7 @@
 set(proj ITKv4)
 
 # Set dependency list
-set(${proj}_DEPENDENCIES "zlib")
+set(${proj}_DEPENDENCIES "zlib" "VTKv9")
 if(Slicer_BUILD_DICOM_SUPPORT)
   list(APPEND ${proj}_DEPENDENCIES DCMTK)
 endif()
@@ -29,10 +29,25 @@ if(NOT DEFINED ITK_DIR AND NOT ${CMAKE_PROJECT_NAME}_USE_SYSTEM_${proj})
       set(git_protocol "git")
   endif()
 
-  set(ITKv4_REPOSITORY ${git_protocol}://github.com/Slicer/ITK.git)
-  # ITK master (v4.10.0) of 2016-02-17 with
-  #   * Slicer patches for CMP0042 (See Slicer r24522)
-  set(ITKv4_GIT_TAG 84ba36bbbdfc9bdf489479453a4a85b4a4ed22d5)
+  ExternalProject_SetIfNotDefined(
+    ${CMAKE_PROJECT_NAME}_${proj}_GIT_REPOSITORY
+    "${git_protocol}://github.com/Slicer/ITK.git"
+    QUIET
+    )
+
+  # ITK release v4.12.0rc1 from 2017.05.09 with
+  # * MINC patch to set MACOSX_RPATH based on CMAKE_MACOSX_RPATH
+  # * KWsys patch to set MACOSX_RPATH based on CMAKE_MACOSX_RPATH
+  # * Reverted "Slicer patches for CMP0042"
+  # * Slicer patches for CMP0042
+  # * MINC patch to support building using redhat devtoolset 2
+  # * fix DCMTK imageIO orientation bug
+  # * Support color images (RGB/RGBA) with DCMTK. See #4454
+  ExternalProject_SetIfNotDefined(
+    ${CMAKE_PROJECT_NAME}_${proj}_GIT_TAG
+    "9ab5fb62184e1e41982c1eef6932983c6e62940a" # slicer-v4.12.0-2017-05-09-2d63918
+    QUIET
+    )
 
   set(EXTERNAL_PROJECT_OPTIONAL_CMAKE_CACHE_ARGS)
 
@@ -48,6 +63,11 @@ if(NOT DEFINED ITK_DIR AND NOT ${CMAKE_PROJECT_NAME}_USE_SYSTEM_${proj})
 
   if(Slicer_BUILD_ITKPython)
 
+    # Sanity checks
+    if("${PYTHON_SITE_PACKAGES_SUBDIR}" STREQUAL "")
+      message(FATAL_ERROR "PYTHON_SITE_PACKAGES_SUBDIR CMake variable is expected to be set")
+    endif()
+
     # Custom name for the components associated with ITK
     # wrapping install rules enabling Slicer to optionally
     # package ITK Wrapping in Slicer installer by simply
@@ -55,7 +75,7 @@ if(NOT DEFINED ITK_DIR AND NOT ${CMAKE_PROJECT_NAME}_USE_SYSTEM_${proj})
     set(Slicer_WRAP_ITK_INSTALL_COMPONENT_IDENTIFIER "Wrapping")
     mark_as_superbuild(Slicer_WRAP_ITK_INSTALL_COMPONENT_IDENTIFIER:STRING)
 
-    set(PY_SITE_PACKAGES_PATH lib/Python/${pythonpath_subdir}/site-packages)
+    set(PY_SITE_PACKAGES_PATH lib/Python/${PYTHON_SITE_PACKAGES_SUBDIR})
 
     list(APPEND EXTERNAL_PROJECT_OPTIONAL_CMAKE_CACHE_ARGS
       -DPYTHON_LIBRARY:FILEPATH=${PYTHON_LIBRARY}
@@ -68,17 +88,23 @@ if(NOT DEFINED ITK_DIR AND NOT ${CMAKE_PROJECT_NAME}_USE_SYSTEM_${proj})
       )
   endif()
 
+  set(EP_SOURCE_DIR ${CMAKE_BINARY_DIR}/${proj})
+  set(EP_BINARY_DIR ${CMAKE_BINARY_DIR}/${proj}-build)
+
   ExternalProject_Add(${proj}
     ${${proj}_EP_ARGS}
-    GIT_REPOSITORY ${ITKv4_REPOSITORY}
-    GIT_TAG ${ITKv4_GIT_TAG}
-    SOURCE_DIR ${proj}
-    BINARY_DIR ${proj}-build
+    GIT_REPOSITORY "${${CMAKE_PROJECT_NAME}_${proj}_GIT_REPOSITORY}"
+    GIT_TAG "${${CMAKE_PROJECT_NAME}_${proj}_GIT_TAG}"
+    SOURCE_DIR ${EP_SOURCE_DIR}
+    BINARY_DIR ${EP_BINARY_DIR}
     CMAKE_CACHE_ARGS
       -DCMAKE_CXX_COMPILER:FILEPATH=${CMAKE_CXX_COMPILER}
       -DCMAKE_CXX_FLAGS:STRING=${ep_common_cxx_flags}
       -DCMAKE_C_COMPILER:FILEPATH=${CMAKE_C_COMPILER}
       -DCMAKE_C_FLAGS:STRING=${ep_common_c_flags}
+      -DCMAKE_CXX_STANDARD:STRING=${CMAKE_CXX_STANDARD}
+      -DCMAKE_CXX_STANDARD_REQUIRED:BOOL=${CMAKE_CXX_STANDARD_REQUIRED}
+      -DCMAKE_CXX_EXTENSIONS:BOOL=${CMAKE_CXX_EXTENSIONS}
       -DITK_INSTALL_ARCHIVE_DIR:PATH=${Slicer_INSTALL_LIB_DIR}
       -DITK_INSTALL_LIBRARY_DIR:PATH=${Slicer_INSTALL_LIB_DIR}
       -DBUILD_TESTING:BOOL=OFF
@@ -88,11 +114,18 @@ if(NOT DEFINED ITK_DIR AND NOT ${CMAKE_PROJECT_NAME}_USE_SYSTEM_${proj})
       -DITK_BUILD_DEFAULT_MODULES:BOOL=ON
       -DModule_ITKReview:BOOL=ON
       -DModule_MGHIO:BOOL=ON
+      -DModule_ITKIOMINC:BOOL=ON
       -DBUILD_SHARED_LIBS:BOOL=ON
       -DITK_INSTALL_NO_DEVELOPMENT:BOOL=ON
       -DKWSYS_USE_MD5:BOOL=ON # Required by SlicerExecutionModel
       -DITK_WRAPPING:BOOL=OFF #${BUILD_SHARED_LIBS} ## HACK:  QUICK CHANGE
       -DITK_WRAP_PYTHON:BOOL=${Slicer_BUILD_ITKPython}
+      -DExternalData_OBJECT_STORES:PATH=${ExternalData_OBJECT_STORES}
+      # macOS
+      -DCMAKE_MACOSX_RPATH:BOOL=0
+      # VTK
+      -DModule_ITKVtkGlue:BOOL=ON
+      -DVTK_DIR:PATH=${VTK_DIR}
       # DCMTK
       -DITK_USE_SYSTEM_DCMTK:BOOL=ON
       -DDCMTK_DIR:PATH=${DCMTK_DIR}
@@ -107,6 +140,9 @@ if(NOT DEFINED ITK_DIR AND NOT ${CMAKE_PROJECT_NAME}_USE_SYSTEM_${proj})
     DEPENDS
       ${${proj}_DEPENDENCIES}
     )
+
+  ExternalProject_GenerateProjectDescription_Step(${proj})
+
   set(ITK_DIR ${CMAKE_BINARY_DIR}/${proj}-build)
 
   #-----------------------------------------------------------------------------

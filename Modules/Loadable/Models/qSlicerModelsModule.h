@@ -36,6 +36,9 @@ class Q_SLICER_QTMODULES_MODELS_EXPORT qSlicerModelsModule :
   public qSlicerLoadableModule
 {
   Q_OBJECT
+#ifdef Slicer_HAVE_QT5
+  Q_PLUGIN_METADATA(IID "org.slicer.modules.loadable.qSlicerLoadableModule/1.0");
+#endif
   Q_INTERFACES(qSlicerLoadableModule);
 
 public:
@@ -55,6 +58,9 @@ public:
 
   virtual QStringList categories()const;
   virtual QStringList dependencies() const;
+
+  /// Specify editable node types
+  virtual QStringList associatedNodeTypes()const;
 
 protected:
   /// Initialize the module. Register the volumes reader/writer

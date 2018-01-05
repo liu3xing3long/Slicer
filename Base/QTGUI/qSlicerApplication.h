@@ -89,7 +89,8 @@ public:
   #ifdef Slicer_USE_PYTHONQT
   /// Get Python Manager
   Q_INVOKABLE qSlicerPythonManager * pythonManager();
-  #endif
+  Q_INVOKABLE ctkPythonConsole * pythonConsole();
+#endif
 
   #ifdef Slicer_USE_QtTesting
   /// Get test utility
@@ -111,16 +112,14 @@ public:
   /// Enable/Disable tooltips
   void setToolTipsEnabled(bool enable);
 
-  /// Return the best module name for a given node.
-  /// \note qSlicerApplication is a temporary host for the function as it should be
-  /// moved into a DataManager where module can register new node
-  /// types/modules
+  /// Return the module name that is most suitable for editing the specified node.
   QString nodeModule(vtkMRMLNode* node)const;
 
   Q_INVOKABLE ctkSettingsDialog* settingsDialog()const;
 
-  /// Display application informations.
-  /// This function will print to standard output the following
+  /// Log application information.
+  ///
+  /// This function will log the following
   /// details:
   ///   - Session start time
   ///   - Slicer version
@@ -130,7 +129,12 @@ public:
   ///   - Developer mode enabled
   ///   - Prefer executable CLI
   ///   - Additional module paths
-  Q_INVOKABLE virtual void displayApplicationInformations() const;
+  ///
+  /// \note Starting the application with `--application-information` will
+  /// also print the information to standard output.
+  ///
+  /// \sa qSlicerCoreCommandOptions::displayApplicationInformation()
+  Q_INVOKABLE virtual void logApplicationInformation() const;
 
 public slots:
 
@@ -158,6 +162,19 @@ public slots:
   /// Path of the current log file
   /// \sa recentLogFiles(), setupFileLogging()
   QString currentLogFile()const;
+
+signals:
+
+  /// Emitted when the startup phase has been completed.
+  ///
+  /// Startup is complete when all the modules have been
+  /// initialized and the main window is shown to the user.
+  ///
+  /// \note If the application is started without the mainwindow,
+  /// the signal is emitted after the modules are initialized.
+  ///
+  /// \sa qSlicerAppMainWindow::windowShown()
+  void startupCompleted();
 
 protected:
   /// Reimplemented from qSlicerCoreApplication

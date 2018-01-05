@@ -27,6 +27,7 @@ vtkMRMLNodeNewMacro(vtkMRMLDoubleArrayStorageNode);
 //----------------------------------------------------------------------------
 vtkMRMLDoubleArrayStorageNode::vtkMRMLDoubleArrayStorageNode()
 {
+  this->DefaultWriteFileExtension = "mcsv";
 }
 
 //----------------------------------------------------------------------------
@@ -51,7 +52,7 @@ int vtkMRMLDoubleArrayStorageNode::ReadDataInternal(vtkMRMLNode *refNode)
 {
   std::string fullName = this->GetFullNameFromFileName();
 
-  if (fullName == std::string(""))
+  if (fullName.empty())
     {
     vtkErrorMacro("vtkMRMLDoubleArrayStorageNode: File name not specified");
     return 0;
@@ -217,7 +218,7 @@ int vtkMRMLDoubleArrayStorageNode::WriteDataInternal(vtkMRMLNode *refNode)
     }
 
     std::string fullName = this->GetFullNameFromFileName();
-    if (fullName == std::string(""))
+    if (fullName.empty())
     {
         vtkErrorMacro("vtkMRMLDoubleArrayStorageNode: File name not specified");
         return 0;
@@ -299,10 +300,4 @@ void vtkMRMLDoubleArrayStorageNode::InitializeSupportedWriteFileTypes()
 {
   this->SupportedWriteFileTypes->InsertNextValue("Measurement CSV (.mcsv)");
   this->SupportedWriteFileTypes->InsertNextValue("Text (.txt)");
-}
-
-//----------------------------------------------------------------------------
-const char* vtkMRMLDoubleArrayStorageNode::GetDefaultWriteFileExtension()
-{
-  return "mcsv";
 }

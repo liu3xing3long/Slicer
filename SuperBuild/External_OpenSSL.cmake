@@ -76,7 +76,7 @@ You could either:
     file(APPEND ${_env_script}
 "#------------------------------------------------------------------------------
 # Added by '${CMAKE_CURRENT_LIST_FILE}'
-include(\"${${CMAKE_PROJECT_NAME}_CMAKE_DIR}/ExternalProjectForNonCMakeProject.cmake\")
+include(\"${Slicer_CMAKE_DIR}/ExternalProjectForNonCMakeProject.cmake\")
 set(CMAKE_BINARY_DIR \"${CMAKE_BINARY_DIR}\")
 set(ENV{VS_UNICODE_OUTPUT} \"\")
 ")
@@ -109,7 +109,7 @@ ExternalProject_Execute(${proj} \"configure\" sh config --with-zlib-lib=${_zlib_
       ${${proj}_EP_ARGS}
       URL ${OpenSSL_${OPENSSL_DOWNLOAD_VERSION}_URL}
       URL_MD5 ${OpenSSL_${OPENSSL_DOWNLOAD_VERSION}_MD5}
-      DOWNLOAD_DIR ${CMAKE_CURRENT_BINARY_DIR}
+      DOWNLOAD_DIR ${CMAKE_BINARY_DIR}
       SOURCE_DIR ${EP_SOURCE_DIR}
       BUILD_IN_SOURCE 1
       PATCH_COMMAND ${CMAKE_COMMAND} -P ${_configure_script}
@@ -195,6 +195,9 @@ this version of visual studio [${MSVC_VERSION}]. You could either:
       # VS2013
       set(OpenSSL_1.0.1h_1800_URL http://packages.kitware.com/download/bitstream/8918/OpenSSL_1_0_1h-install-msvc1800-32.tar.gz)
       set(OpenSSL_1.0.1h_1800_MD5 f10ceb422ab37f2b0bd5e225c74fd1d4)
+      # VS2015
+      set(OpenSSL_1.0.1h_1900_URL https://packages.kitware.com/download/item/10334/OpenSSL_1_0_1h-install-msvc1900-32.tar.gz)
+      set(OpenSSL_1.0.1h_1900_MD5 e0e26ae6ac5693d266c804e738d7aa14)
 
       # OpenSSL 1.0.1l
       # VS2008
@@ -217,6 +220,9 @@ this version of visual studio [${MSVC_VERSION}]. You could either:
       # VS2013
       set(OpenSSL_1.0.1h_1800_URL http://packages.kitware.com/download/bitstream/8915/OpenSSL_1_0_1h-install-msvc1800-64.tar.gz)
       set(OpenSSL_1.0.1h_1800_MD5 7aefdd94babefbe603cca48ff86da768)
+      # VS2015
+      set(OpenSSL_1.0.1h_1900_URL https://packages.kitware.com/download/item/10331/OpenSSL_1_0_1h-install-msvc1900-64.tar.gz)
+      set(OpenSSL_1.0.1h_1900_MD5 f93d266def384926015550452573e824)
 
       # OpenSSL 1.0.1l
       # VS2008
@@ -239,7 +245,7 @@ this version of visual studio [${MSVC_VERSION}]. You could either:
       ${${proj}_EP_ARGS}
       URL ${OpenSSL_${OPENSSL_DOWNLOAD_VERSION}_${MSVC_VERSION}_URL}
       URL_MD5 ${OpenSSL_${OPENSSL_DOWNLOAD_VERSION}_${MSVC_VERSION}_MD5}
-      DOWNLOAD_DIR ${CMAKE_CURRENT_BINARY_DIR}
+      DOWNLOAD_DIR ${CMAKE_BINARY_DIR}
       SOURCE_DIR ${EP_SOURCE_DIR}
       CONFIGURE_COMMAND ""
       BUILD_COMMAND ""
@@ -249,10 +255,24 @@ this version of visual studio [${MSVC_VERSION}]. You could either:
       )
 
     set(OpenSSL_DIR ${EP_SOURCE_DIR})
+    set(_openssl_base_dir ${OpenSSL_DIR})
     if(DEFINED CMAKE_CONFIGURATION_TYPES)
       set(OpenSSL_DIR ${OpenSSL_DIR}/${CMAKE_CFG_INTDIR})
+      set(_copy_release_directory 1)
     else()
       set(OpenSSL_DIR ${OpenSSL_DIR}/${CMAKE_BUILD_TYPE})
+      if(CMAKE_BUILD_TYPE STREQUAL "RelWithDebInfo")
+        set(_copy_release_directory 1)
+      endif()
+    endif()
+
+    # Support building in RelWithDebInfo configuration
+    if(_copy_release_directory)
+      ExternalProject_Add_Step(${proj} copy_release_directory
+        COMMAND ${CMAKE_COMMAND} -E copy_directory "${_openssl_base_dir}/Release" "${_openssl_base_dir}/RelWithDebInfo"
+        COMMENT "Copying '${_openssl_base_dir}/Release' to '${_openssl_base_dir}/RelWithDebInfo'"
+        DEPENDEES install
+        )
     endif()
 
     set(OPENSSL_INCLUDE_DIR "${OpenSSL_DIR}/include")
@@ -269,6 +289,10 @@ this version of visual studio [${MSVC_VERSION}]. You could either:
     ExternalProject_Message(${proj} "SSL_EAY_DEBUG:${SSL_EAY_DEBUG}")
     ExternalProject_Message(${proj} "SSL_EAY_RELEASE:${SSL_EAY_RELEASE}")
   endif()
+
+  ExternalProject_GenerateProjectDescription_Step(${proj}
+    VERSION ${OPENSSL_DOWNLOAD_VERSION}
+    )
 
   #-----------------------------------------------------------------------------
   # Launcher setting specific to build tree

@@ -30,6 +30,7 @@
 #include "vtkSlicerVolumesLogic.h"
 
 // MRML includes
+#include <vtkMRMLDisplayNode.h>
 #include <vtkMRMLLabelMapVolumeNode.h>
 #include <vtkMRMLScalarVolumeNode.h>
 #include <vtkMRMLSelectionNode.h>
@@ -96,7 +97,7 @@ QStringList qSlicerVolumesReader::extensions()const
 {
   // pic files are bio-rad images (see itkBioRadImageIO)
   return QStringList()
-    << "Volume (*.hdr *.nhdr *.nrrd *.mhd *.mha *.vti *.nii *.gz *.mgz *.img *.pic)"
+    << "Volume (*.hdr *.nhdr *.nrrd *.mhd *.mha *.mnc *.vti *.nii *.nii.gz *.mgh *.mgz *.mgh.gz *.img *.img.gz *.pic)"
     << "Dicom (*.dcm *.ima)"
     << "Image (*.png *.tif *.tiff *.jpg *.jpeg)"
     << "All Files (*)";
@@ -105,7 +106,10 @@ QStringList qSlicerVolumesReader::extensions()const
 //-----------------------------------------------------------------------------
 qSlicerIOOptions* qSlicerVolumesReader::options()const
 {
-  return new qSlicerVolumesIOOptionsWidget;
+  // set the mrml scene on the options widget to allow selecting a color node
+  qSlicerIOOptionsWidget* options = new qSlicerVolumesIOOptionsWidget;
+  options->setMRMLScene(this->mrmlScene());
+  return options;
 }
 
 //-----------------------------------------------------------------------------
@@ -141,6 +145,11 @@ bool qSlicerVolumesReader::load(const IOProperties& properties)
     {
     options |= properties["discardOrientation"].toBool() ? 0x10 : 0x0;
     }
+  bool propagateVolumeSelection = true;
+  if (properties.contains("show"))
+    {
+    propagateVolumeSelection = properties["show"].toBool();
+    }
   vtkSmartPointer<vtkStringArray> fileList;
   if (properties.contains("fileNames"))
     {
@@ -158,23 +167,34 @@ bool qSlicerVolumesReader::load(const IOProperties& properties)
     fileList.GetPointer());
   if (node)
     {
-    vtkSlicerApplicationLogic* appLogic =
-      d->Logic->GetApplicationLogic();
-    vtkMRMLSelectionNode* selectionNode =
-      appLogic ? appLogic->GetSelectionNode() : 0;
-    if (selectionNode)
+    if (properties.contains("colorNodeID"))
       {
-      if (vtkMRMLLabelMapVolumeNode::SafeDownCast(node))
+      QString colorNodeID = properties["colorNodeID"].toString();
+      if (node->GetDisplayNode())
         {
-        selectionNode->SetReferenceActiveLabelVolumeID(node->GetID());
+        node->GetDisplayNode()->SetAndObserveColorNodeID(colorNodeID.toLatin1());
         }
-      else
+      }
+    if (propagateVolumeSelection)
+      {
+      vtkSlicerApplicationLogic* appLogic =
+        d->Logic->GetApplicationLogic();
+      vtkMRMLSelectionNode* selectionNode =
+        appLogic ? appLogic->GetSelectionNode() : 0;
+      if (selectionNode)
         {
-        selectionNode->SetReferenceActiveVolumeID(node->GetID());
-        }
-      if (appLogic)
-        {
-        appLogic->PropagateVolumeSelection(); // includes FitSliceToAll by default
+        if (vtkMRMLLabelMapVolumeNode::SafeDownCast(node))
+          {
+          selectionNode->SetReferenceActiveLabelVolumeID(node->GetID());
+          }
+        else
+          {
+          selectionNode->SetReferenceActiveVolumeID(node->GetID());
+          }
+        if (appLogic)
+          {
+          appLogic->PropagateVolumeSelection(); // includes FitSliceToAll by default
+          }
         }
       }
     this->setLoadedNodes(QStringList(QString(node->GetID())));

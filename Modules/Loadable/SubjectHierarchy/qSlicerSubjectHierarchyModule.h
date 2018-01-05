@@ -39,6 +39,9 @@ class Q_SLICER_QTMODULES_SUBJECTHIERARCHY_EXPORT qSlicerSubjectHierarchyModule :
   public qSlicerLoadableModule
 {
   Q_OBJECT
+#ifdef Slicer_HAVE_QT5
+  Q_PLUGIN_METADATA(IID "org.slicer.modules.loadable.qSlicerLoadableModule/1.0");
+#endif
   Q_INTERFACES(qSlicerLoadableModule);
   QVTK_OBJECT
 
@@ -63,6 +66,9 @@ public:
 
   /// Return the categories for the module
   virtual QStringList categories()const;
+
+  /// Make this module hidden
+  virtual bool isHidden()const { return true; };
 
 protected:
   /// Initialize the module. Register the volumes reader/writer

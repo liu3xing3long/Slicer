@@ -121,8 +121,6 @@ void vtkMRMLStorableNode::WriteXML(ostream& of, int nIndent)
 
   Superclass::WriteXML(of, nIndent);
 
-  vtkIndent indent(nIndent);
-
   std::stringstream ss;
 
   //---write any user tags.
@@ -147,10 +145,9 @@ void vtkMRMLStorableNode::WriteXML(ostream& of, int nIndent)
       }
     if ( ss.str().c_str()!= NULL )
       {
-      of << indent << " userTags=\"" << ss.str().c_str() << "\"";
+      of << " userTags=\"" << ss.str().c_str() << "\"";
       }
     }
-
 }
 
 
@@ -403,4 +400,50 @@ vtkTimeStamp vtkMRMLStorableNode::GetStoredTime()
       }
     }
   return storedTime;
+}
+
+//---------------------------------------------------------------------------
+std::string vtkMRMLStorableNode::GetDefaultStorageNodeClassName(const char* vtkNotUsed(filename) /* =NULL */)
+{
+  std::string defaultStorageNodeClassName;
+  vtkSmartPointer<vtkMRMLStorageNode> defaultStorageNode = vtkSmartPointer<vtkMRMLStorageNode>::Take(this->CreateDefaultStorageNode());
+  if (defaultStorageNode && defaultStorageNode->GetClassName())
+    {
+    defaultStorageNodeClassName = defaultStorageNode->GetClassName();
+    }
+  return defaultStorageNodeClassName;
+}
+
+//---------------------------------------------------------------------------
+bool vtkMRMLStorableNode::AddDefaultStorageNode(const char* filename /* =NULL */)
+{
+  vtkMRMLStorageNode* storageNode = this->GetStorageNode();
+  if (storageNode)
+    {
+    // storage node exists already, no need to add a new one
+    return true;
+    }
+  std::string defaultStorageNodeClassName = this->GetDefaultStorageNodeClassName(filename);
+  if (defaultStorageNodeClassName.empty())
+    {
+    // node can be stored in the scene
+    return true;
+    }
+  if (!this->GetScene())
+  {
+    vtkErrorMacro("vtkMRMLStorableNode::AddDefaultStorageNode failed: node is not in a scene " << (this->GetID() ? this->GetID() : "(unknown)"));
+    return false;
+  }
+  vtkSmartPointer<vtkMRMLNode> newStorageNode = vtkSmartPointer<vtkMRMLNode>::Take(this->GetScene()->CreateNodeByClass(defaultStorageNodeClassName.c_str()));
+  storageNode = vtkMRMLStorageNode::SafeDownCast(newStorageNode);
+  if (!storageNode)
+    {
+    vtkErrorMacro("vtkMRMLStorableNode::AddDefaultStorageNode failed: failed to create storage node for node "
+      << (this->GetID() ? this->GetID() : "(unknown)"));
+    return false;
+    }
+  storageNode->SetFileName(filename);
+  this->GetScene()->AddNode(storageNode);
+  this->SetAndObserveStorageNodeID(storageNode->GetID());
+  return storageNode;
 }

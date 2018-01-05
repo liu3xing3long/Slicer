@@ -24,7 +24,7 @@
 // MRMLLogic includes
 #include "vtkMRMLAbstractLogic.h"
 
-#include "vtkMRMLDisplayableManagerWin32Header.h"
+#include "vtkMRMLDisplayableManagerExport.h"
 
 class vtkMRMLInteractionNode;
 class vtkMRMLSelectionNode;
@@ -48,7 +48,7 @@ class VTK_MRML_DISPLAYABLEMANAGER_EXPORT vtkMRMLAbstractDisplayableManager
 {
 public:
   static vtkMRMLAbstractDisplayableManager *New();
-  void PrintSelf(ostream& os, vtkIndent indent);
+  void PrintSelf(ostream& os, vtkIndent indent) VTK_OVERRIDE;
   vtkTypeMacro(vtkMRMLAbstractDisplayableManager, vtkMRMLAbstractLogic);
 
   /// Return True if Create() method has been invoked
@@ -85,6 +85,11 @@ public:
   /// Convenient method to get the current SelectionNode
   vtkMRMLSelectionNode* GetSelectionNode();
 
+  /// Assemble and return info string to display in Data probe for a given viewer XYZ position.
+  /// \return Invalid string by default, meaning no information to display.
+  virtual std::string GetDataProbeInfoStringForPosition(
+      double vtkNotUsed(xyz)[3]) { return ""; }
+
 protected:
 
   vtkMRMLAbstractDisplayableManager();
@@ -115,7 +120,7 @@ protected:
 
   virtual void ProcessMRMLNodesEvents(vtkObject* caller,
                                       unsigned long event,
-                                      void * callData);
+                                      void * callData) VTK_OVERRIDE;
 
   /// Receives all the events fired by any graphical object interacted by the
   /// user (typically vtk widgets).
@@ -146,14 +151,14 @@ protected:
   /// Called by SetMRMLScene - Used to initialize the Scene
   /// Observe all the events of the scene and call OnMRMLSceneEndClose()
   /// or OnMRMLSceneEndImport() if the new scene is valid
-  virtual void SetMRMLSceneInternal(vtkMRMLScene* newScene);
+  virtual void SetMRMLSceneInternal(vtkMRMLScene* newScene) VTK_OVERRIDE;
 
   /// ProcessMRMLNodesEvents calls OnMRMLDisplayableNodeModifiedEvent when the
   /// displayable node (e.g. vtkMRMLSliceNode, vtkMRMLViewNode) is Modified.
   /// Could be overloaded in DisplayableManager subclass.
   virtual void OnMRMLDisplayableNodeModifiedEvent(vtkObject* caller);
 
-  /// \brief Allow to specify additonal events that the DisplayableNode will observe
+  /// \brief Allow to specify additional events that the DisplayableNode will observe
   /// \warning Should be called within AdditionalInitializeStep() method
   /// \sa AdditionalInitializeStep()
   void AddMRMLDisplayableManagerEvent(int eventId);

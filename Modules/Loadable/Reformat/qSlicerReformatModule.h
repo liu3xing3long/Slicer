@@ -33,6 +33,9 @@ class Q_SLICER_QTMODULES_REFORMAT_EXPORT
 qSlicerReformatModule : public qSlicerLoadableModule
 {
   Q_OBJECT
+#ifdef Slicer_HAVE_QT5
+  Q_PLUGIN_METADATA(IID "org.slicer.modules.loadable.qSlicerLoadableModule/1.0");
+#endif
   Q_INTERFACES(qSlicerLoadableModule);
 
 public:
@@ -57,6 +60,10 @@ public:
 
   /// Return the contributor for the module
   virtual QStringList contributors()const;
+
+  /// Specify editable node types
+  virtual QStringList associatedNodeTypes()const;
+
 protected:
 
   /// Initialize the module. Register the volumes reader/writer

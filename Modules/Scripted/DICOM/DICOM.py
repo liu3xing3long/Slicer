@@ -20,18 +20,21 @@ import DICOMLib
 
 class DICOM(ScriptedLoadableModule):
 
+
   def __init__(self, parent):
     ScriptedLoadableModule.__init__(self, parent)
+
     import string
     self.parent.title = "DICOM"
     self.parent.categories = ["", "Informatics"] # top level module
     self.parent.contributors = ["Steve Pieper (Isomics)"]
-    self.parent.helpText = string.Template("""
-The DICOM module integrates DICOM classes from CTK (based on DCMTK).  See <a href=\"$a/Documentation/$b.$c/Modules/DICOM\">the documentaiton</a> for more information.
-""").substitute({ 'a':parent.slicerWikiUrl, 'b':slicer.app.majorVersion, 'c':slicer.app.minorVersion })
+    self.parent.helpText = """
+The DICOM module integrates DICOM classes from CTK (based on DCMTK).
+"""
+    self.parent.helpText += self.getDefaultModuleDocumentationLink()
     self.parent.acknowledgementText = """
 This work is supported by NA-MIC, NAC, BIRN, NCIGT, and the Slicer Community. See <a href=http://www.slicer.org>http://www.slicer.org</a> for details.  Module implemented by Steve Pieper.  Based on work from CommonTK (http://www.commontk.org).
-    """
+"""
     self.parent.icon = qt.QIcon(':Icons/Medium/SlicerLoadDICOM.png')
     self.parent.dependencies = ["SubjectHierarchy"]
 
@@ -64,15 +67,28 @@ This work is supported by NA-MIC, NAC, BIRN, NCIGT, and the Slicer Community. Se
         if slicer.dicomDatabase:
           slicer.app.setDICOMDatabase(slicer.dicomDatabase)
 
-    # Trigger the menu to be added when application has started up
-    if not slicer.app.commandOptions().noMainWindow :
-      qt.QTimer.singleShot(0, self.addMenu)
-    # set the dicom pre-cache tags once all plugin classes have been initialized
-    qt.QTimer.singleShot(0, DICOMLib.setDatabasePrecacheTags)
+    # Tasks to execute after the application has started up
+    slicer.app.connect("startupCompleted()", self.performPostModuleDiscoveryTasks)
 
   def setup(self):
     pluginHandlerSingleton = slicer.qSlicerSubjectHierarchyPluginHandler.instance()
     pluginHandlerSingleton.registerPlugin(slicer.qSlicerSubjectHierarchyDICOMPlugin())
+
+  def performPostModuleDiscoveryTasks(self):
+    """Since dicom plugins are discovered while the application
+    is initialized, they may be found after the DICOM module
+    itself if initialized.  This method is tied to a singleShot
+    that will be called once the event loop is read to start.
+    """
+    # set the dicom pre-cache tags once all plugin classes have been initialized
+    DICOMLib.setDatabasePrecacheTags()
+
+    if not slicer.app.commandOptions().noMainWindow:
+      # add to the main app file menu
+      self.addMenu()
+      # add the settings options
+      self.settingsPanel = DICOMSettingsPanel()
+      slicer.app.settingsDialog().addPanel("DICOM", self.settingsPanel)
 
   def addMenu(self):
     """Add an action to the File menu that will go into
@@ -91,6 +107,44 @@ This work is supported by NA-MIC, NAC, BIRN, NCIGT, and the Slicer Community. Se
     if hasattr(slicer, 'dicomListener'):
       logging.debug('trying to stop listener')
       slicer.dicomListener.stop()
+
+class _ui_DICOMSettingsPanel(object):
+  def __init__(self, parent):
+    vBoxLayout = qt.QVBoxLayout(parent)
+    # Add generic settings
+    genericGroupBox = ctk.ctkCollapsibleGroupBox()
+    genericGroupBox.title = "Generic DICOM settings"
+    genericGroupBoxFormLayout = qt.QFormLayout(genericGroupBox)
+    loadReferencesComboBox = ctk.ctkComboBox()
+    loadReferencesComboBox.toolTip = "Determines whether referenced DICOM series are " \
+      "offered when loading DICOM, or the automatic behavior if interaction is disabled. " \
+      "Interactive selection of referenced series is the default selection"
+    loadReferencesComboBox.addItem("Ask user", qt.QMessageBox.InvalidRole)
+    loadReferencesComboBox.addItem("Always", qt.QMessageBox.Yes)
+    loadReferencesComboBox.addItem("Never", qt.QMessageBox.No)
+    loadReferencesComboBox.currentIndex = 0
+    genericGroupBoxFormLayout.addRow("Load referenced series:", loadReferencesComboBox)
+    parent.registerProperty(
+      "DICOM/automaticallyLoadReferences", loadReferencesComboBox,
+      "currentUserDataAsString", str(qt.SIGNAL("currentIndexChanged(int)")))
+    vBoxLayout.addWidget(genericGroupBox)
+
+    # Add settings panel for the plugins
+    plugins = slicer.modules.dicomPlugins
+    for pluginName in plugins.keys():
+      if hasattr(plugins[pluginName], 'settingsPanelEntry'):
+        pluginGroupBox = ctk.ctkCollapsibleGroupBox()
+        pluginGroupBox.title = pluginName
+        vBoxLayout.addWidget(pluginGroupBox)
+        plugins[pluginName].settingsPanelEntry(parent, pluginGroupBox)
+    vBoxLayout.addStretch(1)
+
+
+class DICOMSettingsPanel(ctk.ctkSettingsPanel):
+  def __init__(self, *args, **kwargs):
+    ctk.ctkSettingsPanel.__init__(self, *args, **kwargs)
+    self.ui = _ui_DICOMSettingsPanel(self)
+
 
 # XXX Slicer 4.5 - Remove this. Here only for backward compatibility.
 DICOM.setDatabasePrecacheTags = DICOMLib.setDatabasePrecacheTags
@@ -144,8 +198,7 @@ class DICOMFileDialog:
     mainWindow = slicer.util.mainWindow()
     mainWindow.moduleSelector().selectModule('DICOM')
     dicomWidget = slicer.modules.DICOMWidget
-    for directory in self.directoriesToAdd:
-      dicomWidget.detailsPopup.dicomBrowser.onImportDirectory(directory)
+    dicomWidget.detailsPopup.dicomBrowser.importDirectories(self.directoriesToAdd)
     self.directoriesToAdd = []
 
 #
@@ -157,6 +210,35 @@ class DICOMWidget:
   Slicer module that creates the Qt GUI for interacting with DICOM
   """
 
+  detailWidgetClasses = [DICOMLib.DICOMDetailsWindow, DICOMLib.DICOMDetailsDialog, DICOMLib.DICOMDetailsDock]
+
+  @staticmethod
+  def getSavedDICOMDetailsWidgetType(default="window"):
+    widgetType = settingsValue('DICOM/BrowserWidgetType', default)
+    widgetClass = DICOMWidget.getDetailsWidgetClassForType(widgetType)
+    if not widgetClass:
+      qt.QSettings().setValue('DICOM/BrowserWidgetType', widgetType)
+      widgetClass = DICOMWidget.getDetailsWidgetClassForType(default)
+    return widgetClass
+
+  @staticmethod
+  def setDICOMDetailsWidgetType(widgetType):
+    if not widgetType in DICOMWidget.getAvailableWidgetTypes():
+      raise ValueError("Widget type '%s' for DICOMDetails does not exist" % widgetType)
+    else:
+      qt.QSettings().setValue('DICOM/BrowserWidgetType', widgetType)
+
+  @staticmethod
+  def getAvailableWidgetTypes():
+    return [c.widgetType for c in DICOMWidget.detailWidgetClasses]
+
+  @staticmethod
+  def getDetailsWidgetClassForType(widgetType):
+    try:
+      return DICOMWidget.detailWidgetClasses[DICOMWidget.getAvailableWidgetTypes().index(widgetType)]
+    except (KeyError, ValueError):
+      return None
+
   def __init__(self, parent=None):
     self.testingServer = None
 
@@ -165,7 +247,7 @@ class DICOMWidget:
     # - if the update is requested before the timeout, the call to timer.start() resets it
     # - the actual update only happens when the the full time elapses since the last request
     self.updateRecentActivityTimer = qt.QTimer()
-    self.updateRecentActivityTimer.singleShot = True
+    self.updateRecentActivityTimer.setSingleShot(True)
     self.updateRecentActivityTimer.interval = 500
     self.updateRecentActivityTimer.connect('timeout()', self.onUpateRecentActivityRequestTimeout)
 
@@ -183,7 +265,7 @@ class DICOMWidget:
     globals()['d'] = self
 
   def enter(self):
-    self.detailsPopup.open()
+    self.onOpenDetailsPopup()
 
   def exit(self):
     if not self.detailsPopup.browserPersistent:
@@ -225,7 +307,7 @@ class DICOMWidget:
     self.toggleListener.checkable = True
     if hasattr(slicer, 'dicomListener'):
       self.toggleListener.text = "Stop Listener"
-      slicer.dicomListener.process.connect('stateChanged(int)',self.onListenerStateChanged)
+      slicer.dicomListener.process.connect('stateChanged(QProcess::ProcessState)',self.onListenerStateChanged)
     else:
       self.toggleListener.text = "Start Listener"
     self.localFrame.layout().addWidget(self.toggleListener)
@@ -233,7 +315,7 @@ class DICOMWidget:
 
     self.runListenerAtStart = qt.QCheckBox("Start Listener when Slicer Starts")
     self.localFrame.layout().addWidget(self.runListenerAtStart)
-    self.runListenerAtStart.checked =  settingsValue('DICOM/RunListenerAtStart', False, converter=toBool)
+    self.runListenerAtStart.checked = settingsValue('DICOM/RunListenerAtStart', False, converter=toBool)
     self.runListenerAtStart.connect('clicked()', self.onRunListenerAtStart)
 
     # the Database frame (home of the ctkDICOM widget)
@@ -242,7 +324,7 @@ class DICOMWidget:
     self.dicomFrame.setText("DICOM Database and Networking")
     self.layout.addWidget(self.dicomFrame)
 
-    self.detailsPopup = DICOMLib.DICOMDetailsPopup()
+    self.detailsPopup = self.getSavedDICOMDetailsWidgetType()()
 
     # XXX Slicer 4.5 - Remove these. Here only for backward compatibility.
     self.dicomBrowser = self.detailsPopup.dicomBrowser
@@ -251,14 +333,14 @@ class DICOMWidget:
     # connect to the 'Show DICOM Browser' button
     self.showBrowserButton = qt.QPushButton('Show DICOM Browser')
     self.dicomFrame.layout().addWidget(self.showBrowserButton)
-    self.showBrowserButton.connect('clicked()', self.detailsPopup.open)
+    self.showBrowserButton.connect('clicked()', self.onOpenDetailsPopup)
 
     # connect to the main window's dicom button
     mw = slicer.util.mainWindow()
     if mw:
       try:
         action = slicer.util.findChildren(mw,name='LoadDICOMAction')[0]
-        action.connect('triggered()',self.detailsPopup.open)
+        action.connect('triggered()',self.onOpenDetailsPopup)
       except IndexError:
         logging.error('Could not connect to the main window DICOM button')
 
@@ -275,12 +357,17 @@ class DICOMWidget:
     self.layout.addWidget(self.activityFrame)
 
     self.recentActivity = DICOMLib.DICOMRecentActivityWidget(self.activityFrame,detailsPopup=self.detailsPopup)
-    self.activityFrame.layout().addWidget(self.recentActivity.widget)
+    self.activityFrame.layout().addWidget(self.recentActivity)
     self.requestUpdateRecentActivity()
 
 
     # Add spacer to layout
     self.layout.addStretch(1)
+
+  def onOpenDetailsPopup(self):
+    if not isinstance(self.detailsPopup, self.getSavedDICOMDetailsWidgetType()):
+      self.detailsPopup = self.getSavedDICOMDetailsWidgetType()()
+    self.detailsPopup.open()
 
   def onDatabaseChanged(self):
     """Use this because to update the view in response to things

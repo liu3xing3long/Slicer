@@ -30,6 +30,7 @@ vtkMRMLNodeNewMacro(vtkMRMLVolumePropertyStorageNode);
 //----------------------------------------------------------------------------
 vtkMRMLVolumePropertyStorageNode::vtkMRMLVolumePropertyStorageNode()
 {
+  this->DefaultWriteFileExtension = "vp";
 }
 
 //----------------------------------------------------------------------------
@@ -56,7 +57,7 @@ int vtkMRMLVolumePropertyStorageNode::ReadDataInternal(vtkMRMLNode *refNode)
     vtkMRMLVolumePropertyNode::SafeDownCast(refNode);
 
   std::string fullName = this->GetFullNameFromFileName();
-  if (fullName == std::string(""))
+  if (fullName.empty())
     {
     vtkErrorMacro("ReadData: File name not specified");
     return 0;
@@ -179,7 +180,7 @@ int vtkMRMLVolumePropertyStorageNode::WriteDataInternal(vtkMRMLNode *refNode)
   vtkMRMLVolumePropertyNode *vpNode = vtkMRMLVolumePropertyNode::SafeDownCast(refNode);
 
   std::string fullName =  this->GetFullNameFromFileName();
-  if (fullName == std::string(""))
+  if (fullName.empty())
     {
     vtkErrorMacro("vtkMRMLVolumePropertyStorageNode: File name not specified");
     return 0;
@@ -225,10 +226,4 @@ void vtkMRMLVolumePropertyStorageNode::InitializeSupportedWriteFileTypes()
   this->SupportedWriteFileTypes->InsertNextValue("VolumeProperty (.vp)");
   this->SupportedWriteFileTypes->InsertNextValue("Text (.txt)");
   this->SupportedWriteFileTypes->InsertNextValue("VolumeProperty (.*)");
-}
-
-//----------------------------------------------------------------------------
-const char* vtkMRMLVolumePropertyStorageNode::GetDefaultWriteFileExtension()
-{
-  return "vp";
 }

@@ -45,11 +45,11 @@ public:
 
   static vtkSlicerMarkupsLogic *New();
   vtkTypeMacro(vtkSlicerMarkupsLogic,vtkSlicerModuleLogic);
-  void PrintSelf(ostream& os, vtkIndent indent);
+  void PrintSelf(ostream& os, vtkIndent indent) VTK_OVERRIDE;
 
   virtual void ProcessMRMLNodesEvents(vtkObject *caller,
                                       unsigned long event,
-                                      void *callData );
+                                      void *callData ) VTK_OVERRIDE;
 
   /// Utility method to return the id of the selection node. Checks
   /// the mrml application logic if set, otherwise checks the scene
@@ -89,9 +89,12 @@ public:
   int AddFiducial(double r=0.0, double a=0.0, double s=0.0);
 
   /// jump the slice windows to the given coordinate
-  void JumpSlicesToLocation(double x, double y, double z, bool centered);
+  /// If viewGroup is -1 then all all slice views are updated, otherwise only those views
+  /// that are in the specified group.
+  void JumpSlicesToLocation(double x, double y, double z, bool centered, int viewGroup = -1);
   /// jump the slice windows to the nth markup with the mrml id id
-  void JumpSlicesToNthPointInMarkup(const char *id, int n, bool centered = false);
+  /// \sa JumpSlicesToLocation
+  void JumpSlicesToNthPointInMarkup(const char *id, int n, bool centered = false, int viewGroup = -1);
   /// refocus all of the 3D cameras to the nth markup with the mrml id id
   /// \sa FocusCameraOnNthPointInMarkup
   void FocusCamerasOnNthPointInMarkup(const char *id, int n);
@@ -198,14 +201,14 @@ protected:
   virtual ~vtkSlicerMarkupsLogic();
 
   /// Initialize listening to MRML events
-  virtual void SetMRMLSceneInternal(vtkMRMLScene * newScene);
-  virtual void ObserveMRMLScene();
+  virtual void SetMRMLSceneInternal(vtkMRMLScene * newScene) VTK_OVERRIDE;
+  virtual void ObserveMRMLScene() VTK_OVERRIDE;
 
   /// Register MRML Node classes to Scene. Gets called automatically when the MRMLScene is attached to this logic class.
-  virtual void RegisterNodes();
-  virtual void UpdateFromMRMLScene();
-  virtual void OnMRMLSceneNodeAdded(vtkMRMLNode* node);
-  virtual void OnMRMLSceneNodeRemoved(vtkMRMLNode* node);
+  virtual void RegisterNodes() VTK_OVERRIDE;
+  virtual void UpdateFromMRMLScene() VTK_OVERRIDE;
+  virtual void OnMRMLSceneNodeAdded(vtkMRMLNode* node) VTK_OVERRIDE;
+  virtual void OnMRMLSceneNodeRemoved(vtkMRMLNode* node) VTK_OVERRIDE;
 
 private:
 

@@ -25,27 +25,50 @@ if(NOT DEFINED OpenIGTLink_DIR AND NOT ${CMAKE_PROJECT_NAME}_USE_SYSTEM_${proj})
       "-DCMAKE_PROJECT_OpenIGTLink_INCLUDE:FILEPATH=${CMAKE_ROOT}/Modules/CTestUseLaunchers.cmake")
   endif()
 
+  ExternalProject_SetIfNotDefined(
+    ${CMAKE_PROJECT_NAME}_${proj}_GIT_REPOSITORY
+    "${git_protocol}://github.com/openigtlink/OpenIGTLink.git"
+    QUIET
+    )
+
+  ExternalProject_SetIfNotDefined(
+    ${CMAKE_PROJECT_NAME}_${proj}_GIT_TAG
+    "92bc3d7b4fd8294f10ae34b1c832a5285aaa154f"
+    QUIET
+    )
+
+  set(EP_SOURCE_DIR ${CMAKE_BINARY_DIR}/${proj})
+  set(EP_BINARY_DIR ${CMAKE_BINARY_DIR}/${proj}-build)
+
   ExternalProject_Add(${proj}
     ${${proj}_EP_ARGS}
-    GIT_REPOSITORY "${git_protocol}://github.com/openigtlink/OpenIGTLink.git"
-    GIT_TAG "daa957a6d8037fd01bd3c19f5bc34c12b766eba7"
-    SOURCE_DIR OpenIGTLink
-    BINARY_DIR OpenIGTLink-build
+    GIT_REPOSITORY "${${CMAKE_PROJECT_NAME}_${proj}_GIT_REPOSITORY}"
+    GIT_TAG "${${CMAKE_PROJECT_NAME}_${proj}_GIT_TAG}"
+    SOURCE_DIR ${EP_SOURCE_DIR}
+    BINARY_DIR ${EP_BINARY_DIR}
     CMAKE_CACHE_ARGS
       -DCMAKE_CXX_COMPILER:FILEPATH=${CMAKE_CXX_COMPILER}
       -DCMAKE_CXX_FLAGS:STRING=${ep_common_cxx_flags}
       -DCMAKE_C_COMPILER:FILEPATH=${CMAKE_C_COMPILER}
       -DCMAKE_C_FLAGS:STRING=${ep_common_c_flags}
+      -DCMAKE_CXX_STANDARD:STRING=${CMAKE_CXX_STANDARD}
+      -DCMAKE_CXX_STANDARD_REQUIRED:BOOL=${CMAKE_CXX_STANDARD_REQUIRED}
+      -DCMAKE_CXX_EXTENSIONS:BOOL=${CMAKE_CXX_EXTENSIONS}
       ${CMAKE_PROJECT_INCLUDE_EXTERNAL_PROJECT_ARG}
       -DBUILD_TESTING:BOOL=OFF
       -DBUILD_SHARED_LIBS:BOOL=ON
       -DOpenIGTLink_PROTOCOL_VERSION_2:BOOL=ON
+      -DOpenIGTLink_PROTOCOL_VERSION_3:BOOL=ON
+      # macOS
+      -DCMAKE_MACOSX_RPATH:BOOL=0
     INSTALL_COMMAND ""
     DEPENDS
       ${${proj}_DEPENDENCIES}
     )
 
-  set(OpenIGTLink_DIR ${CMAKE_BINARY_DIR}/OpenIGTLink-build)
+  ExternalProject_GenerateProjectDescription_Step(${proj})
+
+  set(OpenIGTLink_DIR ${EP_BINARY_DIR})
 
   #-----------------------------------------------------------------------------
   # Launcher setting specific to build tree

@@ -5,11 +5,12 @@ set(KIT ${PROJECT_NAME})
 set(${KIT}_EXPORT_DIRECTIVE "Q_SLICER_${MODULE_NAME_UPPER}_SUBJECT_HIERARCHY_PLUGINS_EXPORT")
 
 set(${KIT}_INCLUDE_DIRECTORIES
-  ${vtkSlicerSubjectHierarchyModuleLogic_INCLUDE_DIRS}
+  ${vtkSlicerTablesModuleLogic_INCLUDE_DIRS}
   ${qSlicerSubjectHierarchyModuleWidgets_INCLUDE_DIRS}
-  ${MRMLCore_INCLUDE_DIRS}
-  ${MRMLLogic_INCLUDE_DIRS}
+  ${vtkSlicerSubjectHierarchyModuleLogic_INCLUDE_DIRS}
   ${qMRMLWidgets_INCLUDE_DIRS}
+  ${MRMLLogic_INCLUDE_DIRS}
+  ${MRMLCore_INCLUDE_DIRS}
   )
 
 set(${KIT}_SRCS
@@ -31,12 +32,12 @@ set(${KIT}_RESOURCES
 
 #-----------------------------------------------------------------------------
 set(${KIT}_TARGET_LIBRARIES
-  vtkSlicerSubjectHierarchyModuleLogic
+  vtkSlicerTablesModuleLogic
   qSlicerSubjectHierarchyModuleWidgets
-  MRMLCore
-  MRMLLogic
+  vtkSlicerSubjectHierarchyModuleLogic
   qMRMLWidgets
-  ${QT_LIBRARIES}
+  MRMLLogic
+  MRMLCore
   )
 
 #-----------------------------------------------------------------------------

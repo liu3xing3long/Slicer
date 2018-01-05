@@ -107,17 +107,26 @@ vtkMRMLTransformNode* vtkMRMLTransformableNode::GetParentTransformNode()
 }
 
 //----------------------------------------------------------------------------
-void vtkMRMLTransformableNode::SetAndObserveTransformNodeID(const char *transformNodeID)
+bool vtkMRMLTransformableNode::SetAndObserveTransformNodeID(const char *transformNodeID)
 {
-  // Prevent transform cycles
-  vtkMRMLTransformNode* tnode = vtkMRMLTransformNode::SafeDownCast(
-    this->GetScene() != 0 ?this->GetScene()->GetNodeByID(transformNodeID) : 0);
-  if (tnode && tnode->GetParentTransformNode() == this)
+  // Prevent circular reference in transform tree
+  vtkMRMLTransformNode* newParentTransformNode = vtkMRMLTransformNode::SafeDownCast(
+    this->GetScene() != 0 ? this->GetScene()->GetNodeByID(transformNodeID) : 0);
+  if (newParentTransformNode)
     {
-    transformNodeID = 0;
+    vtkMRMLTransformNode* thisTransform = vtkMRMLTransformNode::SafeDownCast(this);
+    if (thisTransform)
+      {
+      if (newParentTransformNode == thisTransform || thisTransform->IsTransformNodeMyChild(newParentTransformNode))
+        {
+        vtkErrorMacro("vtkMRMLTransformableNode::SetAndObserveTransformNodeID failed: parent transform cannot be self or a child transform");
+        return false;
+        }
+      }
     }
 
   this->SetAndObserveNodeReferenceID(this->GetTransformNodeReferenceRole(), transformNodeID);
+  return true;
 }
 
 
@@ -160,6 +169,32 @@ void vtkMRMLTransformableNode::ApplyTransformMatrix(vtkMatrix4x4* transformMatri
 void vtkMRMLTransformableNode::ApplyTransform(vtkAbstractTransform* vtkNotUsed(transform))
 {
   vtkErrorMacro("ApplyTransform is not implemented for node type "<<this->GetClassName());
+}
+
+//-----------------------------------------------------------
+bool vtkMRMLTransformableNode::HardenTransform()
+{
+  vtkMRMLTransformNode* transformNode = this->GetParentTransformNode();
+  if (!transformNode)
+    {
+    // already in the world coordinate system
+    return true;
+    }
+  if (transformNode->IsTransformToWorldLinear())
+    {
+    vtkNew<vtkMatrix4x4> hardeningMatrix;
+    transformNode->GetMatrixTransformToWorld(hardeningMatrix.GetPointer());
+    this->ApplyTransformMatrix(hardeningMatrix.GetPointer());
+    }
+  else
+    {
+    vtkNew<vtkGeneralTransform> hardeningTransform;
+    transformNode->GetTransformToWorld(hardeningTransform.GetPointer());
+    this->ApplyTransform(hardeningTransform.GetPointer());
+    }
+
+  this->SetAndObserveTransformNodeID(NULL);
+  return true;
 }
 
 //-----------------------------------------------------------

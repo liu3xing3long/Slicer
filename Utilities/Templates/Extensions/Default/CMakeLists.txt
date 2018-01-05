@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 2.8.9)
+cmake_minimum_required(VERSION 3.5)
 
 project(TemplateKey)
 
@@ -10,6 +10,7 @@ set(EXTENSION_CONTRIBUTORS "John Doe (AnyWare Corp.)")
 set(EXTENSION_DESCRIPTION "This is an example of a simple extension")
 set(EXTENSION_ICONURL "http://www.example.com/Slicer/Extensions/TemplateKey.png")
 set(EXTENSION_SCREENSHOTURLS "http://www.example.com/Slicer/Extensions/TemplateKey/Screenshots/1.png")
+set(EXTENSION_DEPENDS "NA") # Specified as a space separated string, a list or 'NA' if any
 
 #-----------------------------------------------------------------------------
 # Extension dependencies
@@ -21,4 +22,5 @@ include(${Slicer_USE_FILE})
 ## NEXT_MODULE
 
 #-----------------------------------------------------------------------------
+include(${Slicer_EXTENSION_GENERATE_CONFIG})
 include(${Slicer_EXTENSION_CPACK})

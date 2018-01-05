@@ -1,35 +1,51 @@
+import os
+import unittest
 import vtk, qt, ctk, slicer
+from slicer.ScriptedLoadableModule import *
+import logging
+
 #
 # Endoscopy
 #
 
-class Endoscopy:
+class Endoscopy(ScriptedLoadableModule):
+  """Uses ScriptedLoadableModule base class, available at:
+  https://github.com/Slicer/Slicer/blob/master/Base/Python/slicer/ScriptedLoadableModule.py
+  """
+
   def __init__(self, parent):
-    import string
-    parent.title = "Endoscopy"
-    parent.categories = ["Endoscopy"]
-    parent.contributors = ["Steve Pieper (Isomics)"]
-    parent.helpText = string.Template("""
-    Create a path model as a spline interpolation of a set of fiducial points. Pick the Camera to be modified by the path and the Fiducial List defining the control points. Clicking "Create path" will make a path model and enable the flythrough panel. You can manually scroll though the path with the Frame slider. The Play/Pause button toggles animated flythrough. The Frame Skip slider speeds up the animation by skipping points on the path. The Frame Delay slider slows down the animation by adding more time between frames. The View Angle provides is used to approximate the optics of an endoscopy system. See <a href=\"$a/Documentation/$b.$c/Modules/Endoscopy\">$a/Documentation/$b.$c/Modules/Endoscopy</a> for more information.
-    """).substitute({ 'a':parent.slicerWikiUrl, 'b':slicer.app.majorVersion, 'c':slicer.app.minorVersion })
-    parent.acknowledgementText = """
-    This work is supported by PAR-07-249: R01CA131718 NA-MIC Virtual Colonoscopy (See <a>http://www.na-mic.org/Wiki/index.php/NA-MIC_NCBC_Collaboration:NA-MIC_virtual_colonoscopy</a>) NA-MIC, NAC, BIRN, NCIGT, and the Slicer Community. See http://www.slicer.org for details.  Module implemented by Steve Pieper.
-    """
-    self.parent = parent
+    ScriptedLoadableModule.__init__(self, parent)
+    self.parent.title = "Endoscopy"
+    self.parent.categories = ["Endoscopy"]
+    self.parent.dependencies = []
+    self.parent.contributors = ["Steve Pieper (Isomics)"]
+    self.parent.helpText = """
+Create a path model as a spline interpolation of a set of fiducial points.
+Pick the Camera to be modified by the path and the Fiducial List defining the control points.
+Clicking "Create path" will make a path model and enable the flythrough panel.
+You can manually scroll through the path with the Frame slider. The Play/Pause button toggles animated flythrough.
+The Frame Skip slider speeds up the animation by skipping points on the path.
+The Frame Delay slider slows down the animation by adding more time between frames.
+The View Angle provides is used to approximate the optics of an endoscopy system.
+"""
+    self.parent.helpText += self.getDefaultModuleDocumentationLink()
+    self.parent.acknowledgementText = """
+This work is supported by PAR-07-249: R01CA131718 NA-MIC Virtual Colonoscopy
+(See <a>http://www.na-mic.org/Wiki/index.php/NA-MIC_NCBC_Collaboration:NA-MIC_virtual_colonoscopy</a>)
+NA-MIC, NAC, BIRN, NCIGT, and the Slicer Community. See http://www.slicer.org for details.  Module implemented by Steve Pieper.
+"""
 
 #
 # qSlicerPythonModuleExampleWidget
 #
 
-class EndoscopyWidget:
+class EndoscopyWidget(ScriptedLoadableModuleWidget):
+  """Uses ScriptedLoadableModuleWidget base class, available at:
+  https://github.com/Slicer/Slicer/blob/master/Base/Python/slicer/ScriptedLoadableModule.py
+  """
+
   def __init__(self, parent=None):
-    if not parent:
-      self.parent = slicer.qMRMLWidget()
-      self.parent.setLayout(qt.QVBoxLayout())
-      self.parent.setMRMLScene(slicer.mrmlScene)
-    else:
-      self.parent = parent
-    self.layout = self.parent.layout()
+    ScriptedLoadableModuleWidget.__init__(self, parent)
     self.cameraNode = None
     self.cameraNodeObserverTag = None
     self.cameraObserverTag= None
@@ -41,13 +57,10 @@ class EndoscopyWidget:
     self.timer = qt.QTimer()
     self.timer.setInterval(20)
     self.timer.connect('timeout()', self.flyToNext)
-    if not parent:
-      self.setup()
-      self.cameraNodeSelector.setMRMLScene(slicer.mrmlScene)
-      self.inputFiducialsNodeSelector.setMRMLScene(slicer.mrmlScene)
-      self.parent.show()
 
   def setup(self):
+    ScriptedLoadableModuleWidget.setup(self)
+
     # Path collapsible button
     pathCollapsibleButton = ctk.ctkCollapsibleButton()
     pathCollapsibleButton.text = "Path"
@@ -75,7 +88,7 @@ class EndoscopyWidget:
     inputFiducialsNodeSelector.objectName = 'inputFiducialsNodeSelector'
     inputFiducialsNodeSelector.toolTip = "Select a fiducial list to define control points for the path."
     inputFiducialsNodeSelector.nodeTypes = ['vtkMRMLMarkupsFiducialNode', 'vtkMRMLAnnotationHierarchyNode', 'vtkMRMLFiducialListNode']
-    inputFiducialsNodeSelector.noneEnabled = True
+    inputFiducialsNodeSelector.noneEnabled = False
     inputFiducialsNodeSelector.addEnabled = False
     inputFiducialsNodeSelector.removeEnabled = False
     inputFiducialsNodeSelector.connect('currentNodeChanged(bool)', self.enableOrDisableCreateButton)
@@ -151,6 +164,10 @@ class EndoscopyWidget:
     self.viewAngleSlider = viewAngleSlider
     self.playButton = playButton
 
+    cameraNodeSelector.setMRMLScene(slicer.mrmlScene)
+    inputFiducialsNodeSelector.setMRMLScene(slicer.mrmlScene)
+
+
   def setCameraNode(self, newCameraNode):
     """Allow to set the current camera node.
     Connected to signal 'currentNodeChanged()' emitted by camera node selector."""
@@ -213,6 +230,7 @@ class EndoscopyWidget:
     # Update flythrough variables
     self.camera = self.camera
     self.transform = model.transform
+    self.pathPlaneNormal = model.planeNormal
     self.path = result.path
 
     # Enable / Disable flythrough button
@@ -265,6 +283,26 @@ class EndoscopyWidget:
       toParent.SetElement(0 ,3, p[0])
       toParent.SetElement(1, 3, p[1])
       toParent.SetElement(2, 3, p[2])
+
+      # Set up transform orientation component so that
+      # Z axis is aligned with view direction and
+      # Y vector is aligned with the curve's plane normal.
+      # This can be used for example to show a reformatted slice
+      # using with SlicerIGT extension's VolumeResliceDriver module.
+      import numpy as np
+      zVec = (foc-p)/np.linalg.norm(foc-p)
+      yVec = self.pathPlaneNormal
+      xVec = np.cross(yVec, zVec)
+      toParent.SetElement(0, 0, xVec[0])
+      toParent.SetElement(1, 0, xVec[1])
+      toParent.SetElement(2, 0, xVec[2])
+      toParent.SetElement(0, 1, yVec[0])
+      toParent.SetElement(1, 1, yVec[1])
+      toParent.SetElement(2, 1, yVec[2])
+      toParent.SetElement(0, 2, zVec[0])
+      toParent.SetElement(1, 2, zVec[1])
+      toParent.SetElement(2, 2, zVec[2])
+
       self.transform.SetMatrixTransformToParent(toParent)
 
 
@@ -439,6 +477,10 @@ class EndoscopyPathModel:
       linesIDArray.SetTuple1( 0, linesIDArray.GetNumberOfTuples() - 1 )
       lines.SetNumberOfCells(1)
 
+    import vtk.util.numpy_support as VN
+    pointsArray = VN.vtk_to_numpy(points.GetData())
+    self.planePosition, self.planeNormal = self.planeFit(pointsArray.T)
+
     # Create model node
     model = slicer.vtkMRMLModelNode()
     model.SetScene(scene)
@@ -482,3 +524,23 @@ class EndoscopyPathModel:
     cursor.SetAndObserveTransformNodeID(transform.GetID())
 
     self.transform = transform
+
+  # source: http://stackoverflow.com/questions/12299540/plane-fitting-to-4-or-more-xyz-points
+  def planeFit(self, points):
+    """
+    p, n = planeFit(points)
+
+    Given an array, points, of shape (d,...)
+    representing points in d-dimensional space,
+    fit an d-dimensional plane to the points.
+    Return a point, p, on the plane (the point-cloud centroid),
+    and the normal, n.
+    """
+    import numpy as np
+    from numpy.linalg import svd
+    points = np.reshape(points, (np.shape(points)[0], -1)) # Collapse trialing dimensions
+    assert points.shape[0] <= points.shape[1], "There are only {} points in {} dimensions.".format(points.shape[1], points.shape[0])
+    ctr = points.mean(axis=1)
+    x = points - ctr[:,np.newaxis]
+    M = np.dot(x, x.T) # Could also use np.cov(x) here.
+    return ctr, svd(M)[0][:,-1]

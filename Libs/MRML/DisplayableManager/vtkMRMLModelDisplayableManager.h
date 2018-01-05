@@ -17,30 +17,33 @@
 
 // MRMLDisplayableManager includes
 #include "vtkMRMLAbstractThreeDViewDisplayableManager.h"
-#include "vtkMRMLDisplayableManagerWin32Header.h"
+#include "vtkMRMLDisplayableManagerExport.h"
 
 // MRMLLogic includes
 #include "vtkMRMLModelHierarchyLogic.h"
 
 // MRML includes
+#include <vtkMRMLModelNode.h>
 class vtkMRMLClipModelsNode;
 class vtkMRMLDisplayNode;
 class vtkMRMLDisplayableNode;
 class vtkMRMLModelHierarchyLogic;
 class vtkMRMLModelHierarchyNode;
-class vtkMRMLModelNode;
 class vtkMRMLSelectionNode;
+class vtkMRMLTransformNode;
 
 // VTK includes
 #include "vtkRenderWindow.h"
 class vtkActor;
 class vtkActorText;
+class vtkAlgorithm;
 class vtkBoundingBox;
 class vtkCellArray;
 class vtkCellPicker;
 class vtkClipPolyData;
 class vtkFollower;
 class vtkImplicitBoolean;
+class vtkLookupTable;
 class vtkMatrix4x4;
 class vtkPMatrix4x4;
 class vtkPlane;
@@ -65,7 +68,7 @@ class VTK_MRML_DISPLAYABLEMANAGER_EXPORT vtkMRMLModelDisplayableManager
 public:
   static vtkMRMLModelDisplayableManager* New();
   vtkTypeMacro(vtkMRMLModelDisplayableManager,vtkMRMLAbstractThreeDViewDisplayableManager);
-  void PrintSelf(ostream& os, vtkIndent indent);
+  void PrintSelf(ostream& os, vtkIndent indent) VTK_OVERRIDE;
 
   ///
   /// Get/Set the ClipModels Node
@@ -135,33 +138,43 @@ public:
   bool IsModelDisplayable(vtkMRMLDisplayableNode* node)const;
   /// Return true if the display node is a model
   bool IsModelDisplayable(vtkMRMLDisplayNode* node)const;
+
+  /// Helper function for copying lookup tables
+  /// It handles special types of lookup tables and fixes
+  /// error in vtkLoookupTable copy.
+  static vtkLookupTable* CreateLookupTableCopy(vtkLookupTable* source);
+
+  /// Helper function for determining what type of scalar is active.
+  static bool IsCellScalarsActive(vtkMRMLDisplayNode* displayNode,
+    vtkMRMLModelNode* model = 0);
+
 protected:
 
   vtkMRMLModelDisplayableManager();
   virtual ~vtkMRMLModelDisplayableManager();
 
-  virtual void AdditionalInitializeStep();
-  virtual int ActiveInteractionModes();
+  virtual void AdditionalInitializeStep() VTK_OVERRIDE;
+  virtual int ActiveInteractionModes() VTK_OVERRIDE;
 
-  virtual void UnobserveMRMLScene();
+  virtual void UnobserveMRMLScene() VTK_OVERRIDE;
 
-  virtual void OnMRMLSceneStartClose();
-  virtual void OnMRMLSceneEndClose();
-  virtual void UpdateFromMRMLScene();
-  virtual void OnMRMLSceneNodeAdded(vtkMRMLNode* node);
-  virtual void OnMRMLSceneNodeRemoved(vtkMRMLNode* node);
+  virtual void OnMRMLSceneStartClose() VTK_OVERRIDE;
+  virtual void OnMRMLSceneEndClose() VTK_OVERRIDE;
+  virtual void UpdateFromMRMLScene() VTK_OVERRIDE;
+  virtual void OnMRMLSceneNodeAdded(vtkMRMLNode* node) VTK_OVERRIDE;
+  virtual void OnMRMLSceneNodeRemoved(vtkMRMLNode* node) VTK_OVERRIDE;
 
-  virtual void OnInteractorStyleEvent(int eventId);
-  virtual void ProcessMRMLNodesEvents(vtkObject *caller, unsigned long event, void *callData);
+  virtual void OnInteractorStyleEvent(int eventId) VTK_OVERRIDE;
+  virtual void ProcessMRMLNodesEvents(vtkObject *caller, unsigned long event, void *callData) VTK_OVERRIDE;
 
   /// Returns true if something visible in modelNode has changed and would
   /// require a refresh.
   bool OnMRMLDisplayableModelNodeModifiedEvent(vtkMRMLDisplayableNode * modelNode);
 
   /// Updates Actors based on models in the scene
-  void UpdateFromMRML();
+  virtual void UpdateFromMRML() VTK_OVERRIDE;
 
-  virtual void RemoveMRMLObservers();
+  virtual void RemoveMRMLObservers() VTK_OVERRIDE;
 
   friend class vtkThreeDViewInteractorStyle; // Access to RequestRender();
 
@@ -172,7 +185,7 @@ protected:
 
   void UpdateModelsFromMRML();
   void UpdateModel(vtkMRMLDisplayableNode *model);
-  void UpdateModelPolyData(vtkMRMLDisplayableNode *model);
+  void UpdateModelMesh(vtkMRMLDisplayableNode *model);
   void UpdateModifiedModel(vtkMRMLDisplayableNode *model);
 
   void SetModelDisplayProperty(vtkMRMLDisplayableNode *model);
@@ -180,12 +193,11 @@ protected:
 
   const char* GetActiveScalarName(vtkMRMLDisplayNode* displayNode,
                                   vtkMRMLModelNode* model = 0);
-  bool IsCellScalarsActive(vtkMRMLDisplayNode* displayNode,
-                           vtkMRMLModelNode* model = 0);
 
   /// Returns not null if modified
   int UpdateClipSlicesFromMRML();
-  vtkClipPolyData* CreateTransformedClipper(vtkMRMLDisplayableNode *model);
+  vtkAlgorithm *CreateTransformedClipper(vtkMRMLTransformNode *tnode,
+                                         vtkMRMLModelNode::MeshTypeHint type);
 
   void AddHierarchyObservers();
   void RemoveHierarchyObservers(int clearCache);
